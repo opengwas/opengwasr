@@ -1,0 +1,7 @@
+# Vignettes are written first and run offline from recorded responses
+
+opengwasr is built outside-in. Each epic starts with a ticket that writes its vignettes, one per user journey, with every chunk `eval = FALSE`, and the vignettes are reviewed before implementation begins. Each implementation ticket then turns on the vignette chunks it satisfies and adds testthat tests at the Source seam that make the same calls and assert on the results. A ticket is done when its chunks run and its tests pass. The vignettes fix the interface (function names, arguments, columns, messages), which is the part TwoSampleMR and users' scripts will depend on and the hardest to change later. The tests fix the behaviour, because a vignette only proves the code runs, not that the answers are right.
+
+Vignettes must build on CRAN and in CI without network access, so they replay real API responses recorded with httptest2, and are re-recorded when the API changes. Unit tests use a stateful fake Data API (webfakes) instead, because the job protocol's queued, running and succeeded states can't be expressed by replayed recordings.
+
+**Considered:** precomputed vignettes knitted by hand against the live API (realistic, but nothing is checked on CRAN or CI); live-only vignettes skipped without credentials (CRAN users would see empty vignettes); writing the implementation first and documenting it afterwards (the interface would follow the implementation rather than the user).

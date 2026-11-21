@@ -6,10 +6,19 @@
 - **Find or open an issue.** For anything larger than a small fix, discuss it in an issue first.
 - **Read** [GLOSSARY.md](GLOSSARY.md) and [docs/adr/](docs/adr/). Use the glossary's terms in code, documentation and issues. One principle matters above all: opengwasr never silently returns a different scientific answer from the one asked for. An option is either honoured or refused with a clear error.
 
+## How work proceeds
+
+opengwasr is built outside-in (ADR 0005):
+
+1. Each epic starts by writing its vignettes, one per user journey, with chunks set to `eval = FALSE`. These are reviewed before implementation begins.
+2. Each implementation ticket names the vignette section it satisfies. It turns those chunks on and adds testthat tests at the Source seam that make the same calls and assert on the results.
+3. Vignettes run offline from httptest2 recordings of the real API. Unit tests run against the fake Data API in `tests/testthat`. Neither touches the network on CRAN or in CI.
+4. Errors are classed conditions, and tests assert on the class, not on the message text.
+
 ## Pull requests
 
 - One purpose per pull request. Name the issue (`Closes #n`).
-- Every check must pass, including the CLA.
+- Every check must pass: `R CMD check --as-cran` on Linux, macOS and Windows with no errors, warnings or notes, and the CLA.
 - Update the documentation when behaviour changes.
 
 ## Licence

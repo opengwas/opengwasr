@@ -1,0 +1,7 @@
+# Copy to .Renviron (gitignored, never committed). Read only by live tests
+# and when recording vignette responses; never needed by users of the API Source.
+OPENGWAS_URL=http://localhost:6433
+# Interim, until the Gateway is ready: the Data API's Gateway key, sent with
+# X-OGDB-User naming the user on whose behalf requests are made.
+OPENGWAS_DEV_KEY=
+OPENGWAS_DEV_USER=opengwasr-dev

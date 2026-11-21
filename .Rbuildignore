@@ -5,3 +5,6 @@
 ^GLOSSARY\.md$
 ^docs$
 ^\.github$
+^\.Renviron$
+^\.Renviron\.example$
+^\.gitignore$

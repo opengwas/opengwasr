@@ -1,0 +1,6 @@
+.Renviron
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+docs/_site/

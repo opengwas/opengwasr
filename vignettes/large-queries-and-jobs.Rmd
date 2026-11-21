@@ -45,7 +45,7 @@ outcome <- og_associations(src, ldl$alid, bmi_ids)
 ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■  2/2 Jobs
 ```
 
-`og_api(max_in_flight = )` sets how many Jobs run at once (default 4, set by the option `opengwasr.max_in_flight`). The API lets each user queue at most 100 Jobs, and opengwasr stays well under that.
+`og_api(max_in_flight = )` sets how many Jobs run at once (default 4, set by the option `opengwasr.max_in_flight`). The API runs at most 10 of your Jobs at a time (the "Jobs running at once" that `og_user()` reports) and holds at most 100 more queued; opengwasr stays well under both.
 
 opengwasr splits a query only to fit these shapes. It never splits one to get round the API's cost limit (see [Too large](#too-large)).
 
@@ -66,7 +66,7 @@ Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by th
 
 ```{r waiting, eval = FALSE}
 src_quick <- og_api(timeout = 60)
-top <- og_tophits(src_quick, "OGS-00011:GCST90029007")
+top <- og_tophits(src_quick, "OGS-00011:GCST90029007", clump = FALSE)
 ```
 
 ```text
@@ -95,13 +95,13 @@ If the timeout runs out first, the error has class `opengwasr_busy`.
 To run many queries at once and collect them yourself, submit them without waiting. `og_submit()` takes a query function and its arguments, and returns as soon as the Jobs are queued:
 
 ```{r job-functions-submit, eval = FALSE}
-jobs <- lapply(bmi_ids, function(id) og_submit(src, og_tophits, id))
+jobs <- lapply(bmi_ids, function(id) og_submit(src, og_tophits, id, clump = FALSE))
 jobs[[2]]
 ```
 
 ```text
 # illustrative
-<og_jobs> 1 Job for og_tophits("OGS-00011:GCST90029007")
+<og_jobs> 1 Job for og_tophits("OGS-00011:GCST90029007", clump = FALSE)
                                 job_id status
   a1513652-85ff-4eac-b4d7-b043b03aaf0a queued
 ```
@@ -119,7 +119,7 @@ tophits <- lapply(jobs, function(job) og_job_result(src, job))
   a1513652-85ff-4eac-b4d7-b043b03aaf0a running             NA
 ```
 
-All four Job functions take the Source first, then a Job from `og_submit()` or a Job id as text. A query bigger than one Job gives several Jobs, and they are handled together.
+`og_job_status()`, `og_job_result()` and `og_job_cancel()` take the Source first, then the Jobs `og_submit()` returned, or a Job id as text. A query bigger than one Job gives several Jobs, and they are handled together.
 
 ## Interrupting and reattaching {#interrupting}
 
@@ -135,7 +135,7 @@ Pressing Esc or Ctrl-C while opengwasr waits doesn't cancel the Job. It stops wa
 Running the same call again is always safe. The API recognises an identical query and reattaches you to the Job it already has, so nothing is computed twice:
 
 ```{r interrupting, eval = FALSE}
-top <- og_tophits(src, "OGS-00011:GCST90029007")
+top <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE)
 ```
 
 ```text
@@ -158,14 +158,14 @@ og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")
 ✔ Cancelled Job a1513652.
 ```
 
-## Answers expire {#result-expired}
+## Results expire {#result-expired}
 
-The API keeps a finished Job's answer for an hour if nobody reads it, and for five minutes after it has been read in full. opengwasr reads every page in one go, so this only matters when you collect a Job yourself, late:
+The API keeps a finished Job's result for an hour if nobody reads it, and for five minutes after it has been read in full. opengwasr reads every page in one go, so this only matters when you collect a Job yourself, late:
 
 ```text
 # illustrative
 Error in `og_job_result()`:
-! Job a1513652-85ff-4eac-b4d7-b043b03aaf0a's answer is no longer available: it was already collected, or it expired.
+! Job a1513652-85ff-4eac-b4d7-b043b03aaf0a's result is no longer available: it was already collected, or it expired.
 ℹ Run the query again; the API will run it afresh.
 ```
 
@@ -188,7 +188,7 @@ region <- tryCatch(
 ```text
 # illustrative
 Error in `og_range()`:
-! The API refused this query as too costly: the job is estimated at 3479 CPU-seconds, more than the 300 one job may use.
+! The API refused this query as too costly: it estimated 3,479 CPU-seconds, more than the 300 one Job may use.
 ℹ opengwasr doesn't split queries to get round this limit.
 ℹ Ask for less (fewer Analyses, a shorter range), or download the Store Release and query it locally with a Local Source (coming in a later opengwasr release).
 ```

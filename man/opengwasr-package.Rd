@@ -11,7 +11,7 @@ Query OpenGWAS Analyses, Associations, top hits and linkage disequilibrium (LD),
 \details{
 opengwasr reads OpenGWAS data through a \emph{Source}. The API Source queries
 the OpenGWAS API; a Local Source, planned for a later release, will read
-Store Releases downloaded to your own machine. Query functions take the
+Store Releases and LD Stores downloaded to your own machine. Query functions take the
 Source as their first argument, so the same call works against either.
 
 The terms used throughout the package (Analysis, Association, Source,

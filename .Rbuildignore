@@ -14,3 +14,4 @@
 ^\.Rhistory$
 ^\.RData$
 ^\.git$
+^.*\.Rproj$

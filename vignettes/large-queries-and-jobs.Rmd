@@ -28,10 +28,10 @@ One Job has limits on its shape. When a query is bigger, opengwasr splits it int
 | `og_ld_matrix()` | 500 variants |
 | Any Job's answer | 100,000 Associations |
 
-For example, the 1,090 LDL cholesterol instruments looked up in 10 BMI Analyses:
+For example, 2,000 LDL cholesterol top hits looked up in 10 BMI Analyses:
 
 ```{r splitting, eval = FALSE}
-ldl <- og_tophits(src, "OGS-00011:GCST90002412", limit = 2000)
+ldl <- og_tophits(src, "OGS-00011:GCST90002412", clump = FALSE, limit = 2000)
 bmi_ids <- c("OGS-00011:GCST90025994", "OGS-00011:GCST90029007", "OGS-00011:GCST90302889",
              "OGS-00011:GCST90429765", "OGS-00011:GCST90429770", "OGS-00011:GCST90429775",
              "OGS-00011:GCST90446645", "OGS-00011:GCST90624700", "OGS-00011:GCST90624704",

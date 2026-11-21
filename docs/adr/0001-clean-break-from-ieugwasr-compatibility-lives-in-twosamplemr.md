@@ -1,0 +1,5 @@
+# Clean break from ieugwasr; compatibility lives in TwoSampleMR
+
+opengwasr replaces both ieugwasr and gwasvcf, but does not imitate either interface: it uses the opengwasdb/ogld vocabulary (Store, Store Release, Analysis, Association, LD Store) and their row schema. Users' existing scripts are protected one level up, by TwoSampleMR keeping `extract_instruments()`, `extract_outcome_data()`, `clump_data()` etc. as its stable surface and switching to opengwasr internally in one major version, without carrying both back ends. opengwasr never reads raw GWAS-VCFs; a user's own summary statistics are queried by first building them into a local Store with opengwasdb. ieugwasr and gwasvcf are frozen until the old OpenGWAS API is retired. We chose this because the new API has a different shape (Jobs, ALIDs, z/se instead of beta, no server-side proxies or clumping), so an ieugwasr-shaped facade would hide those differences behind familiar names that behave differently.
+
+**Consequences:** gwasglue, which imports gwasvcf, ieugwasr and TwoSampleMR, has to be migrated separately.

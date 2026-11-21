@@ -8,3 +8,9 @@
 ^\.Renviron$
 ^\.Renviron\.example$
 ^\.gitignore$
+^_pkgdown\.yml$
+^README\.md$
+^\.Rproj\.user$
+^\.Rhistory$
+^\.RData$
+^\.git$

@@ -1,0 +1,489 @@
+---
+title: "Getting started with opengwasr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with opengwasr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Associations and LD. Every query function takes a **Source** as its first argument, which says where the query is answered. This vignette uses the API Source, `og_api()`, which queries the OpenGWAS API over the network. A later release adds a Local Source for Store Releases downloaded to your own machine. Code written against `og_api()` will work with it unchanged.
+
+You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
+
+> **Status.** No code in this vignette runs yet. It fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+
+The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
+
+```{r library, eval = FALSE}
+library(opengwasr)
+```
+
+## Credentials {#credentials}
+
+### Your OpenGWAS token {#credentials-token}
+
+opengwasr signs in to the OpenGWAS Gateway with the same token ieugwasr uses. Get it from your [OpenGWAS profile](https://api.opengwas.io/profile/) and add it to your `.Renviron` file, which you can open with `usethis::edit_r_environ()`:
+
+```text
+OPENGWAS_JWT=<your token>
+```
+
+Restart R so the new setting is read. opengwasr never prints your token, and never writes it into errors or logs.
+
+> **Not yet available.** The Gateway doesn't serve the new OpenGWAS API yet. Until it does, only the developer access below works.
+
+### Developer access (development and tests only) {#credentials-developer}
+
+Before the Gateway is live, opengwasr's developers reach the Data API directly with a developer key. This is for developing opengwasr, running its live tests and recording these vignettes. Don't use it for analyses.
+
+```text
+OPENGWAS_URL=http://localhost:6433
+OPENGWAS_DEV_KEY=<developer key>
+OPENGWAS_DEV_USER=opengwasr-dev
+```
+
+When `OPENGWAS_DEV_KEY` is set, `og_api()` sends it to `OPENGWAS_URL`, naming `OPENGWAS_DEV_USER` (default `opengwasr-dev`) as the user. Keep these settings in a `.Renviron` that is never committed.
+
+### Creating the API Source {#og-api}
+
+```{r og-api, eval = FALSE}
+src <- og_api()
+src
+```
+
+```text
+# illustrative
+<og_api_source>
+• URL: https://api.opengwas.io/ogdb
+• Signed in with: OPENGWAS_JWT
+• Timeout: 3600 s
+• Jobs in flight: at most 4
+```
+
+`og_api()` takes `url`, `timeout` (seconds to wait for any one call before giving up) and `max_in_flight` (how many Jobs one call may run at once). Each defaults to an option, so you can set it once for a session:
+
+```{r og-api-options, eval = FALSE}
+options(opengwasr.timeout = 600)
+src <- og_api()
+```
+
+Without a token, `og_api()` stops straight away:
+
+```text
+# illustrative
+Error in `og_api()`:
+! No OpenGWAS token found.
+ℹ Set `OPENGWAS_JWT` in your .Renviron to the token from <https://api.opengwas.io/profile/>, then restart R.
+```
+
+A token the API doesn't accept is reported on the first query, with the same advice. Both errors have class `opengwasr_auth`.
+
+### Checking your access {#checking-access}
+
+`og_status()` reports whether the API is up. `og_user()` reports who you are signed in as, and your allowance.
+
+```{r og-status, eval = FALSE}
+og_status(src)
+og_user(src)
+```
+
+```text
+# illustrative
+── OpenGWAS API ─────────────────────────────
+✔ Ready
+• Most rows one query returns: 100,000
+• Unread answers kept for: 1 h
+
+── Signed in ────────────────────────────────
+• User: opengwasr-dev
+• Tier: gateway
+• Allowance: 1,000
+• Jobs at once: 10
+```
+
+Both return a list, so scripts can read the fields.
+
+## Finding Analyses {#finding-analyses}
+
+An **Analysis** is one statistical analysis of one trait. Each lives in a **Store**, and is named `<store_id>:<analysis_id>`, such as `OGS-00011:GCST90029007`.
+
+### By identifier {#analyses-by-id}
+
+```{r analyses-by-id, eval = FALSE}
+info <- og_analyses(src, c("OGS-00011:GCST90029007", "OGS-00011:GCST003116"))
+info[, c("id", "analysis_label", "assigned_ancestry", "sample_size",
+         "outcome_type", "stored_effect_scale")]
+```
+
+```text
+# illustrative
+                     id          analysis_label assigned_ancestry sample_size outcome_type stored_effect_scale
+ OGS-00011:GCST90029007         Body mass index               EUR      532396   continuous                  sd
+   OGS-00011:GCST003116 Coronary artery disease               EUR      187599       binary              log_or
+```
+
+Analyses come back in the order you gave them, one per identifier. The metadata includes the trait (`analysis_label`, `trait_ontology_id`), the Assigned Ancestry, sample sizes (`sample_size`, `sample_size_kind`, `n_cases`, `n_controls`), how effects are scaled (`stored_effect_scale`, `original_sd`, `original_sd_method`), the publication and the licence.
+
+### Legacy OpenGWAS identifiers {#legacy-ids}
+
+Identifiers from the old OpenGWAS API are accepted where they name exactly one Analysis. The `requested_id` column shows what you asked for:
+
+```{r legacy-ids, eval = FALSE}
+og_analyses(src, c("ukb-b-19953", "ebi-a-GCST003116"))[, c("requested_id", "id", "analysis_label")]
+```
+
+```text
+# illustrative
+     requested_id                    id          analysis_label
+      ukb-b-19953 OGS-00009:ukb-b-19953   Body mass index (BMI)
+ ebi-a-GCST003116  OGS-00011:GCST003116 Coronary artery disease
+```
+
+An identifier that names no Analysis is an error, with the API's reason. Some OpenGWAS identifier families aren't held by any Store:
+
+```text
+# illustrative
+Error in `og_analyses()`:
+! 1 identifier names no Analysis:
+✖ ieu-a-2: OpenGWAS batch ieu-a is not held by any Store.
+```
+
+Some old identifiers now point to a later release of the same analysis. For example, `finn-b-I9_CHD` points to FinnGen release 13, `OGS-00017:finngen-r13-I9_CHD`. Its numbers differ from the ones OpenGWAS served, so opengwasr won't swap it in for you. You have to ask for the successor by name:
+
+```text
+# illustrative
+Error in `og_analyses()`:
+! `finn-b-I9_CHD` now points to a later release of that analysis, whose numbers differ.
+ℹ To use it, ask for "OGS-00017:finngen-r13-I9_CHD".
+```
+
+This error has class `opengwasr_legacy_successor`. If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two Stores:
+
+```text
+# illustrative
+Error in `og_analyses()`:
+! `GCST90000001` names more than one Analysis.
+ℹ Use one of: "OGS-00011:GCST90000001", "OGS-00012:GCST90000001".
+```
+
+### Pinning a Store Release {#pinning-releases}
+
+Each Store is published as a series of immutable **Store Releases**. Queries use each Store's latest Release unless you pin one with `releases`, which every query function accepts. Give a Store id for its latest Release, or `"<store_id>/<release_id>"` for a particular one:
+
+```{r pinning-releases, eval = FALSE}
+og_analyses(src, "OGS-00011:GCST90029007",
+            releases = "OGS-00011/OGS-00011-completed")[, c("id", "release_id")]
+```
+
+```text
+# illustrative
+                     id          release_id
+ OGS-00011:GCST90029007 OGS-00011-completed
+```
+
+To reproduce an analysis later, record the `store_id` and `release_id` columns that come back with every Association (see [Provenance](#provenance)).
+
+### Browsing the catalogue {#browsing-the-catalogue}
+
+Without identifiers, `og_analyses()` reads the whole catalogue, page by page, with a progress bar:
+
+```{r browsing-the-catalogue, eval = FALSE}
+catalogue <- og_analyses(src)
+nrow(catalogue)
+bmi <- subset(catalogue, grepl("body mass index", analysis_label, ignore.case = TRUE) &
+                assigned_ancestry %in% "EUR" & outcome_type == "continuous")
+head(bmi[, c("id", "analysis_label", "sample_size")], 3)
+```
+
+```text
+# illustrative
+[1] 38152
+                     id  analysis_label sample_size
+ OGS-00011:GCST90025994 Body mass index      457756
+ OGS-00011:GCST90029007 Body mass index      532396
+ OGS-00011:GCST90302889 Body mass index      365498
+```
+
+## Top hits {#top-hits}
+
+`og_tophits()` returns each Analysis's Associations at or below a p-value `threshold` (default `5e-8`), strongest first. It **clumps them by default**, keeping one variant per independent signal; the [instruments and clumping](instruments-and-clumping.html) vignette explains how. Here, `clump = FALSE` shows every top hit:
+
+```{r tophits-unclumped, eval = FALSE}
+top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE)
+head(top[, c("rsid", "alid", "beta", "se", "pval", "association_status")], 4)
+```
+
+```text
+# illustrative
+Warning message:
+OGS-00011:GCST003116 has more than 1,000 top hits at p <= 5e-08; only the strongest 1,000 were returned.
+ℹ Raise `limit` (at most 10,000) for more.
+
+       rsid           alid       beta          se         pval association_status
+  rs2891168 9:22098620:A:G -0.1933591 0.009185791 2.296241e-98           observed
+  rs4977574 9:22098575:A:G -0.1929106 0.009185791 6.425124e-98           observed
+ rs10738610 9:22123767:A:C -0.1936836 0.009292603 1.772656e-96           observed
+ rs10757275 9:22106226:A:G  0.1930436 0.009269714 2.558808e-96           observed
+```
+
+- `limit` (default 1,000) caps the top hits returned per Analysis. When it cuts any off, you get the warning above.
+- `threshold` must be one the Store indexes. Each Store indexes `5e-8`, `5e-6` and `5e-4`, and refuses anything looser:
+
+```text
+# illustrative
+Error in `og_tophits()`:
+! The API refused `threshold = 0.001`: threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds.
+ℹ Thresholds this Store indexes: 5e-08, 5e-06 and 5e-04.
+```
+
+That error has class `opengwasr_unsupported_threshold`, a kind of `opengwasr_refusal`.
+
+## Associations {#associations}
+
+`og_associations()` returns the Associations for a set of variants in a set of Analyses: for example, the outcome data for your instruments. Variants can be rsIDs or ALIDs, mixed. An **ALID** is a variant's position on GRCh38 with its two alleles, `chromosome:position:allele:allele`.
+
+```{r associations, eval = FALSE}
+assoc <- og_associations(
+  src,
+  variants = c("rs1421085", "16:53767042:C:T", "rs6567160", "rs34159589", "rs999999999"),
+  analyses = c("OGS-00011:GCST90029007", "OGS-00011:GCST003116")
+)
+assoc[, c("id", "rsid", "alid", "beta", "se", "pval", "association_status")]
+```
+
+```text
+# illustrative
+ℹ 1 rsID is in none of these Analyses' Stores, so it has no Associations: rs999999999.
+
+                     id       rsid               alid         beta          se          pval association_status
+   OGS-00011:GCST003116 rs34159589 5:75701728:A:AAAAT -0.003017932 0.009841919  7.591169e-01            imputed
+   OGS-00011:GCST003116  rs1421085    16:53767042:C:T  0.029665306 0.009628296  2.062688e-03           observed
+   OGS-00011:GCST003116  rs6567160    18:60161902:C:T  0.057734668 0.010559082  4.557239e-08           observed
+ OGS-00011:GCST90029007 rs34159589 5:75701728:A:AAAAT -0.025441924 0.002000809  4.830139e-37            imputed
+ OGS-00011:GCST90029007  rs1421085    16:53767042:C:T  0.075834384 0.001968384  0.000000e+00           observed
+ OGS-00011:GCST90029007  rs6567160    18:60161902:C:T  0.054658253 0.002292633 1.260915e-125           observed
+```
+
+- `rs1421085` and `16:53767042:C:T` are the same variant, so it appears once per Analysis.
+- An rsID can name several ALIDs at a multiallelic site. `rs34159589` names both `5:75701728:A:AAAAT` and `5:75701728:AAAAT:AAAATAAAT`. opengwasr asks for all of them and returns every Association the Analyses hold. It never picks one for you.
+- Every Association has both `rsid` and `alid`, so you can join either way.
+- An rsID that no Store holds is reported in a message, never dropped quietly.
+- **Imputed Associations are included** (`association_status == "imputed"`). Pass `observed_only = TRUE` to leave them out. See [Imputed Associations](#imputed-associations).
+
+There is no LD-proxy option. Reference-Completed Store Releases already hold an Imputed Association for most variants a source didn't report.
+
+## PheWAS, regions and variant lookups {#phewas-regions-variants}
+
+`og_phewas()` returns one variant's Associations across Analyses, at p ≤ `threshold` (default `1e-8`). By default it searches every Store; `releases` narrows the search.
+
+```{r phewas, eval = FALSE}
+ph <- og_phewas(src, "rs1421085", releases = c("OGS-00009", "OGS-00011"))
+nrow(ph)
+head(ph[, c("id", "analysis_label", "beta", "pval")], 4)
+```
+
+```text
+# illustrative
+[1] 90
+                      id        analysis_label       beta           pval
+   OGS-00009:ukb-b-19953 Body mass index (BMI) 0.07355628 4.336199e-291
+    OGS-00009:ukb-b-2303 Body mass index (BMI) 0.07343301 7.372227e-286
+   OGS-00009:ukb-b-11842                Weight 0.06059626 7.674857e-257
+   OGS-00009:ukb-b-12039                Weight 0.06055586 7.026346e-253
+```
+
+`og_range()` returns every Association in a stretch of one chromosome. Positions are on GRCh38, one-based and inclusive:
+
+```{r range, eval = FALSE}
+locus <- og_range(src, "OGS-00011:GCST003116", chromosome = "9",
+                  start = 22090000, end = 22130000)
+table(locus$association_status)
+```
+
+```text
+# illustrative
+ imputed observed
+      19       85
+```
+
+`og_variants_rsid()` and `og_variants_chrpos()` translate rsIDs and GRCh38 positions into ALIDs, using the Stores' own variant tables. You get each ALID once for every Store that holds it:
+
+```{r variants, eval = FALSE}
+og_variants_rsid(src, "rs34159589", releases = "OGS-00011")
+og_variants_chrpos(src, "16:53767042", releases = "OGS-00011")
+```
+
+```text
+# illustrative
+                       alid chromosome position effect_allele other_allele       rsid  store_id          release_id
+         5:75701728:A:AAAAT          5 75701728             A        AAAAT rs34159589 OGS-00011 OGS-00011-completed
+ 5:75701728:AAAAT:AAAATAAAT          5 75701728         AAAAT    AAAATAAAT rs34159589 OGS-00011 OGS-00011-completed
+```
+
+## What the columns mean {#columns}
+
+Every function that returns Associations (`og_tophits()`, `og_associations()`, `og_phewas()`, `og_range()`) returns the same columns:
+
+| Column | Meaning |
+|---|---|
+| `id` | The Analysis, as `<store_id>:<analysis_id>` |
+| `store_id`, `analysis_id`, `analysis_label` | Its Store, its identifier within the Store, and its trait |
+| `alid`, `rsid`, `chromosome`, `position` | The variant, on GRCh38 |
+| `effect_allele`, `other_allele`, `eaf` | Its alleles, and the effect allele's frequency |
+| `beta`, `se` | The effect of one copy of the effect allele, and its standard error |
+| `z`, `log10_p`, `pval` | The z-score, log10 of the p-value, and the p-value |
+| `effect_scale` | The scale `beta` and `se` are on: `"sd"`, `"log_or"` or `"original"` |
+| `n`, `sample_size_kind`, `ncase`, `ncontrol` | Sample size, and what kind of count it is |
+| `association_status` | `"observed"` or `"imputed"` |
+| `release_id` | The Store Release the Association came from |
+
+### Effects and p-values {#effects-and-p-values}
+
+The API stores `z`, `se` and `log10_p`. opengwasr adds `beta` = `z * se` and `pval` = `10^log10_p`, the same way everywhere. `log10_p` is negative: −97.6 means p = 10^−97.6.
+
+```{r effects-and-p-values, eval = FALSE}
+top <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE, limit = 3)
+top[, c("rsid", "z", "se", "beta", "log10_p", "pval")]
+```
+
+```text
+# illustrative
+       rsid        z         se        beta   log10_p pval
+ rs56094641 -38.5342 0.00196838 -0.07585011 -324.1229    0
+ rs11642015 -38.5327 0.00196838 -0.07584705 -324.0969    0
+ rs62048402  38.5273 0.00196838  0.07583645 -324.0067    0
+```
+
+These p-values are smaller than R can represent (about 1e-308), so `pval` is 0. `log10_p` keeps the value, so sort or filter on `log10_p` when the strongest signals matter.
+
+### Effect scale and original units {#effect-scale}
+
+The `effect_scale` column says what `beta` and `se` mean:
+
+- `"sd"`: per standard deviation of the trait. Continuous traits are stored this way, so effects are comparable across Analyses.
+- `"log_or"`: log odds, for binary traits.
+
+Some binary Analyses are stored per SD rather than as log odds. `effect_scale` says which, so check it rather than assuming from the trait.
+
+For a continuous trait in its original units, ask for `effect_scale = "original"`. opengwasr multiplies `beta` and `se` by the Analysis's recorded phenotype SD (`original_sd` in `og_analyses()`):
+
+```{r effect-scale-original, eval = FALSE}
+og_associations(src, "rs1421085", "OGS-00011:GCST90624700")[, c("beta", "se", "effect_scale")]
+og_associations(src, "rs1421085", "OGS-00011:GCST90624700",
+                effect_scale = "original")[, c("beta", "se", "effect_scale")]
+```
+
+```text
+# illustrative
+       beta         se effect_scale
+ 0.09583174 0.00312233           sd
+
+      beta         se effect_scale
+ 0.4667140 0.01520618     original
+```
+
+Here `original_sd` is 4.87 kg/m², estimated from the source's own effect sizes and allele frequencies (`original_sd_method == "estimated_from_source_maf"`). Log-odds effects are returned unchanged. When an Analysis has no recorded phenotype SD, opengwasr refuses rather than guess:
+
+```text
+# illustrative
+Error in `og_associations()`:
+! Can't give OGS-00009:ukb-b-19953 in original units: it has no recorded phenotype SD.
+ℹ Its effects were standardised at source (`original_sd_method` is "declared_standardised").
+ℹ Use `effect_scale = "stored"` (the default) for per-SD effects.
+```
+
+That error has class `opengwasr_original_units_unavailable`, a kind of `opengwasr_refusal`.
+
+### Sample size {#sample-size}
+
+`n` is the per-Association sample size where the Store holds one, and otherwise the Analysis's `sample_size`. `sample_size_kind` says what kind of count it is, so an effective N is never mistaken for a count of participants:
+
+- `"total"`: participants in the Analysis.
+- `"case_control"`: cases plus controls. `ncase` and `ncontrol` give each.
+- `"variant_level"`: N differs from variant to variant, as in many molecular-trait Analyses.
+
+```{r sample-size, eval = FALSE}
+out <- og_associations(src, "rs6567160", "OGS-00011:GCST003116")
+out[, c("id", "n", "sample_size_kind", "ncase", "ncontrol", "effect_scale")]
+```
+
+```text
+# illustrative
+                   id      n sample_size_kind ncase ncontrol effect_scale
+ OGS-00011:GCST003116 187599     case_control 61289   126310       log_or
+```
+
+### Imputed Associations {#imputed-associations}
+
+A Reference-Completed Store Release holds, beside the Associations its source reported (Observed), an Imputed Association for most variants the source didn't report. opengwasr includes them by default, and labels each Association in `association_status`. Here are 1,000 BMI instruments looked up in CAD:
+
+```{r imputed-associations, eval = FALSE}
+instruments <- og_tophits(src, "OGS-00011:GCST90029007")
+outcome <- og_associations(src, instruments$alid, "OGS-00011:GCST003116")
+table(outcome$association_status)
+
+observed <- og_associations(src, instruments$alid, "OGS-00011:GCST003116",
+                            observed_only = TRUE)
+nrow(observed)
+```
+
+```text
+# illustrative
+ imputed observed
+      67      929
+[1] 929
+```
+
+Including the Imputed Associations finds 996 of the 1,000 instruments in the outcome. With only the Observed ones, 929. Report how many of the Associations you used were Imputed.
+
+### Provenance {#provenance}
+
+Every Association carries the `store_id` and `release_id` it came from. `og_provenance()` gives the details of the query that produced a data frame:
+
+```{r provenance, eval = FALSE}
+og_provenance(top)
+```
+
+```text
+# illustrative
+── opengwasr provenance ─────────────────────
+• Query: og_tophits(threshold = 5e-08, limit = 3, observed_only = FALSE, clump = FALSE)
+• Releases: OGS-00011/OGS-00011-completed
+• Jobs: fc93f06c-52b9-4e7f-b657-13926aff0d29
+• Top hits: 3 returned (truncated)
+• Retrieved: 2026-11-21 23:20:32 UTC
+```
+
+Record the Releases alongside your analysis. They identify exactly which data answered.
+
+## When a query can't be answered {#errors}
+
+opengwasr never quietly returns a different answer from the one you asked for. An option is either honoured or refused with an error saying why. Every error is a classed condition, so scripts and packages can handle particular failures:
+
+| Class | When |
+|---|---|
+| `opengwasr_auth` | No token, or the API didn't accept it |
+| `opengwasr_unknown_analysis` | An identifier names no Analysis, or one that has been retired |
+| `opengwasr_ambiguous_analysis` | An identifier names more than one Analysis |
+| `opengwasr_refusal` | An option can't be honoured exactly. Its subclasses include `opengwasr_unsupported_threshold`, `opengwasr_original_units_unavailable`, `opengwasr_legacy_successor`, `opengwasr_ld_refusal`, `opengwasr_ld_unmatched` and `opengwasr_too_large` |
+| `opengwasr_timeout`, `opengwasr_job_failed`, `opengwasr_result_expired` | A Job didn't finish in time, failed, or its answer had expired ([Large queries and Jobs](large-queries-and-jobs.html)) |
+
+All of them also have class `opengwasr_error`. Catch one by its class:
+
+```{r errors, eval = FALSE}
+info <- tryCatch(
+  og_analyses(src, c("ukb-b-19953", "ieu-a-2")),
+  opengwasr_unknown_analysis = function(e) {
+    message("Skipping: ", paste(e$ids, collapse = ", "))
+    og_analyses(src, setdiff(c("ukb-b-19953", "ieu-a-2"), e$ids))
+  }
+)
+```
+
+```text
+# illustrative
+Skipping: ieu-a-2
+```
+
+Each condition carries the details as fields, such as `e$ids` here, or the API's own error code and message as `e$api_error` and `e$api_message`.

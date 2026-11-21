@@ -1,3 +1,11 @@
 destination: docs/_site
 template:
   bootstrap: 5
+articles:
+- title: User journeys
+  navbar: Articles
+  contents:
+  - opengwasr
+  - instruments-and-clumping
+  - large-queries-and-jobs
+  - migrating-from-ieugwasr

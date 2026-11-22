@@ -129,6 +129,9 @@ fake_world <- function(n_synthetic = 1001) {
   # total_too_small (the status and NDJSON ones echo the caller's key). `page_rows` sets the result
   # page size, `poll_after_ms` the interval the API asks for, `delay_ms` how long it takes to answer a
   # Job request, `many_stores` adds 11 Analyses in 11 GWAS Stores (OGS-02001 to OGS-02011).
+  # Busy API: `busy` is a code from the errors guide (`user_queue_full` answers 429, `intake_paused` 503),
+  # `busy_times` how many requests to Job routes it refuses before it recovers, `busy_after` the
+  # Retry-After it sends, `busy_route` which request (submit, status or result). DELETE /api/jobs/<id> cancels a Job.
   # Scenarios, switched by POST /_fake/<setting>/<value>: `two_releases` makes GWAS Store OGS-00099
   # serve two Store Releases (listed newest-first; the API gives no order); `leak` makes errors and
   # lookup reasons echo the caller's key, as a careless server might; `plain401` answers 401 in plain
@@ -149,7 +152,8 @@ fake_world <- function(n_synthetic = 1001) {
   world$associations <- fake_associations()
   world$mode <- list(paging = "cursor", malformed = FALSE, two_releases = FALSE, leak = FALSE,
                      plain401 = FALSE, no_analyses = FALSE, many_stores = FALSE, job = "normal",
-                     page_rows = 1000L, poll_after_ms = 10, delay_ms = 0)
+                     page_rows = 1000L, poll_after_ms = 10, delay_ms = 0,
+                     busy = "none", busy_times = 0L, busy_after = 3L, busy_route = "submit")
   world$key <- fake_key
   world
 }
@@ -309,11 +313,21 @@ fake_api <- function(world = fake_world()) {
   app$locals$jobs <- new.env()
   app$locals$job_keys <- new.env()
   app$locals$bodies <- new.env()
+  busy_refusal <- function(req, res, route) {
+    mode <- req$app$locals$world$mode
+    if (!identical(mode$busy_route, route)) return(FALSE)
+    if (identical(mode$busy, "none") || as.integer(mode$busy_times) <= 0L) return(FALSE)
+    req$app$locals$world$mode$busy_times <- as.integer(mode$busy_times) - 1L
+    status <- if (mode$busy %in% c("results_cache_full", "intake_paused", "job_store_unavailable")) 503L else 429L
+    res$set_header("Retry-After", as.character(mode$busy_after))
+    fail(res, status, mode$busy, "The API is busy")
+    TRUE
+  }
   job_status_body <- function(job, mode) {
     n <- job$polls
     scenario <- job$scenario
     waiting <- identical(scenario, "queued_running")
-    status <- if (waiting && n <= 2) "queued" else if (waiting && n == 3) "running" else switch(scenario,
+    status <- if (isTRUE(job$cancelled)) "cancelled" else if (waiting && n <= 2) "queued" else if (waiting && n == 3) "running" else switch(scenario,
       never = "running", failed_request = , failed_temporary = , failed_leak = "failed",
       cancelled = "cancelled", expired = "expired", bad_status = paste("weird", job$token), "succeeded")
     body <- list(job_id = job$id, status = status, endpoint = job$endpoint,
@@ -377,6 +391,7 @@ fake_api <- function(world = fake_world()) {
   }
   app$post("/api/tophits", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
+    if (busy_refusal(req, res, "submit")) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
     problems <- request_body_problems(body, "/api/tophits", "post", req$app$locals$openapi)
@@ -436,6 +451,7 @@ fake_api <- function(world = fake_world()) {
   })
   app$get("/api/jobs/:id", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
+    if (busy_refusal(req, res, "status")) return()
     env <- req$app$locals$jobs
     if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
     arrived <- as.numeric(Sys.time())
@@ -449,8 +465,22 @@ fake_api <- function(world = fake_world()) {
     if (delay > 0) Sys.sleep(delay)
     res$send_json(out$body, auto_unbox = TRUE, null = "null")
   })
+  app$delete("/api/jobs/:id", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    env <- req$app$locals$jobs
+    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
+    job <- get(req$params$id, envir = env)
+    # A finished Job is returned unchanged: one asked about at least once has finished (`normal`).
+    if (identical(job$scenario, "normal") && job$polls > 0L) {
+      return(res$send_json(job_status_body(job, NULL)$body, auto_unbox = TRUE, null = "null"))
+    }
+    job$cancelled <- TRUE
+    assign(job$id, job, envir = env)
+    res$send_json(job_status_body(job, NULL)$body, auto_unbox = TRUE, null = "null")
+  })
   app$get("/api/jobs/:id/result", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
+    if (busy_refusal(req, res, "result")) return()
     env <- req$app$locals$jobs
     if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
     job <- get(req$params$id, envir = env)

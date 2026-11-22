@@ -50,9 +50,9 @@ og_tophits <- function(src, analyses, threshold = 5e-8, limit = 1000, observed_o
 og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
                                      observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
                                      kb = NULL, original_units = FALSE, releases = NULL) {
-  check_tophits_arguments(analyses, threshold, limit, observed_only, clump, ld, r2, kb, original_units)
   # The call's one deadline starts here, so finding the Store Releases and Analyses counts.
-  deadline <- job_now() + src$timeout
+  deadline <- local_query(src)
+  check_tophits_arguments(analyses, threshold, limit, observed_only, clump, ld, r2, kb, original_units)
   releases <- resolve_releases(src, releases)
   info <- analyses_lookup(src, analyses, releases)
   if (original_units) check_original_units(info)  # refuse before the Job runs, not after
@@ -60,16 +60,21 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
 
   body <- list(analyses = as.list(info$id), threshold = threshold, limit = as.integer(limit),
                observed_only = observed_only, releases = releases)
-  out <- run_job(src, "api/tophits", body, unit = "Associations", deadline = deadline)
-  check_tophits_metadata(out$job, nrow(out$rows))
-  if (out$job$truncated) warn_truncated(info$id, threshold, limit)
-
   args <- list(threshold = threshold, limit = limit, observed_only = observed_only, clump = clump,
                original_units = original_units)
-  attach_provenance(shape_associations(out$rows, info, original_units),
-                    query = provenance_query("og_tophits", args),
-                    args = c(list(analyses = analyses), args, list(releases = releases)),
-                    jobs = list(out$job))
+  # What the answer is shaped from is pinned here, at plan time: `og_job_result()` finishes the
+  # same plan later, however long after.
+  plan <- query_plan(list(list(path = "api/tophits", body = body)), unit = "Associations",
+                     finish = function(results) {
+    out <- results[[1]]
+    check_tophits_metadata(out$job, nrow(out$rows))
+    if (out$job$truncated) warn_truncated(info$id, threshold, limit)
+    attach_provenance(shape_associations(out$rows, info, original_units),
+                      query = provenance_query("og_tophits", args),
+                      args = c(list(analyses = analyses), args, list(releases = releases)),
+                      jobs = list(out$job))
+  })
+  run_query(src, plan, deadline)
 }
 
 # The API says how many top hits it returned and whether `limit` cut any off. An answer that doesn't

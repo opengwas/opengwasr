@@ -17,7 +17,7 @@ og_api(
 \code{opengwasr.timeout} option, then 3600.}
 
 \item{max_in_flight}{How many Jobs one call may run at once. Defaults to the
-\code{opengwasr.max_in_flight} option, then 4.}
+\code{opengwasr.max_in_flight} option, then 4; at most 100, the Jobs one user may have queued.}
 }
 \value{
 An \code{og_api_source}.

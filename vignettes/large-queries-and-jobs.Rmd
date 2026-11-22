@@ -9,11 +9,11 @@ vignette: >
 
 The OpenGWAS API answers every data query as a **Job**: it queues the query fairly between users, runs it, and keeps the answer for you to collect in pages. opengwasr's query functions hide this. They submit, wait and collect, and return a data frame. This vignette is for when you want to know what happens underneath, or to take control of it: big queries, many queries at once, long waits, interruptions, and queries too large for the API.
 
-> **Status.** The chunks that run, from responses recorded against the development Data API on 22 November 2026, are the setup, waiting, Job-function, reattaching and cancelling chunks. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
+> **Status.** The chunks that run, from responses recorded against the development Data API on 22 November 2026, are the setup, splitting, waiting, Job-function, reattaching and cancelling chunks. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
 
 ```{r recordings, include = FALSE}
 source("recordings.R")
-start_recordings("recordings-large-queries-and-jobs")
+start_recordings("recordings-large")
 ```
 
 ```{r setup}
@@ -34,24 +34,25 @@ One Job has limits on its shape. When a query is bigger, opengwasr splits it int
 | `og_ld_matrix()` | 500 variants |
 | Any Job's answer | 100,000 Associations |
 
-For example, 2,000 LDL cholesterol top hits looked up in 10 BMI Analyses:
+For example, 1,100 LDL cholesterol top hits looked up in two BMI Analyses:
 
-```{r splitting, eval = FALSE}
-ldl <- og_tophits(src, "OGS-00011:GCST90002412", clump = FALSE, limit = 2000)
-bmi_ids <- c("OGS-00011:GCST90025994", "OGS-00011:GCST90029007", "OGS-00011:GCST90302889",
-             "OGS-00011:GCST90429765", "OGS-00011:GCST90429770", "OGS-00011:GCST90429775",
-             "OGS-00011:GCST90446645", "OGS-00011:GCST90624700", "OGS-00011:GCST90624704",
-             "OGS-00009:ukb-b-19953")
+```{r splitting, warning = FALSE}
+ldl <- og_tophits(src, "OGS-00011:GCST90002412", clump = FALSE, limit = 1100)
+bmi_ids <- c("OGS-00011:GCST90029007", "OGS-00011:GCST90025994")
 outcome <- og_associations(src, ldl$alid, bmi_ids)
+length(og_provenance(outcome)$job_ids)
 ```
 
+The 1,100 variants went in two Jobs, of 1,000 and 100 variants, and `og_provenance()` lists both. While it runs, an interactive session shows:
+
 ```text
-# illustrative
-ℹ Split into 2 Jobs (at most 1,000 variants and 100 Analyses each), at most 4 at a time.
-■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■  2/2 Jobs
+# illustrative: the progress display appears only in interactive sessions
+ℹ Split into 2 Jobs, at most 4 at a time.
 ```
 
 `og_api(max_in_flight = )` sets how many Jobs run at once (default 4, set by the option `opengwasr.max_in_flight`). The API runs at most 10 of your Jobs at a time (the "Jobs running at once" that `og_user()` reports) and holds at most 100 more queued; opengwasr stays well under both.
+
+The pieces come back in a stable order (Analyses as you asked for them, then chromosome, position and ALID), so the data frame doesn't depend on which Job finished first. If you start the query with `og_submit()`, every piece is submitted at once and one handle collects them; a query that splits into more than the 100 Jobs one user may have queued is refused before anything is submitted (`opengwasr_too_many_jobs`), and the synchronous call, which paces itself, is the way to run it.
 
 opengwasr splits a query only to fit these shapes. It never splits one to get round the API's cost limit (see [Too large](#too-large)).
 
@@ -187,12 +188,12 @@ Still to be decided: whether one Job may return a whole subset, over the 100,000
 
 ## Too large: download the Store Release {#too-large}
 
-Separately from its shape limits, the API refuses a query it estimates would cost more than one Job may use. opengwasr doesn't split such a query to get round the limit. A query that large belongs on a local copy of the Store Release, not on the shared API. None of the queries in these vignettes comes near the limit. This is what the refusal looks like, for a hypothetical query over many large Analyses:
+Separately from its shape limits, the API refuses a query it estimates would cost more than one Job may use. opengwasr doesn't split such a query to get round the limit. A query that large belongs on a local copy of the Store Release, not on the shared API. None of the queries in these vignettes comes near the limit. The refusal can't be provoked on the development Data API, so what follows is illustrative, not recorded (opengwasr's tests run it against a fake). If a piece of a split query is refused, the pieces already submitted are cancelled (`e$cancelled` lists them) and the call stops. This is what the refusal looks like, for a hypothetical query over many large Analyses:
 
 ```{r too-large, eval = FALSE}
 region <- tryCatch(
   og_range(src, many_bmi_ids, chromosome = "16", start = 1, end = 90000000),
-  opengwasr_too_large = function(e) {
+  opengwasr_request_too_large = function(e) {
     message("Too large for the API (estimated ", e$cost_estimate, " of ", e$max_cost, ").")
     NULL
   }
@@ -202,12 +203,10 @@ region <- tryCatch(
 ```text
 # illustrative
 Error in `og_range()`:
-! The API refused this query as too costly: it estimated 3,479 CPU-seconds, more than the 300 one Job may use.
-ℹ opengwasr doesn't split queries to get round this limit.
-ℹ Ask for less (fewer Analyses, a shorter range), or download the Store Release and query it locally with a Local Source (coming in a later opengwasr release).
+! Estimated cost 3,479 CPU-seconds exceeds the 300 one Job may use; download the GWAS Store's Store Release and query it locally.
 ```
 
-The error has class `opengwasr_too_large`, a kind of `opengwasr_refusal`, and carries the API's `e$cost_estimate` and `e$max_cost`.
+The message is the API's own (illustrative: the wording is the API's to set). The error has class `opengwasr_request_too_large`, a kind of `opengwasr_refusal`, and carries the API's `e$cost_estimate` and `e$max_cost`.
 
 ```{r end-recordings, include = FALSE}
 end_recordings()

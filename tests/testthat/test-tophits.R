@@ -436,16 +436,16 @@ test_api("a binary Analysis stored per SD is refused live", {
   expect_equal(e$ids, "OGS-00009:ukb-b-13745")
 })
 
-test_that("more Store Releases than one Job holds is refused, naming the splitting ticket", {
+test_that("more Store Releases than one Job holds are split (test-split.R has the rest)", {
   fake_set(fake, "many_stores", "true", "false")
   src <- fake_source(fake)
   ids <- sprintf("OGS-%05d:MANY%02d", 2000 + 1:11, 1:11)
   pins <- sprintf("OGS-%05d/OGS-%05d-r", 2000 + 1:11, 2000 + 1:11)
   # Eleven pinned Store Releases, ten Analyses: only the Analyses' own Store Releases go to the Job.
   top <- og_tophits(src, ids[1:10], clump = FALSE, releases = pins)
-  expect_equal(nrow(top), 0)
-  e <- expect_error(og_tophits(src, ids, clump = FALSE, releases = pins), class = "opengwasr_not_implemented")
-  expect_equal(e$ticket, "#9")
+  expect_length(og_provenance(top)$job_ids, 1)
+  top <- og_tophits(src, ids, clump = FALSE, releases = pins)
+  expect_length(og_provenance(top)$job_ids, 2)
 })
 
 test_that("og_tophits() is a Source generic, and checks its arguments", {

@@ -107,3 +107,29 @@ check_original_units <- function(analyses, call = rlang::caller_env()) {
     call = call
   )
 }
+
+# Put the Associations of a query back in one stable order, whether one Job or several answered:
+# Analyses in the order asked for, then chromosome (1-22, X, Y, MT, then others by name), position,
+# ALID. `ids` are the canonical Analysis ids as asked for.
+order_associations <- function(rows, ids) {
+  if (nrow(rows) < 2) return(rows)
+  chr <- as.character(rows$chromosome)
+  rank <- suppressWarnings(as.numeric(chr))
+  special <- match(chr, c("X", "Y", "MT", "M"))
+  rank[is.na(rank)] <- 22 + special[is.na(rank)]
+  other <- is.na(rank)
+  rank[other] <- 1000 + match(chr[other], sort(unique(chr[other])))
+  o <- order(match(rows$id, ids), rank, rows$position, rows$alid, method = "radix")
+  rows <- rows[o, , drop = FALSE]
+  rownames(rows) <- NULL
+  rows
+}
+
+# Put the rows of a split query that are in a given order per Analysis (top hits, strongest first)
+# back by Analysis in the order asked for, keeping each Analysis's own order.
+order_by_analysis <- function(rows, ids) {
+  if (nrow(rows) < 2) return(rows)
+  rows <- rows[order(match(rows$id, ids), seq_len(nrow(rows)), method = "radix"), , drop = FALSE]
+  rownames(rows) <- NULL
+  rows
+}

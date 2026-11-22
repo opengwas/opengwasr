@@ -11,7 +11,7 @@
 #' @param timeout Seconds to wait for any one call before giving up. Defaults to the
 #'   `opengwasr.timeout` option, then 3600.
 #' @param max_in_flight How many Jobs one call may run at once. Defaults to the
-#'   `opengwasr.max_in_flight` option, then 4.
+#'   `opengwasr.max_in_flight` option, then 4; at most 100, the Jobs one user may have queued.
 #' @return An `og_api_source`.
 #' @examples
 #' \dontrun{
@@ -28,9 +28,9 @@ og_api <- function(url = getOption("opengwasr.url"),
     og_abort("`timeout` must be one positive number of seconds.", class = "opengwasr_argument")
   }
   if (!is.numeric(max_in_flight) || length(max_in_flight) != 1 || is.na(max_in_flight) ||
-      !is.finite(max_in_flight) || max_in_flight < 1 || max_in_flight > .Machine$integer.max ||
+      !is.finite(max_in_flight) || max_in_flight < 1 || max_in_flight > max_queued_jobs_per_user ||
       max_in_flight != round(max_in_flight)) {
-    og_abort("`max_in_flight` must be one whole number, at least 1.", class = "opengwasr_argument")
+    og_abort("`max_in_flight` must be one whole number from 1 to 100 (the Jobs one user may have queued).", class = "opengwasr_argument")
   }
   structure(
     list(

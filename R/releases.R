@@ -70,16 +70,9 @@ default_releases <- function(src, call) {
   lapply(served, function(b) list(store_id = b$store_id, release_id = b$release_id))
 }
 
-# The Store Releases of the Analyses asked for: a Job reads only those, and takes at most
-# `max_releases_per_job` (more is #9's splitter). `info` is Analysis metadata with `store_id`.
-releases_of_analyses <- function(releases, info, call = rlang::caller_env()) {
-  releases <- Filter(function(r) r$store_id %in% unique(info$store_id), releases)
-  if (length(releases) > max_releases_per_job) {
-    not_implemented(
-      paste0("A query over ", length(releases), " GWAS Stores (a Job takes at most ", max_releases_per_job, ")"),
-      "#9", "Ask for Analyses from at most 10 GWAS Stores at a time; opengwasr will split larger queries later.",
-      call
-    )
-  }
-  releases
+# The Store Releases of the Analyses asked for: a Job reads only those. A query over more than
+# `max_releases_per_job` of them is split by GWAS Store (R/split.R), so there is no limit here.
+# `info` is Analysis metadata with `store_id`.
+releases_of_analyses <- function(releases, info) {
+  Filter(function(r) r$store_id %in% unique(info$store_id), releases)
 }

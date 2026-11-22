@@ -46,9 +46,12 @@ for most variants a source didn't report.
 The columns are those of \code{\link[=og_tophits]{og_tophits()}}. Every row has an \code{alid}; its \code{rsid} is \code{NA} for a variant
 that has no rsID (the API sends \code{"."}).
 
-One call takes at most 1,000 distinct variants (ALIDs, after rsIDs are resolved), 100 Analyses and
-Analyses from 10 GWAS Stores. A larger request raises an error of class
-\code{opengwasr_not_implemented}.
+One Job takes at most 1,000 distinct variants (ALIDs, after rsIDs are resolved), 100 Analyses and
+Analyses from 10 GWAS Stores. A larger request is split into several Jobs, run a few at a time
+(\code{og_api(max_in_flight = )}), and put back together: you get the rows an unsplit request would
+give, in a stable order (Analyses in the order asked; then chromosome 1-22, X, Y, MT and other contigs by name; then position; then ALID, whether one Job or several answered), with every Job in
+\code{\link[=og_provenance]{og_provenance()}}. A request the API refuses as too costly (\code{opengwasr_request_too_large}) is never split
+to get round that: see \code{vignette("large-queries-and-jobs")}.
 }
 \examples{
 \dontrun{

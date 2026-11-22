@@ -1,0 +1,12 @@
+{
+  "analysis_row": ["id", "store_id", "analysis_id", "status", "listed", "analysis_label", "source_label", "source_analysis_id", "trait_ontology_id", "trait_ontology_label", "trait_ontology_mapping_method", "tissue", "context", "trait_chr", "trait_bp", "assigned_ancestry", "ancestry_assignment_method", "source_ancestry_label", "sample_size_kind", "sample_size_scope", "sample_size", "n_cases", "n_controls", "stored_effect_scale", "original_effect_scale", "original_sd", "original_sd_method", "maf_threshold", "info_score_threshold", "license", "publication_doi", "publication_pmid", "consortium", "first_author", "outcome_type", "trait_class", "ancestry_category", "label_from_source", "release_id"],
+  "gwasinfo_lookup": ["release_id", "requested", "total", "analyses", "not_found", "catalog_version"],
+  "gwasinfo_page": ["release_id", "catalog_version", "offset", "after", "limit", "total", "analyses", "next_after"],
+  "user": ["user", "role", "key_name", "tier", "allowance", "concurrency_budget"],
+  "status": ["status", "ready", "execution"],
+  "status_limits": ["result_rows", "result_bytes", "page_rows", "page_bytes", "retention_seconds", "result_grace_seconds", "result_cache_bytes", "result_cache_principal_bytes", "result_unread_seconds", "failed_job_seconds", "store_timeout_seconds", "backend_max_running", "job_workers", "job_workers_max", "job_processes", "queue_max_age_seconds", "admission", "backend_max_per_release", "backend_release_limits", "range_span", "lookup_variants", "lookup_analyses", "analysis_analyses", "range_analyses"],
+  "opengwas_entry": ["id", "batch", "catalog_ids"],
+  "retired_entry": ["id", "catalog_id", "superseded_by"],
+  "batches": "batches",
+  "batch_row": ["release_id", "store_id", "analysis_count"]
+}

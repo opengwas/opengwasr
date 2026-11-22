@@ -1,0 +1,8 @@
+{
+    "user": "user:opengwasr-dev",
+    "role": "gateway",
+    "key_name": "current",
+    "tier": "gateway",
+    "allowance": 1000,
+    "concurrency_budget": 10
+}

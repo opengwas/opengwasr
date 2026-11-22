@@ -12,10 +12,6 @@
 "_PACKAGE"
 
 ## usethis namespace: start
-# These hold the Imports until real code uses each package; remove each as it does.
-#' @importFrom cli cli_abort
-#' @importFrom httr2 request
-#' @importFrom jsonlite fromJSON
-#' @importFrom rlang abort
+#' @importFrom rlang %||%
 ## usethis namespace: end
 NULL

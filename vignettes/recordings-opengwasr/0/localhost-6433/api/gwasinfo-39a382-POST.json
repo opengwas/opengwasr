@@ -1,0 +1,25 @@
+{
+    "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024,OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+    "requested": 1,
+    "total": 0,
+    "analyses": [
+
+    ],
+    "not_found": [
+        "ieu-a-2"
+    ],
+    "catalog_version": "2b9d06d6f8b200d2",
+    "retired": [
+
+    ],
+    "opengwas": [
+        {
+            "id": "ieu-a-2",
+            "batch": "ieu-a",
+            "catalog_ids": [
+
+            ],
+            "reason": "OpenGWAS batch ieu-a is not held by any Store"
+        }
+    ]
+}

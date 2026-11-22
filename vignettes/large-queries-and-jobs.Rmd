@@ -22,6 +22,7 @@ One Job has limits on its shape. When a query is bigger, opengwasr splits it int
 
 | Query | One Job holds at most |
 |---|---|
+| `og_tophits()`, clumped | 1 Analysis |
 | `og_associations()` | 100 Analyses × 1,000 variants |
 | `og_range()` | 10 Analyses, and 10 Mb of one chromosome |
 | `og_phewas()` | 10 Store Releases |

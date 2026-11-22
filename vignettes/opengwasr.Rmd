@@ -150,16 +150,24 @@ Error in `og_analyses()`:
 ✖ ieu-a-2: OpenGWAS batch ieu-a is not held by any Store.
 ```
 
-Some old identifiers now point to a later release of the same analysis. For example, `finn-b-I9_CHD` points to FinnGen release 13, `OGS-00017:finngen-r13-I9_CHD`. Its numbers differ from the ones OpenGWAS served, so opengwasr won't swap it in for you. You have to ask for the successor by name:
+Some old identifiers now point to a later release of the same analysis. For example, `finn-b-I9_CHD` points to FinnGen release 13, `OGS-00017:finngen-r13-I9_CHD`. opengwasr answers with the successor, and warns you, because its numbers differ from the ones OpenGWAS served:
+
+```{r legacy-successor, eval = FALSE}
+og_analyses(src, "finn-b-I9_CHD")[, c("requested_id", "id", "analysis_label")]
+```
 
 ```text
 # illustrative
-Error in `og_analyses()`:
-! `finn-b-I9_CHD` now points to a later release of that analysis, whose numbers differ.
-ℹ To use it, ask for "OGS-00017:finngen-r13-I9_CHD".
+  requested_id                           id                     analysis_label
+ finn-b-I9_CHD OGS-00017:finngen-r13-I9_CHD Major coronary heart disease event
+Warning message:
+`finn-b-I9_CHD` now points to a later release of that analysis, "OGS-00017:finngen-r13-I9_CHD", whose numbers differ from the ones OpenGWAS served.
+ℹ Ask for "OGS-00017:finngen-r13-I9_CHD" by name to silence this warning.
 ```
 
-This error has class `opengwasr_legacy_successor`. If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two Stores:
+The warning has class `opengwasr_legacy_successor`, and carries the identifier you gave in `w$requested_id` and the successor in `w$id`. Catch it with `tryCatch()` to stop instead, or muffle it with `withCallingHandlers()`. Every query function that takes Analyses does the same.
+
+If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two Stores:
 
 ```text
 # illustrative
@@ -480,7 +488,7 @@ opengwasr never quietly returns a different answer from the one you asked for. A
 | `opengwasr_auth` | No token, or the API didn't accept it |
 | `opengwasr_unknown_analysis` | An identifier names no Analysis, or one that has been retired |
 | `opengwasr_ambiguous_analysis` | An identifier names more than one Analysis |
-| `opengwasr_refusal` | An option can't be honoured exactly. Its subclasses include `opengwasr_unsupported_threshold`, `opengwasr_original_units_unavailable`, `opengwasr_legacy_successor`, `opengwasr_ld_refusal`, `opengwasr_ld_unmatched` and `opengwasr_too_large` |
+| `opengwasr_refusal` | An option can't be honoured exactly. Its subclasses include `opengwasr_unsupported_threshold`, `opengwasr_original_units_unavailable`, `opengwasr_ld_refusal`, `opengwasr_ld_unmatched` and `opengwasr_too_large` |
 | `opengwasr_timeout`, `opengwasr_job_failed`, `opengwasr_result_expired` | A Job didn't finish in time, failed, or its result had expired ([Large queries and Jobs](large-queries-and-jobs.html)) |
 | `opengwasr_busy` | The API stayed busy, or your allowance stayed used up, until the call's timeout |
 
@@ -502,3 +510,5 @@ Skipping: ieu-a-2
 ```
 
 Each condition carries the details as fields, such as `e$ids` here, or the API's own error code and message as `e$api_error` and `e$api_message`.
+
+One warning is classed too: `opengwasr_legacy_successor`, when an old identifier is answered by a later release of its analysis (see [Legacy OpenGWAS identifiers](#legacy-ids)). It is a warning rather than an error because opengwasr does answer, and says which Analysis answered. It doesn't have class `opengwasr_error`.

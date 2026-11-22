@@ -124,9 +124,9 @@ test_api("an rsID resolves to every ALID it names, with the lookup's rows", {
                     "store_id", "release_id") %in% names(got$lookup)))
   expect_equal(got$lookup$position[got$lookup$alid == snv], 53767042)
   expect_equal(got$lookup$other_allele[got$lookup$alid == "5:75701728:AAAAT:AAAATAAAT"], "AAAATAAAT")
-  expect_length(got$job$job_id, 1)
+  expect_length(got$jobs, 1)
   # No rsIDs, no Job.
-  expect_null(resolve_variants(src, snv, src_releases)$job)
+  expect_length(resolve_variants(src, snv, src_releases)$jobs, 0)
 })
 
 test_api("the vignette workflow: BMI top hits looked up in CAD, Imputed included and excluded", {

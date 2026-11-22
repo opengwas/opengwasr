@@ -131,7 +131,7 @@ api_error <- function(code) {
 }
 refusal_413 <- function(...) api_error("request_too_large")
 four <- lapply(1:4, function(i) list(path = "api/associations", body = list(i = i)))
-window <- function(src, deadline = job_now() + 60) run_window(src, four, deadline, "rows")
+window <- function(src, deadline = job_now() + 60) run_window(src, four, deadline)
 withr::local_options(opengwasr.poll_cap = 0.02, opengwasr.progress = FALSE)
 
 test_that("a 413 is classed from the API's error code, with the API's message and its fields", {

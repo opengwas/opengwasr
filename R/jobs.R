@@ -1,23 +1,18 @@
 # The Job client: the one place that runs a query as a Job. The API answers every data query with a
 # Job (ADR 0002): opengwasr submits it, waits for it, and reads every page of its result.
 #
-# Three steps, each a function later tickets can call on its own:
-#
 #   job_submit(src, path, body)  -> Job (id, poll_after_seconds, existing, queue_position, ...)
 #   job_wait(src, job)           -> the finished Job's status; polls at the server's interval with a
-#                                   capped backoff, until the Source's timeout, with progress
+#                                   capped backoff, until the call's deadline, with progress
 #   job_rows(src, job_id, n)     -> every row of the result, cursor by cursor, in one pass, checked
 #                                   against the manifest's row count `n`
-#   run_job(src, path, body)     -> the three together: `list(rows, job)`, `job` being what a caller
-#                                   needs for provenance (job_id, total, truncated, releases)
+#   collect_job(src, job, ...)   -> wait and read: `list(rows, job)`, `job` being what provenance
+#                                   needs (job_id, total, truncated, releases, existing, cost)
 #
-# One deadline (the Source's timeout) covers submit, wait and every result page; each request's own
-# timeout is what is left of it. Anything the API sends that can't be trusted (an unknown status, a
-# page without rows, rows that don't add up) is `opengwasr_job_invalid`.
-#
-# #9 (the splitter) builds a plan of many requests (R/query-plan.R). #10 added the Job functions
-# (R/job-functions.R, which drive plans, so no query function knows about them), Ctrl-C handling,
-# and the 429/503 retry (in api_response(), so every request gets it).
+# Queries don't call these: they hand requests to the query plan (R/query-plan.R), which runs them.
+# One deadline covers submit, wait and every result page; each request's own timeout is what is
+# left of it. Anything the API sends that can't be trusted (an unknown status, a page without rows,
+# rows that don't add up) is `opengwasr_job_invalid`.
 
 job_states_active <- c("queued", "running")
 job_states_done <- c("succeeded", "failed", "cancelled", "expired")
@@ -149,16 +144,21 @@ poll_delay <- function(poll_after, looks) {
 #' @return The finished Job's status (`succeeded`, with its `result`); anything else raises a
 #'   classed error.
 #' @noRd
-job_wait <- function(src, job, deadline = job_now() + src$timeout, unit = "rows",
-                     call = rlang::caller_env()) {
+job_wait <- function(src, job, deadline = job_now() + src$timeout, call = rlang::caller_env()) {
   force(call)
-  started <- job_now()
-  progress <- job_progress(job$job_id)
-  on.exit(progress$stop(), add = TRUE)
+  # Progress: one status line (state, queue position, time waited), updated at every look.
+  bar <- if (progress_enabled()) {
+    cli::cli_progress_bar(format = "Job {job_short(job$job_id)} {cli::pb_extra$state} | {cli::pb_elapsed}",
+                          extra = list(state = "submitted"), total = NA, clear = FALSE)
+  }
   status <- job
   looks <- 0
   repeat {
     state <- job_state(status, call)
+    if (!is.null(bar)) {
+      at <- if (!is.null(status$queue_position)) paste0(" (position ", status$queue_position, ")")
+      cli::cli_progress_update(id = bar, extra = list(state = paste0(state, at)), force = TRUE)
+    }
     if (state == "succeeded") {
       # Reattaching to a finished Job: the submit answer says succeeded but holds no result.
       if (is.null(status$result)) status <- job_status(src, job$job_id, deadline, call)
@@ -168,16 +168,11 @@ job_wait <- function(src, job, deadline = job_now() + src$timeout, unit = "rows"
       break
     }
     if (state %in% job_states_done) job_ended(src, status, call)
-    progress$update(state, status$queue_position)
     remaining <- job_remaining(src, deadline, job$job_id, state, call)
     job_sleep(min(poll_delay(status$poll_after_seconds, looks), remaining))
     status <- job_status(src, job$job_id, deadline, call)
     looks <- looks + 1
   }
-  rows <- status$result$manifest$row_count
-  progress$done(paste0("Job ", job_short(job$job_id), " succeeded",
-                       if (!is.null(rows)) paste0(" | ", format(rows, big.mark = ","), " ", unit),
-                       " | ", format_seconds(job_now() - started)))
   status
 }
 
@@ -281,26 +276,7 @@ ndjson_rows <- function(ndjson, job_id, call) {
   rows
 }
 
-#' Run one request as a Job and collect it: submit, wait, read the rows, all inside one deadline.
-#' For a query function's own preparation (looking up Analyses, resolving rsIDs); the answer itself
-#' goes through a plan and `run_query()` (R/query-plan.R). A caller that did other work first passes
-#' the deadline it started at the beginning of the user's call.
-#'
-#' @return `list(rows, job)`. `job` holds `job_id`, `total` and `truncated` (what the API says of
-#'   the result's size, `NULL` if it says nothing: the caller decides whether that is acceptable),
-#'   `releases` (the Store Releases that answered, as `<store_id>/<release_id>`), `existing` and
-#'   `cost_estimate`.
-#' @noRd
-run_job <- function(src, path, body, unit = "rows", deadline = job_now() + src$timeout,
-                    call = rlang::caller_env()) {
-  force(call)
-  job <- job_submit(src, path, body, deadline, call)
-  job_reattached(job)
-  # From here the Job exists, so an interrupt leaves a known state: it keeps running on the API.
-  tryCatch(collect_job(src, job, deadline, unit, call),
-           interrupt = function(e) job_interrupted(job$job_id, call = call))
-}
-
+# Say so when the API reattached a submission to a Job it already had.
 job_reattached <- function(job) {
   if (isTRUE(job$existing) && progress_enabled()) {
     cli::cli_alert_info("Reattached to Job {job_short(job$job_id)} (already {job$status}).")
@@ -309,8 +285,8 @@ job_reattached <- function(job) {
 
 # Wait for a submitted Job and read its rows. `job` is the submit answer, or that merged with a
 # later status. Does not catch interrupts: its callers know what to tell the user.
-collect_job <- function(src, job, deadline, unit, call) {
-  status <- job_wait(src, job, deadline, unit = unit, call = call)
+collect_job <- function(src, job, deadline, call) {
+  status <- job_wait(src, job, deadline, call = call)
   rows <- job_rows(src, job$job_id, status$result$manifest$row_count, deadline, call)
   metadata <- status$result$metadata
   list(
@@ -342,27 +318,3 @@ job_releases <- function(status) {
 progress_enabled <- function() isTRUE(getOption("opengwasr.progress", interactive()))
 
 job_short <- function(job_id) substr(job_id, 1, 8)
-
-format_seconds <- function(seconds) paste0(format(round(seconds), big.mark = ","), "s")
-
-# A progress display for one Job: `update(state, queue_position)` while waiting, `done(text)` on
-# success, `stop()` always. Silent unless progress is enabled.
-job_progress <- function(job_id, env = rlang::caller_env()) {
-  if (!progress_enabled()) {
-    return(list(update = function(...) NULL, done = function(...) NULL, stop = function() NULL))
-  }
-  short <- job_short(job_id)
-  bar <- cli::cli_progress_bar(
-    format = "{cli::pb_spin} Job {cli::pb_extra$short} {cli::pb_extra$state} | {cli::pb_elapsed}",
-    extra = list(short = short, state = "submitted"), total = NA, clear = TRUE, .envir = env
-  )
-  list(
-    update = function(state, queue_position = NULL) {
-      text <- if (!is.null(queue_position)) paste0(state, " (position ", queue_position, ")") else state
-      cli::cli_progress_update(id = bar, extra = list(short = short, state = text), .envir = env,
-                               force = TRUE)
-    },
-    done = function(text) cli::cli_alert_success("{text}"),
-    stop = function() cli::cli_progress_done(id = bar, .envir = env)
-  )
-}

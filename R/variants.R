@@ -59,12 +59,12 @@ is_canonical_alid <- function(x) {
 #' @param variants ALIDs and rsIDs, or the result of [classify_variants()].
 #' @param releases Store Releases to resolve rsIDs in, as `list(store_id, release_id)` from
 #'   [resolve_releases()]. Only used when there are rsIDs.
-#' @return `list(alids, map, lookup, unresolved, job)`: every ALID to query (those given, then those
+#' @return `list(alids, map, lookup, unresolved, jobs)`: every ALID to query (those given, then those
 #'   the rsIDs name, unique); `map`, a data frame of `rsid` and `alid`, one row per ALID an rsID names;
 #'   `lookup`, the API's rows (`alid`, `chromosome`, `position`, `effect_allele`, `other_allele`,
 #'   `rsid`, `store_id`, `release_id`; none with no rsIDs); `unresolved`, the rsIDs no Store Release
 #'   holds; `jobs`, the `job` of every Job the lookup ran (more than one when it was split; empty with
-#'   no rsIDs), and `job`, the first of them (`NULL` with no rsIDs).
+#'   no rsIDs).
 #' @noRd
 resolve_variants <- function(src, variants, releases, deadline = job_now() + src$timeout,
                              call = rlang::caller_env()) {
@@ -83,14 +83,14 @@ resolve_variants <- function(src, variants, releases, deadline = job_now() + src
       list(path = "api/variants/rsid",
            body = list(rsids = as.list(kinds$rsids[p$rsids]), releases = releases[p$releases]))
     })
-    out <- run_window(src, requests, deadline, "variants", call)
+    out <- run_window(src, requests, deadline, call)
     found <- Filter(function(o) nrow(o$rows) > 0, out)
     if (length(found) > 0) lookup <- bind_frames(lapply(found, `[[`, "rows"))
     jobs <- lapply(out, `[[`, "job")
   }
   map <- unique(lookup[c("rsid", "alid")])
   list(alids = unique(c(kinds$alids, map$alid)), map = map, lookup = lookup,
-       unresolved = setdiff(kinds$rsids, map$rsid), job = if (length(jobs) > 0) jobs[[1]], jobs = jobs)
+       unresolved = setdiff(kinds$rsids, map$rsid), jobs = jobs)
 }
 
 warn_unresolved <- function(ids, call = rlang::caller_env()) {

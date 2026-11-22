@@ -1,0 +1,61 @@
+{
+    "job_id": "03faf936",
+    "query_hash": "sha256:15da0a688f519f238748db4aa1e7d072ff80616d3a9eef8eab40379794dbb7ed",
+    "status": "succeeded",
+    "endpoint": "/api/associations",
+    "release_id": "OGS-00011/OGS-00011-completed",
+    "created_at": "2026-11-22T19:39:05.399251+00:00",
+    "started_at": "2026-11-22T19:39:05.432191+00:00",
+    "completed_at": "2026-11-22T19:39:07.309737+00:00",
+    "expires_at": "2026-11-22T20:39:07.304193+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 1799,
+            "total_rows": 1799,
+            "page_count": 2,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0,
+                1000
+            ],
+            "byte_count": 672620,
+            "total_bytes": 672620,
+            "sha256": "d552c1f138b633e9ab7053ec4d47e8bf87706672a7f4e8cebafc54bde6051dd5",
+            "page_sha256": [
+                "a028bb67a81a06088ab4f301baf790558a23a584948da51982af06a2860cf44e",
+                "8c9c3452a0b6dc2db054a441078156c06db629127ec5b461b3a951c1501d2fbe"
+            ],
+            "retention_expires_at": "2026-11-22T20:39:07.304193+00:00",
+            "page_encoding": "text",
+            "job_id": "03faf936",
+            "fingerprint": "sha256:15da0a688f519f238748db4aa1e7d072ff80616d3a9eef8eab40379794dbb7ed",
+            "release_id": "OGS-00011/OGS-00011-completed",
+            "releases": [
+                {
+                    "store_id": "OGS-00011",
+                    "release_id": "OGS-00011-completed"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/03faf936/result"
+    },
+    "compute": {
+        "cpu_seconds": 1.8828,
+        "run_seconds": 1.8589,
+        "queue_seconds": 0.0329,
+        "attempts": 1,
+        "rows": 1799,
+        "bytes": 672620
+    },
+    "status_url": "/api/jobs/03faf936",
+    "poll_after_seconds": 0
+}

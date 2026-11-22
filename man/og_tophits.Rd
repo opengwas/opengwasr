@@ -62,6 +62,15 @@ the \code{store_id} and \code{release_id} each Association came from. \code{n} i
 where the API sends one, otherwise the Analysis's \code{sample_size}; the other three describe the Analysis. \code{pval} underflows to 0 when \verb{|z|} is
 above about 38.5; \code{z} stays exact, so rank the strongest signals by \code{abs(z)}.
 
+One Job takes at most 100 Analyses from 10 GWAS Stores, and at most 100,000 rows (\code{limit} times its
+Analyses). A larger request is split into several Jobs,
+run a few at a time (\code{og_api(max_in_flight = )}) and put back together: you get the rows an unsplit
+request would give, with every Job in \code{\link[=og_provenance]{og_provenance()}}. The rows are ordered by Analysis, in the
+order you asked for, and within each Analysis in the API's order (strongest first), whether one Job
+or several answered.
+\code{limit} applies to each Analysis, so splitting never changes it. A request the API refuses as too
+costly (\code{opengwasr_request_too_large}) is never split to get round that.
+
 When \code{limit} cuts any Analysis's top hits off, you get a warning of class
 \code{opengwasr_truncated}, and \code{\link[=og_provenance]{og_provenance()}} has \code{truncated = TRUE}.
 }

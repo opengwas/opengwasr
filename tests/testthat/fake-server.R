@@ -81,7 +81,8 @@ fake_world <- function(n_synthetic = 1001) {
   world <- read_fixture("world.json")
   template <- world$analyses[[1]]
   # Synthetic rows carry only the keys the tests read, so a 1,001-row catalogue is cheap to serve.
-  slim <- template[c("id", "store_id", "analysis_id", "analysis_label", "release_id")]
+  slim <- template[intersect(names(template), c("id", "store_id", "analysis_id", "analysis_label", "release_id",
+                                                "stored_effect_scale", "sample_size", "sample_size_kind"))]
   synthetic <- lapply(seq_len(n_synthetic), function(i) {
     row <- slim
     row$analysis_id <- sprintf("SYN%05d", i)
@@ -150,7 +151,30 @@ fake_world <- function(n_synthetic = 1001) {
   world$tophits <- fake_tophits()
   world$variants <- fake_variants()
   world$associations <- fake_associations()
-  world$mode <- list(paging = "cursor", malformed = FALSE, two_releases = FALSE, leak = FALSE,
+  # The Analyses the splitting tests spread queries over (first 120 synthetic, and the 11 of
+  # `many_stores`) each hold the variant every one of them shares (3:1000:A:C) and one of their own.
+  # The same rows are their top hits.
+  held <- function(a, i, own) {
+    one <- function(alid, z) {
+      parts <- strsplit(alid, ":", fixed = TRUE)[[1]]
+      list(alid = alid, analysis_id = a$analysis_id, analysis_label = a$analysis_label,
+           association_status = "observed", chromosome = parts[[1]], eaf = 0.3, effect_allele = parts[[3]],
+           log10_p = -9 - i / 100, other_allele = parts[[4]], position = as.integer(parts[[2]]),
+           release_id = a$release_id, rsid = ".", se = 0.01, store_id = a$store_id, z = z)
+    }
+    list(one(own, 6), one("3:1000:A:C", 7))
+  }
+  for (i in seq_len(min(n_synthetic, 120))) {
+    a <- synthetic[[i]]
+    world$associations[[a$id]] <- world$tophits[[a$id]] <- held(a, i, sprintf("3:%d:A:G", 2000 + i))
+  }
+  for (i in 1:11) {
+    a <- world$many_analyses[[i]]
+    world$associations[[a$id]] <- world$tophits[[a$id]] <- held(a, i, sprintf("4:%d:A:G", 100 + i))
+  }
+  # Limits: the Job routes enforce the contract's array limits (100 Analyses, 1,000 variants, 10 Store
+  # Releases) as the API does; `lift_limits` lifts them, for the reference run of a split query.
+  world$mode <- list(paging = "cursor", lift_limits = FALSE, malformed = FALSE, two_releases = FALSE, leak = FALSE,
                      plain401 = FALSE, no_analyses = FALSE, many_stores = FALSE, job = "normal",
                      page_rows = 1000L, poll_after_ms = 10, delay_ms = 0,
                      busy = "none", busy_times = 0L, busy_after = 3L, busy_route = "submit")
@@ -313,6 +337,25 @@ fake_api <- function(world = fake_world()) {
   app$locals$jobs <- new.env()
   app$locals$job_keys <- new.env()
   app$locals$bodies <- new.env()
+  app$locals$events <- new.env()
+  app$locals$events$log <- list()
+  # The array limits are part of the request contract; a test may lift them.
+  body_problems <- function(req, body, path) {
+    openapi <- req$app$locals$openapi
+    if (isTRUE(req$app$locals$world$mode$lift_limits)) {
+      strip <- function(x) {
+        if (!is.list(x)) return(x)
+        x$maxItems <- NULL
+        lapply(x, strip)
+      }
+      openapi <- strip(openapi)
+    }
+    request_body_problems(body, path, "post", openapi)
+  }
+  log_event <- function(req, what, id) {
+    log <- req$app$locals$events$log
+    req$app$locals$events$log[[length(log) + 1]] <- list(event = what, job_id = id)
+  }
   busy_refusal <- function(req, res, route) {
     mode <- req$app$locals$world$mode
     if (!identical(mode$busy_route, route)) return(FALSE)
@@ -379,6 +422,7 @@ fake_api <- function(world = fake_world()) {
       assign(id, job, envir = req$app$locals$jobs)
       assign(key, id, envir = req$app$locals$job_keys)
     }
+    log_event(req, "submit", job$id)
     ignored <- if (identical(job$scenario, "ignored")) list("observed_onyl", token) else list()
     res$set_status(202)$set_header("Retry-After", "1")$set_header("Location", paste0("/api/jobs/", job$id))
     res$set_header("X-OGDB-Cost-Estimate", "1")
@@ -394,7 +438,7 @@ fake_api <- function(world = fake_world()) {
     if (busy_refusal(req, res, "submit")) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
-    problems <- request_body_problems(body, "/api/tophits", "post", req$app$locals$openapi)
+    problems <- body_problems(req, body, "/api/tophits")
     if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
     threshold <- body$threshold %||% 5e-8
     if (threshold > 5e-4) {
@@ -422,7 +466,7 @@ fake_api <- function(world = fake_world()) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
-    problems <- request_body_problems(body, "/api/associations", "post", req$app$locals$openapi)
+    problems <- body_problems(req, body, "/api/associations")
     if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
     # The real API also expands rsIDs. The fake does not, so a client that skips resolving them gets
     # no rows (and the tests that look at the submitted body see ALIDs only).
@@ -442,7 +486,7 @@ fake_api <- function(world = fake_world()) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
-    problems <- request_body_problems(body, "/api/variants/rsid", "post", req$app$locals$openapi)
+    problems <- body_problems(req, body, "/api/variants/rsid")
     if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     rows <- Filter(function(v) v$rsid %in% unlist(body$rsids) &&
@@ -458,6 +502,7 @@ fake_api <- function(world = fake_world()) {
     job <- get(req$params$id, envir = env)
     job$polls <- job$polls + 1L
     out <- job_status_body(job, req$app$locals$world$mode)
+    if (identical(out$status, "succeeded")) log_event(req, "done", job$id)
     job$served <- c(job$served, out$status)
     job$times <- c(job$times, arrived)
     assign(job$id, job, envir = env)
@@ -475,6 +520,7 @@ fake_api <- function(world = fake_world()) {
       return(res$send_json(job_status_body(job, NULL)$body, auto_unbox = TRUE, null = "null"))
     }
     job$cancelled <- TRUE
+    log_event(req, "cancel", job$id)
     assign(job$id, job, envir = env)
     res$send_json(job_status_body(job, NULL)$body, auto_unbox = TRUE, null = "null")
   })
@@ -505,6 +551,10 @@ fake_api <- function(world = fake_world()) {
     keys <- ls(env)
     keys <- keys[order(as.integer(sub("^b", "", keys)))]
     res$send_json(lapply(keys, function(k) get(k, envir = env)), auto_unbox = TRUE, null = "null")
+  })
+  # Submissions, completions (a status look that found the Job succeeded), cancellations, in the order they happened.
+  app$get("/_fake/events", function(req, res) {
+    res$send_json(req$app$locals$events$log, auto_unbox = TRUE)
   })
   app$get("/_fake/jobs", function(req, res) {
     env <- req$app$locals$jobs

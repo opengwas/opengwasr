@@ -221,30 +221,3 @@ test_that("variants that can't be ALIDs or rsIDs, and bad arguments, are argumen
   expect_equal(ok(c("1:827587:GGGGCC:G", "5:75701728:A:AAAAT", "1_KI270706v1_random:1000:A:C", "X:100:AC:GT"))$alids,
                c("1:827587:GGGGCC:G", "5:75701728:A:AAAAT", "1_KI270706v1_random:1000:A:C", "X:100:AC:GT"))
 })
-
-test_that("requests over one Job's limits are not implemented yet, naming #9", {
-  src <- fake_source(fake)
-  ticket <- function(expr) {
-    e <- expect_error(expr, class = "opengwasr_not_implemented")
-    e$ticket
-  }
-  alids <- sprintf("1:%d:A:C", seq_len(1001))
-  expect_equal(ticket(og_associations(src, alids, cad, releases = rel)), "#9")
-  expect_equal(ticket(og_associations(src, snv, sprintf("OGS-00011:GCST%d", seq_len(101)), releases = rel)), "#9")
-  expect_equal(ticket(og_associations(src, sprintf("rs%d", seq_len(1001)), cad, releases = rel)), "#9")
-  # The limit is on the distinct ALIDs after rsIDs are resolved: exactly 1,000 go through, and both
-  # ALIDs of rs1421085 are already among them, so the rsID adds nothing.
-  thousand <- c(other_snv, snv, sprintf("1:%d:A:C", seq_len(998)))
-  expect_length(thousand, 1000)
-  expect_no_error(og_associations(src, c(thousand, "rs1421085"), cad, releases = rel))
-  # One more ALID than that is over.
-  expect_equal(ticket(og_associations(src, c(thousand[-1], insertion, "rs1421085"), cad, releases = rel)), "#9")
-})
-
-test_that("Analyses in more than 10 GWAS Stores are not implemented yet, naming #9", {
-  src <- fake_source(fake)
-  fake_set(fake, "many_stores", "true", "false")
-  ids <- sprintf("OGS-%05d:MANY%02d", 2000 + 1:11, 1:11)
-  e <- expect_error(og_associations(src, snv, ids), class = "opengwasr_not_implemented")
-  expect_equal(e$ticket, "#9")
-})

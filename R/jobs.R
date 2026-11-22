@@ -33,6 +33,8 @@ max_releases_per_job <- 10L    # GWAS Stores (Store Releases) in `releases`
 max_variants_per_job <- 1000L  # variants in POST /api/associations
 max_analyses_per_job <- 100L   # Analyses in POST /api/associations
 max_rsids_per_job <- 1000L     # rsIDs in POST /api/variants/rsid
+max_rows_per_job <- 100000L    # rows one Job's result may hold (errors guide: `request` failure beyond)
+max_queued_jobs_per_user <- 100L  # Jobs one user may have queued (429 user_queue_full)
 
 # An answer the client can't trust: an unknown status, a result with no rows, pages that don't add up.
 # Never papered over with a partial result.
@@ -198,7 +200,7 @@ job_interrupted <- function(job_ids, jobs = NULL, call) {
   n <- length(job_ids)
   og_abort(c(paste0("Interrupted. ", if (n == 1) paste0("Job ", job_ids) else paste(n, "Jobs"),
                     if (n == 1) " is" else " are", " still running (or queued)."),
-             i = if (!is.null(jobs)) "Collect with `og_job_result(src, e$jobs)` in this session, or run the same call again: it reattaches."
+             i = if (!is.null(jobs) && !isTRUE(jobs$partial)) "Collect with `og_job_result(src, e$jobs)` in this session, or run the same call again: it reattaches."
                  else "Run the same call again: it reattaches to the Job.",
              i = paste0("Cancel with `og_job_cancel(src, ", if (n == 1) paste0("\"", job_ids, "\"") else "e$job_ids", ")`.")),
            class = "opengwasr_interrupted", job_ids = job_ids, jobs = jobs, call = call)

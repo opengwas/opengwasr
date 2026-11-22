@@ -77,30 +77,108 @@ run_query <- function(src, plan, deadline = call_deadline() %||% (job_now() + sr
                i = "Call `og_submit()` for each query separately."),
              class = "opengwasr_argument", call = call)
   }
-  jobs <- list()
-  # An interrupt or error part-way through submitting must not lose the Jobs already accepted.
-  partial <- function() new_og_jobs(plan, jobs, partial = TRUE)
-  tryCatch(
-    for (r in plan$requests) jobs[[length(jobs) + 1]] <- job_submit(src, r$path, r$body, deadline, call),
+  if (!submit_only) {
+    return(plan$finish(run_window(src, plan$requests, deadline, plan$unit, call, plan)))
+  }
+  # og_submit(): every piece is submitted at once, so they must fit the per-user queue. Refuse
+  # before submitting anything, rather than leave half a query queued.
+  n <- length(plan$requests)
+  if (n > max_queued_jobs_per_user) {
+    og_abort(c(paste0("This query splits into ", n, " Jobs, more than the ", max_queued_jobs_per_user,
+                      " one user may have queued (Jobs you already have queued count against the same ", max_queued_jobs_per_user, ")."),
+               i = "Call the function itself instead of `og_submit()`: it runs a few Jobs at a time and keeps within the queue.",
+               i = "Or ask for less at a time."),
+             class = "opengwasr_too_many_jobs", refusal = TRUE, n_jobs = n,
+             limit = max_queued_jobs_per_user, call = call)
+  }
+  st <- new_run_state(plan, n)
+  guard_jobs(src, st, call, for (r in plan$requests) submit_next(src, st, r, deadline, call))
+  handle <- new_og_jobs(plan, st$jobs)
+  query_state$submit$handle <- handle
+  handle
+}
+
+# What a run knows of its Jobs: those submitted (in `jobs`), how many were collected, the plan.
+new_run_state <- function(plan, n) {
+  st <- new.env()
+  st$jobs <- list()
+  st$collected <- 0L
+  st$plan <- plan
+  st$n <- n
+  st
+}
+
+submit_next <- function(src, st, request, deadline, call) {
+  job <- job_submit(src, request$path, request$body, deadline, call)
+  job_reattached(job)
+  st$jobs[[length(st$jobs) + 1]] <- job
+  invisible(job)
+}
+
+# The one place that knows what a failure while running Jobs owes the user, for run_query() (submit
+# mode) and run_window(): an interrupt reports every Job started, a refusal as too large cancels the
+# Jobs started and not collected (never split round it), and any other error carries what was
+# submitted: `e$jobs` (an `og_jobs` handle, `partial` unless every Job was submitted) and `e$job_ids`.
+guard_jobs <- function(src, st, call, expr) {
+  ids <- function() vapply(st$jobs, function(j) j$job_id, "")
+  handle <- function() new_og_jobs(st$plan, st$jobs, partial = length(st$jobs) < st$n)
+  tryCatch(expr,
     interrupt = function(e) {
-      if (length(jobs) == 0) rlang::interrupt()
-      job_interrupted(vapply(jobs, function(j) j$job_id, ""), partial(), call)
+      if (length(st$jobs) == 0) rlang::interrupt()
+      job_interrupted(ids(), handle(), call)
+    },
+    opengwasr_request_too_large = function(e) {
+      e$cancelled <- cancel_jobs(src, ids()[seq_along(st$jobs) > st$collected], call)
+      rlang::cnd_signal(e)
     },
     error = function(e) {
-      if (length(jobs) > 0) {
-        e$jobs <- partial()
+      if (length(st$jobs) > 0 && is.null(e$jobs)) {
+        e$jobs <- handle()
         e$job_ids <- e$jobs$job_ids
+        if (inherits(e, "opengwasr_timeout") && !isTRUE(e$jobs$partial)) {
+          e$footer <- c(i = "Collect it with `og_job_result(src, e$jobs)`.")
+        }
       }
       rlang::cnd_signal(e)
-    }
-  )
-  handle <- new_og_jobs(plan, jobs)
-  if (submit_only) {
-    query_state$submit$handle <- handle
-    return(handle)
+    })
+}
+
+# Run `requests` as Jobs with at most `src$max_in_flight` submitted and not yet collected at once:
+# the first ones are submitted, each is waited for in request order, and the next is submitted as
+# soon as one is collected. The whole run is inside the call's one deadline. Returns one
+# `list(rows, job)` per request, in request order (what finish() takes). Used by run_query() and by
+# preparation that splits (the rsID lookup). `plan` is what an interrupt's handle carries to collect
+# with; a lookup has none.
+run_window <- function(src, requests, deadline, unit, call = rlang::caller_env(), plan = NULL) {
+  force(call)
+  n <- length(requests)
+  results <- vector("list", n)
+  st <- new_run_state(plan %||% list(requests = requests, unit = unit), n)
+  if (n > 1 && progress_enabled()) {
+    cli::cli_alert_info("Split into {n} Jobs, at most {src$max_in_flight} at a time.")
   }
-  for (job in jobs) job_reattached(job)
-  collect_plan(src, handle, deadline, fetch = FALSE, call = call)
+  guard_jobs(src, st, call, {
+    while (st$collected < n) {
+      while (length(st$jobs) < n && length(st$jobs) - st$collected < src$max_in_flight) {
+        submit_next(src, st, requests[[length(st$jobs) + 1]], deadline, call)
+      }
+      results[[st$collected + 1]] <- collect_job(src, st$jobs[[st$collected + 1]], deadline, unit, call)
+      st$collected <- st$collected + 1L
+    }
+  })
+  results
+}
+
+# Best-effort cancel of Jobs a refused query had already submitted. Returns the ids it asked to cancel.
+# It has a short grace of its own, outside the call's deadline: cancelling after a failure (possibly
+# a timeout) must still be tried.
+cancel_jobs <- function(src, ids, call) {
+  deadline <- job_now() + 30
+  for (id in ids) {
+    tryCatch(job_call(src, deadline, id, "unknown", call, paste0("api/jobs/", id), method = "DELETE"),
+             error = function(e) NULL)
+  }
+  ids
 }
 
 # Wait for every Job of a handle, read its rows and call the plan's finish(). `fetch`: the handle

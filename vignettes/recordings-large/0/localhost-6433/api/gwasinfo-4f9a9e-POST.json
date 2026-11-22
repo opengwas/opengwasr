@@ -1,0 +1,55 @@
+{
+    "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024,OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+    "requested": 1,
+    "total": 1,
+    "analyses": [
+        {
+            "id": "OGS-00011:GCST90002412",
+            "store_id": "OGS-00011",
+            "analysis_id": "GCST90002412",
+            "status": "validated",
+            "listed": 1,
+            "analysis_label": "Low density lipoprotein cholesterol levels",
+            "source_label": "Low density lipoprotein cholesterol levels",
+            "source_analysis_id": "GCST90002412",
+            "trait_ontology_id": "http://www.ebi.ac.uk/efo/EFO_0004611",
+            "trait_ontology_label": "low density lipoprotein cholesterol measurement",
+            "trait_ontology_mapping_method": "source_provided",
+            "tissue": null,
+            "context": null,
+            "trait_chr": null,
+            "trait_bp": null,
+            "assigned_ancestry": "EUR",
+            "ancestry_assignment_method": "af_assigned",
+            "source_ancestry_label": "European",
+            "sample_size_kind": "total",
+            "sample_size_scope": "analysis_level",
+            "sample_size": 431167,
+            "n_cases": null,
+            "n_controls": null,
+            "stored_effect_scale": "sd",
+            "original_effect_scale": "sd",
+            "original_sd": 0.891727,
+            "original_sd_method": "estimated_from_source_maf",
+            "maf_threshold": 0.005,
+            "info_score_threshold": null,
+            "license": "EBI GWAS Catalog terms of use",
+            "publication_doi": null,
+            "publication_pmid": "32493714",
+            "consortium": null,
+            "first_author": "Klimentidis YC",
+            "outcome_type": "continuous",
+            "trait_class": "phenotype",
+            "ancestry_category": "EUR",
+            "label_from_source": 0,
+            "release_id": "OGS-00011-completed"
+        }
+    ],
+    "not_found": [
+
+    ],
+    "catalog_version": "2b9d06d6f8b200d2",
+    "retired": [
+
+    ]
+}

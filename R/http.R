@@ -113,6 +113,7 @@ api_error_classes <- list(
   release_selection_required = "opengwasr_release_selection_required",
   unsupported_threshold = c("opengwasr_unsupported_threshold", "opengwasr_refusal"),
   result_expired = "opengwasr_result_expired",
+  request_too_large = c("opengwasr_request_too_large", "opengwasr_refusal"),
   user_queue_full = "opengwasr_busy", queue_wait_too_long = "opengwasr_busy",
   results_quota_exceeded = "opengwasr_busy", server_busy = "opengwasr_busy",
   results_cache_full = "opengwasr_busy", intake_paused = "opengwasr_busy",
@@ -149,6 +150,8 @@ api_abort <- function(src, resp, call = rlang::caller_env(), retry_after = NULL,
                        i = if (isTRUE(out_of_time)) "Try again later, or raise `og_api(timeout = )` so the call can wait longer."
                            else "Try again in a little while.",
                        x = paste0("API: ", api_message)),
+    # The API words its own refusal (it says where to download the Store Release): never ours.
+    opengwasr_request_too_large = api_message,
     opengwasr_result_expired = c("The Job's result is no longer available: it was already collected, or it expired.",
                                  i = "Run the query again; the API will run it afresh.",
                                  x = paste0("API: ", api_message)),
@@ -156,8 +159,13 @@ api_abort <- function(src, resp, call = rlang::caller_env(), retry_after = NULL,
   )
   fields <- list(status = status, api_error = code, api_message = api_message, api_body = body)
   if (identical(code, "ambiguous_analysis")) fields$candidates <- analysis_candidates(api_message)
+  if (identical(class[[1]], "opengwasr_request_too_large")) {
+    fields$cost_estimate <- suppressWarnings(as.numeric(body$cost_estimate %||% NA))
+    fields$max_cost <- suppressWarnings(as.numeric(body$max_cost %||% NA))
+  }
   if (identical(code, "analysis_retired")) fields$superseded_by <- body$superseded_by
   if (identical(class[[1]], "opengwasr_busy")) fields$retry_after <- retry_after %||% busy_wait(resp)
   if (identical(class[[1]], "opengwasr_auth")) fields$setting <- auth_setting()
   rlang::exec(og_abort, message, class = class, !!!fields, call = call)
 }
+

@@ -15,6 +15,15 @@
 #' where the API sends one, otherwise the Analysis's `sample_size`; the other three describe the Analysis. `pval` underflows to 0 when `|z|` is
 #' above about 38.5; `z` stays exact, so rank the strongest signals by `abs(z)`.
 #'
+#' One Job takes at most 100 Analyses from 10 GWAS Stores, and at most 100,000 rows (`limit` times its
+#' Analyses). A larger request is split into several Jobs,
+#' run a few at a time (`og_api(max_in_flight = )`) and put back together: you get the rows an unsplit
+#' request would give, with every Job in [og_provenance()]. The rows are ordered by Analysis, in the
+#' order you asked for, and within each Analysis in the API's order (strongest first), whether one Job
+#' or several answered.
+#' `limit` applies to each Analysis, so splitting never changes it. A request the API refuses as too
+#' costly (`opengwasr_request_too_large`) is never split to get round that.
+#'
 #' When `limit` cuts any Analysis's top hits off, you get a warning of class
 #' `opengwasr_truncated`, and [og_provenance()] has `truncated = TRUE`.
 #'
@@ -58,21 +67,34 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
   if (original_units) check_original_units(info)  # refuse before the Job runs, not after
   releases <- releases_of_analyses(releases, info)
 
-  body <- list(analyses = as.list(info$id), threshold = threshold, limit = as.integer(limit),
-               observed_only = observed_only, releases = releases)
   args <- list(threshold = threshold, limit = limit, observed_only = observed_only, clump = clump,
                original_units = original_units)
+  # One Job takes at most 100 Analyses from 10 GWAS Stores, and returns at most 100,000 rows: a bigger
+  # request is split by those (Analyses grouped by GWAS Store; `limit` x Analyses within the row cap).
+  # `limit` applies to each Analysis, so no split changes it.
+  limits <- job_limits()
+  pieces <- split_pieces(list(
+    analyses = split_dim(nrow(info), tophits_analyses_per_job(limit, limits), group = info$store_id, group_limit = limits$releases)
+  ))
+  requests <- lapply(pieces, function(p) {
+    list(path = "api/tophits",
+         body = list(analyses = as.list(info$id[p$analyses]), threshold = threshold, limit = as.integer(limit),
+                     observed_only = observed_only,
+                     releases = piece_releases(releases, info$store_id, p$analyses)))
+  })
   # What the answer is shaped from is pinned here, at plan time: `og_job_result()` finishes the
   # same plan later, however long after.
-  plan <- query_plan(list(list(path = "api/tophits", body = body)), unit = "Associations",
-                     finish = function(results) {
-    out <- results[[1]]
-    check_tophits_metadata(out$job, nrow(out$rows))
-    if (out$job$truncated) warn_truncated(info$id, threshold, limit)
-    attach_provenance(shape_associations(out$rows, info, original_units),
+  plan <- query_plan(requests, unit = "Associations", finish = function(results) {
+    for (out in results) check_tophits_metadata(out$job, nrow(out$rows))
+    jobs <- lapply(results, `[[`, "job")
+    if (any(vapply(jobs, function(j) j$truncated, NA))) warn_truncated(info$id, threshold, limit)
+    found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
+    rows <- if (length(found) == 0) data.frame() else bind_frames(found)
+    shaped <- order_by_analysis(shape_associations(rows, info, original_units), info$id)
+    attach_provenance(shaped,
                       query = provenance_query("og_tophits", args),
                       args = c(list(analyses = analyses), args, list(releases = releases)),
-                      jobs = list(out$job))
+                      jobs = jobs)
   })
   run_query(src, plan, deadline)
 }

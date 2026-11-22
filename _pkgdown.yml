@@ -9,6 +9,9 @@ reference:
   contents:
   - og_status
   - og_analyses
+- title: Your own data
+  contents:
+  - og_alid
 articles:
 - title: User journeys
   navbar: Articles

@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** The sections on credentials, finding Analyses and errors run: their output is real, replayed from responses recorded against the development Data API on 22 November 2026. The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
@@ -158,7 +158,7 @@ head(bmi[, c("id", "analysis_label", "sample_size")], 3)
 
 opengwasr names every variant by its **ALID**, as the GWAS Stores and LD Stores do. An ALID is `chromosome:position:A1:A2`, such as `16:53767042:C:T`:
 
-- `chromosome` is `1` to `22`, `X`, `Y` or `MT`, with no `chr` prefix.
+- `chromosome` is `1` to `22`, `X`, `Y` or `MT`, with no `chr` prefix. Other contig names (such as GRCh38 alt contigs) are kept as given, as the GWAS Stores keep them.
 - `position` is on GRCh38, one-based, as in a VCF file. An indel is left-aligned, and its position is that of the first base of its alleles.
 - `A1` and `A2` are the two alleles, upper case. When they are the same length (an SNV, or a substitution of several bases), they are in alphabetical order: `C:T`, never `T:C`. When their lengths differ (an indel), the GRCh38 reference allele comes first: the insertion `5:75701728:A:AAAAT`, the deletion `1:827587:GGGGCC:G`. An insertion and a deletion of the same sequence at one position are therefore two different variants.
 - `A1` is the effect allele. Every Association's `effect_allele` is the `A1` of its `alid`, so `beta`, `z` and `eaf` always refer to `A1`, and the sign of an LD r refers to it too.
@@ -170,7 +170,7 @@ ALIDs are the same in every GWAS Store and LD Store on GRCh38, so the same varia
 
 To join your own summary statistics to OpenGWAS data, give them ALIDs with `og_alid()`. It takes a data frame with a chromosome, a GRCh38 position and two alleles, and returns it with an `alid` column added and the alleles oriented to match. Here `my_gwas` is a small made-up data frame standing in for your own data:
 
-```{r og-alid, eval = FALSE}
+```{r og-alid}
 my_gwas <- data.frame(
   chromosome    = c("16", "chr18", "5", "1"),
   position      = c(53767042, 60161902, 75701728, 827587),
@@ -182,36 +182,13 @@ my_gwas <- data.frame(
 og_alid(my_gwas)
 ```
 
-```text
-# illustrative
-ℹ Swapped the alleles of 1 variant to match its ALID: `beta` negated, `eaf` replaced by 1 - `eaf`.
-! 2 indels have no ALID, because no allele is declared the reference. Name it with `reference`.
-
- chromosome position effect_allele other_allele  eaf   beta            alid
-         16 53767042             C            T 0.42  0.076 16:53767042:C:T
-         18 60161902             C            T 0.24  0.055 18:60161902:C:T
-          5 75701728         AAAAT            A 0.13 -0.025            <NA>
-          1   827587             G       GGGGCC 0.04  0.120            <NA>
-```
-
 - **SNVs and substitutions are always oriented.** Their alleles are sorted, so `A1` comes first. The first variant's effect allele `T` isn't `A1`, so its alleles are swapped, `beta` is negated (and `z`, if there is one), and `eaf` becomes 1 − `eaf`. The second variant's `chr18` and `c` are normalised to `18` and `C`.
 - **Indels need their reference allele declared.** An indel's ALID puts the GRCh38 reference allele first, and the alleles alone can't say which one that is: at a repeat, an insertion and a deletion can have the same two alleles. Without `reference`, an indel's `alid` is `NA`, and a message gives the count. This is the same rule the GWAS Stores were built by, so an ALID `og_alid()` makes always matches theirs.
 
 If your data came from a VCF, or otherwise says which allele is the reference, pass `reference`: `"other_allele"` or `"effect_allele"` when one of those columns is always the reference, or the name of a column holding the reference allele:
 
-```{r og-alid-reference, eval = FALSE}
+```{r og-alid-reference}
 og_alid(my_gwas, reference = "other_allele")
-```
-
-```text
-# illustrative
-ℹ Swapped the alleles of 3 variants to match their ALIDs: `beta` negated, `eaf` replaced by 1 - `eaf`.
-
- chromosome position effect_allele other_allele  eaf   beta               alid
-         16 53767042             C            T 0.42  0.076    16:53767042:C:T
-         18 60161902             C            T 0.24  0.055    18:60161902:C:T
-          5 75701728             A        AAAAT 0.87  0.025 5:75701728:A:AAAAT
-          1   827587        GGGGCC            G 0.96 -0.120  1:827587:GGGGCC:G
 ```
 
 `reference` is used only for indels. `og_alid()` assumes two things it can't check without the reference genome: alleles are on the forward strand, and indels are already left-aligned, as in a normalised VCF. The column names are arguments (`chromosome`, `position`, `effect_allele`, `other_allele`, `eaf`, `beta`, `z`), with the defaults shown. `eaf`, `beta` and `z` are adjusted when the data has them.

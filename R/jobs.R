@@ -28,6 +28,8 @@ max_releases_per_job <- 10L    # GWAS Stores (Store Releases) in `releases`
 max_variants_per_job <- 1000L  # variants in POST /api/associations
 max_analyses_per_job <- 100L   # Analyses in POST /api/associations
 max_rsids_per_job <- 1000L     # rsIDs in POST /api/variants/rsid
+max_ld_matrix_per_job <- 500L  # variants in POST /api/ld/matrix
+max_ld_proxies_per_job <- 1000L  # variants in POST /api/ld/proxies
 max_rows_per_job <- 100000L    # rows one Job's result may hold (errors guide: `request` failure beyond)
 max_tophits_per_analysis <- 10000L  # `limit` in POST /api/tophits
 max_queued_jobs_per_user <- 100L  # Jobs one user may have queued (429 user_queue_full)
@@ -297,6 +299,7 @@ collect_job <- function(src, job, deadline, call) {
       cost_estimate = job$cost_estimate,
       total = metadata$total,
       truncated = metadata$truncated,
+      metadata = metadata,  # whatever else the endpoint reports (an LD Job's `absent`, ...)
       releases = job_releases(status)
     )
   )

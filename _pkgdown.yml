@@ -16,6 +16,11 @@ reference:
 - title: Associations
   contents:
   - og_associations
+- title: LD
+  contents:
+  - og_ld_stores
+  - og_ld_matrix
+  - og_ld_proxies
 - title: Jobs
   contents:
   - og_submit

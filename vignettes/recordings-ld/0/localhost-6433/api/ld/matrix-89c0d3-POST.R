@@ -1,0 +1,10 @@
+structure(list(method = "POST", url = "http://localhost:6433/api/ld/matrix", 
+    status_code = 202L, headers = structure(list(date = "Sun, 22 Nov 2026 22:58:42 GMT", 
+        server = "uvicorn", location = "/api/jobs/63a155ac", 
+        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=74, run;dur=127, cpu;dur=156", 
+        `x-ogdb-cost` = "job=\"63a155ac\", cpu_ms=156, run_ms=127, queue_ms=74, attempts=1, rows=5, bytes=867", 
+        `content-length` = "398", `content-type` = "application/json", 
+        `x-request-id` = "16d2cfe5"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"63a155ac\",\"status_url\":\"/api/jobs/63a155ac\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:ea33065c4d38a3b6ad37a860aebe93cad12cfcaf3443361ef7eeec78f6ce5a24\",\"query_hash\":\"sha256:ea33065c4d38a3b6ad37a860aebe93cad12cfcaf3443361ef7eeec78f6ce5a24\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 9.8e-05, 
+    starttransfer = 0.007398, total = 0.007635), cache = new.env(parent = emptyenv())), class = "httr2_response")

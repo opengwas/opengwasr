@@ -11,11 +11,11 @@ Linkage disequilibrium (LD) is how strongly two variants are inherited together,
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** Only the setup chunk runs yet: it creates the API Source, and the rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 and 22 November 2026, shaped the way opengwasr will return them. The PLINK Reference examples are illustrative too, but the API isn't involved in them.
+> **Status.** The sections on LD Stores, choosing the LD, LD matrices and LD proxies run: their output is real (replayed from responses recorded against the development Data API on 22 November 2026). Clumping and the PLINK Reference aren't written yet: they fix how opengwasr will be used. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 and 22 November 2026, shaped the way opengwasr will return them. The PLINK Reference examples are illustrative too, but the API isn't involved in them.
 
 ```{r credentials, include = FALSE}
 source("recordings.R")
-vignette_credentials()
+start_recordings("recordings-ld")
 ```
 
 ```{r setup}
@@ -27,18 +27,8 @@ src <- og_api()
 
 An **LD Store** holds the LD of one reference panel of one ancestry, on GRCh38. `og_ld_stores()` lists them:
 
-```{r listing-ld-stores, eval = FALSE}
+```{r listing-ld-stores}
 og_ld_stores(src)
-```
-
-```text
-# illustrative
-            ld_store ancestry   n      t_far near_bp   far_bp n_variants default
- hgdp1kgp-v2-EUR-k10      EUR 665 0.03186544 3000000 10000000    8586889      NA
- hgdp1kgp-v2-AFR-k10      AFR 608 0.03490787 3000000 10000000   14374341      NA
- hgdp1kgp-v2-EAS-k10      EAS 724 0.02922861 3000000 10000000    7837854      NA
- hgdp1kgp-v2-SAS-k10      SAS 672 0.03152799 3000000 10000000    8879035      NA
- hgdp1kgp-v2-AMR-k10      AMR 341 0.06315152 3000000 10000000    7561067      NA
 ```
 
 - `n` is the number of people whose genotypes the LD Store was built from (HGDP + 1000 Genomes).
@@ -50,23 +40,18 @@ og_ld_stores(src)
 
 ### Matching by Assigned Ancestry {#ld-store-matching}
 
-By default, opengwasr uses the LD Store that matches each Analysis's **Assigned Ancestry**, the ancestry opengwasdb inferred from the Analysis's allele frequencies. Analyses of different ancestries in one call each get their own LD Store. Here, two Analyses' top hits are clumped (see [Clumping](#clumping)):
+By default, opengwasr uses the LD Store that matches the **Assigned Ancestry** of the Analyses behind your variants, the ancestry opengwasdb inferred from an Analysis's allele frequencies. It reads them from the `id` column of a data frame of Associations. One call uses one LD Store, so each of these Analyses's top hits gets its own LD matrix (clumping, [below](#clumping), will choose the same way):
 
-```{r ld-store-matching, eval = FALSE}
-both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"))
-unique(both[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
+```{r ld-store-matching, warning = FALSE}
+both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"), clump = FALSE, limit = 5)
+tapply(both$alid, both$id, function(alid) {
+  og_provenance(og_ld_matrix(src, both[both$alid %in% alid, ]))$ld
+})
 ```
 
-```text
-# illustrative
-                     id            clump_ld clump_ld_choice   clump_r2 clump_kb
-   OGS-00011:GCST003116 hgdp1kgp-v2-EUR-k10         matched 0.03186544    10000
- OGS-00013:GCST90475090 hgdp1kgp-v2-AFR-k10         matched 0.03490787    10000
-```
+`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is read from African LD. A non-European Analysis is never given European LD unless you ask for it. `og_provenance()` records the choice: `ld` is the LD Store, and `ld_choice` is `"matched"` here.
 
-`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is clumped against African LD, at that LD Store's own `t_far`. A non-European Analysis is never given European LD unless you ask for it.
-
-If several LD Stores serve one ancestry, opengwasr uses the one the LD Store list declares as that ancestry's default, and `clump_ld_choice` says `"ancestry_default"`. Today each ancestry has one LD Store.
+If several LD Stores serve one ancestry, opengwasr uses the one the LD Store list declares as that ancestry's default, and `ld_choice` says `"ancestry_default"`. Today each ancestry has one LD Store. (`og_ld_stores()`'s `default` column says which; it is `NA` until the API declares one, and an ancestry with several LD Stores and no declared default is refused.)
 
 ### The `ld` argument {#ld-argument}
 
@@ -79,18 +64,15 @@ If several LD Stores serve one ancestry, opengwasr uses the one the LD Store lis
 | An ancestry, such as `"EUR"` | That ancestry's LD Store (its declared default, if it has several) |
 | `og_plink_reference(path)` | Your own PLINK Reference, on your machine ([below](#plink-reference)) |
 
-An exact LD Store name wins; otherwise `ld` is read as an ancestry code and resolved to that ancestry's LD Store. LD Store names (`hgdp1kgp-v2-EUR-k10`) and ancestry codes (`EUR`, `AFR`, `EAS`, `SAS`, `AMR`) can't be confused today, and the provenance always records which LD Store was used. A name gives `clump_ld_choice = "user"`; an ancestry code gives `"ancestry_default"`.
+An exact LD Store name wins; otherwise `ld` is read as an ancestry code and resolved to that ancestry's LD Store. LD Store names (`hgdp1kgp-v2-EUR-k10`) and ancestry codes (`EUR`, `AFR`, `EAS`, `SAS`, `AMR`) can't be confused today, and the provenance always records which LD Store was used. A name gives `ld_choice = "user"` (`clump_ld_choice` when clumping); an ancestry code gives `"ancestry_default"`.
 
 `ld` is separate from the Source the Associations come from, so the same LD choice keeps working whichever Source you use.
 
-```{r choosing-ld, eval = FALSE}
-cad_eur <- og_tophits(src, "OGS-00011:GCST003116", ld = "hgdp1kgp-v2-EUR-k10")
-unique(cad_eur$clump_ld_choice)
-```
-
-```text
-# illustrative
-[1] "user"
+```{r choosing-ld, warning = FALSE}
+cad <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE, limit = 5)
+by_name <- og_ld_matrix(src, cad, ld = "hgdp1kgp-v2-EUR-k10")
+by_ancestry <- og_ld_matrix(src, cad, ld = "EUR")
+c(og_provenance(by_name)$ld_choice, og_provenance(by_ancestry)$ld_choice)
 ```
 
 A plain vector of variants has no ancestry to match, so `og_ld_matrix()` and `og_ld_proxies()` need `ld` when given one.
@@ -99,23 +81,16 @@ A plain vector of variants has no ancestry to match, so `og_ld_matrix()` and `og
 
 An Analysis whose allele frequencies match no single ancestry confidently is **Unassigned** (`assigned_ancestry` is `NA` in `og_analyses()`). opengwasr won't guess an LD Store for it, and never falls back to European LD:
 
-```{r unassigned, eval = FALSE}
-og_tophits(src, "OGS-00014:GCST90475125")
+```{r unassigned, error = TRUE, warning = FALSE}
+basophils <- og_tophits(src, "OGS-00014:GCST90475125", clump = FALSE, limit = 5)
+og_ld_matrix(src, basophils)
 ```
 
-```text
-# illustrative
-Error in `og_tophits()`:
-! Can't choose an LD Store for OGS-00014:GCST90475125: its ancestry is Unassigned.
-ℹ Its source describes it as "AMR", but its allele frequencies match no single ancestry confidently.
-ℹ Choose the LD with `ld`, from: "EUR", "AFR", "EAS", "SAS", "AMR" (see `og_ld_stores()`).
-ℹ Or pass `clump = FALSE` for unclumped top hits.
-```
+The error has class `opengwasr_ld_unmatched`, a kind of `opengwasr_refusal`, with the LD Stores in `e$ld_stores`. If you decide AMR LD is right for it (its source describes it as "AMR"), say so:
 
-The error has class `opengwasr_ld_unmatched`, a kind of `opengwasr_refusal`, with the LD Stores in `e$ld_stores`. If you decide AMR LD is right for it, say so:
-
-```{r unassigned-ld, eval = FALSE}
-basophils <- og_tophits(src, "OGS-00014:GCST90475125", ld = "AMR")
+```{r unassigned-ld}
+m <- og_ld_matrix(src, basophils, ld = "AMR")
+og_provenance(m)$ld
 ```
 
 The same refusal applies whenever one LD Store is needed for several Analyses (an LD matrix, or `og_clump()`), and their ancestries differ or one of them is Unassigned. One LD Store is never applied to a different ancestry without your say-so.
@@ -124,23 +99,13 @@ The same refusal applies whenever one LD Store is needed for several Analyses (a
 
 `og_ld_matrix()` returns the signed LD correlation r between every pair of variants:
 
-```{r ld-matrices, eval = FALSE}
+```{r ld-matrices}
 m <- og_ld_matrix(
   src,
   c("16:53772541:A:G", "16:53767042:C:T", "18:60161902:C:T", "2:628504:A:G", "5:75701728:A:AAAAT"),
   ld = "EUR"
 )
 round(m, 3)
-```
-
-```text
-# illustrative
-                   16:53772541:A:G 16:53767042:C:T 18:60161902:C:T 2:628504:A:G 5:75701728:A:AAAAT
-16:53772541:A:G              1.000          -0.998              NA           NA                 NA
-16:53767042:C:T             -0.998           1.000              NA           NA                 NA
-18:60161902:C:T                 NA              NA               1           NA                 NA
-2:628504:A:G                    NA              NA              NA            1                 NA
-5:75701728:A:AAAAT              NA              NA              NA           NA                  1
 ```
 
 - The dimension names are ALIDs. The sign of r refers to the first allele in each name. Square it for r².
@@ -170,27 +135,10 @@ A pair the LD Store doesn't hold is `NA`, never 0 by default. `NA` means one of 
 
 Many methods need a number for every pair. `fill_below_t_far = TRUE` sets the first kind to 0 and leaves the second `NA`:
 
-```{r ld-matrix-fill, eval = FALSE}
+```{r ld-matrix-fill}
 v <- c("7:105919152:C:T", "7:105920689:A:G", "7:110998200:C:T", "7:117559403:A:G", "16:53767042:C:T")
 round(og_ld_matrix(src, v, ld = "EUR"), 3)
 round(og_ld_matrix(src, v, ld = "EUR", fill_below_t_far = TRUE), 3)
-```
-
-```text
-# illustrative
-                7:105919152:C:T 7:105920689:A:G 7:110998200:C:T 7:117559403:A:G 16:53767042:C:T
-7:105919152:C:T           1.000          -0.182              NA              NA              NA
-7:105920689:A:G          -0.182           1.000              NA              NA              NA
-7:110998200:C:T              NA              NA           1.000              NA              NA
-7:117559403:A:G              NA              NA              NA           1.000              NA
-16:53767042:C:T              NA              NA              NA              NA           1.000
-
-                7:105919152:C:T 7:105920689:A:G 7:110998200:C:T 7:117559403:A:G 16:53767042:C:T
-7:105919152:C:T           1.000          -0.182           0.000              NA              NA
-7:105920689:A:G          -0.182           1.000           0.000              NA              NA
-7:110998200:C:T           0.000           0.000           1.000           0.000              NA
-7:117559403:A:G              NA              NA           0.000           1.000              NA
-16:53767042:C:T              NA              NA              NA              NA           1.000
 ```
 
 `7:110998200:C:T` is about 5 Mb from the first two variants and 6.6 Mb from `7:117559403:A:G`: inside the far window, so those pairs become 0. The first two variants are 11.6 Mb from `7:117559403:A:G`, beyond `far_bp`, so those pairs stay `NA`, as do all pairs with the chromosome 16 variant.
@@ -201,27 +149,16 @@ The option is off by default because 0 claims more than the LD Store knows: only
 
 `og_ld_proxies()` finds the variants in LD with each variant you give: every variant within `kb` kilobases whose r² with it is at least `r2` (defaults 0.8 and 10,000 kb). Strongest first:
 
-```{r ld-proxies, eval = FALSE}
+```{r ld-proxies}
 px <- og_ld_proxies(src, "16:53767042:C:T", ld = "EUR")
 nrow(px)
 head(px, 5)
 ```
 
-```text
-# illustrative
-[1] 98
-            alid      proxy_alid          r        r2 distance
- 16:53767042:C:T 16:53768582:C:T -1.0000000 1.0000000     1540
- 16:53767042:C:T 16:53769311:A:G  1.0000000 1.0000000     2269
- 16:53767042:C:T 16:53769662:A:T  1.0000000 1.0000000     2620
- 16:53767042:C:T 16:53775211:C:T -1.0000000 1.0000000     8169
- 16:53767042:C:T 16:53772541:A:G -0.9980431 0.9960899     5499
-```
-
 - `r` is signed for the first alleles of `alid` and `proxy_alid`; `distance` is in base pairs.
 - Variants can be rsIDs or ALIDs, or a data frame of Associations, whose Analyses' Assigned Ancestry then chooses the LD Store.
-- Absent variants have no LD proxies, and a warning gives how many.
-- `r2` and `kb` follow the same rule as clumping: below `t_far`, `kb` can be at most 3,000 ([Your own r² and window](#refusals)).
+- Absent variants have no LD proxies, and a warning (class `opengwasr_ld_absent_variants`) gives how many.
+- `r2` and `kb` follow the same rule as clumping: below `t_far`, `kb` can be at most 3,000 ([Your own r² and window](#refusals)). Otherwise the API refuses (`opengwasr_ld_refusal`, with `reason`, `t_far`, `near_bp` and `far_bp`).
 
 This is an LD lookup, for questions about LD itself: which variants tag a signal, or which variants to look for in data from outside OpenGWAS. It is not the LD-proxy substitution ieugwasr made when an outcome lacked a variant. opengwasr never swaps another variant's Association in for a missing one; Reference-Completed Store Releases hold Imputed Associations instead (see [Imputed Associations](opengwasr.html#imputed-associations)).
 
@@ -386,3 +323,7 @@ m_local <- og_ld_matrix(src, cad_local, ld = ref)
 - **PLINK itself** is found from `og_plink_reference(path, plink_bin = )`, then the genetics.binaRies package if it is installed, then your `PATH`. If none has it, the error says how to install it.
 - `og_ld_proxies()` reads LD Stores only.
 - Provenance works as before: `clump_ld` is the PLINK Reference's path, and `clump_ld_choice` is `"user"`.
+
+```{r end-recordings, include = FALSE}
+end_recordings()
+```

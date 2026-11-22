@@ -22,7 +22,8 @@
 # such as `list(analyses = 2, variants = 3)`, for tests that would otherwise need 1,001 variants.
 job_limits <- function() {
   limits <- list(releases = max_releases_per_job, variants = max_variants_per_job,
-                 analyses = max_analyses_per_job, rsids = max_rsids_per_job)
+                 analyses = max_analyses_per_job, rsids = max_rsids_per_job,
+                 ld_matrix = max_ld_matrix_per_job, ld_proxies = max_ld_proxies_per_job)
   utils::modifyList(limits, as.list(getOption("opengwasr.job_limits", list())))
 }
 

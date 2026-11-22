@@ -1,0 +1,10 @@
+structure(list(method = "POST", url = "http://localhost:6433/api/tophits", 
+    status_code = 202L, headers = structure(list(date = "Sun, 22 Nov 2026 22:58:44 GMT", 
+        server = "uvicorn", location = "/api/jobs/7ec967f5", 
+        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=23, run;dur=482, cpu;dur=468", 
+        `x-ogdb-cost` = "job=\"7ec967f5\", cpu_ms=468, run_ms=482, queue_ms=23, attempts=1, rows=5, bytes=1856", 
+        `content-length` = "398", `content-type` = "application/json", 
+        `x-request-id` = "2e495951"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"7ec967f5\",\"status_url\":\"/api/jobs/7ec967f5\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:0029dba77b3082212cc3d02f4d7cafb4f35369b971e036bd58d00691d28e1aab\",\"query_hash\":\"sha256:0029dba77b3082212cc3d02f4d7cafb4f35369b971e036bd58d00691d28e1aab\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 0.000113, 
+    starttransfer = 0.008135, total = 0.008282), cache = new.env(parent = emptyenv())), class = "httr2_response")

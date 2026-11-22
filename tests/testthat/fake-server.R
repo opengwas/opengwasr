@@ -107,20 +107,66 @@ fake_world <- function(n_synthetic = 1001) {
                         list(id = "OGS-00013:SPLIT", catalog_id = "OGS-00013:SPLIT",
                              superseded_by = list("OGS-00014:A", "OGS-00014:B")),
                         list(id = "OGS-00013:GONE", catalog_id = "OGS-00013:GONE", superseded_by = NULL))
+  # Job scenarios (`job`): normal (succeeds at the first look), queued_running, never (stays running),
+  # failed_request, failed_temporary, failed_leak (the failure echoes the caller's key), cancelled,
+  # expired, ignored (the API ignored a field, and echoes the key), result_gone (410 on the result);
+  # defects: bad_status, no_result, no_ndjson, bad_ndjson, short_rows, no_metadata, total_too_big,
+  # total_too_small (the status and NDJSON ones echo the caller's key). `page_rows` sets the result
+  # page size, `poll_after_ms` the interval the API asks for, `delay_ms` how long it takes to answer a
+  # Job request, `many_stores` adds 11 Analyses in 11 GWAS Stores (OGS-02001 to OGS-02011).
   # Scenarios, switched by POST /_fake/<setting>/<value>: `two_releases` makes GWAS Store OGS-00099
   # serve two Store Releases (listed newest-first; the API gives no order); `leak` makes errors and
   # lookup reasons echo the caller's key, as a careless server might; `plain401` answers 401 in plain
   # text; `no_analyses` answers gwasinfo with `{}`.
   world$extra_releases <- list(list(store_id = "OGS-00099", release_id = "OGS-00099-b"),
                                list(store_id = "OGS-00099", release_id = "OGS-00099-a"))
+  world$many_analyses <- lapply(1:11, function(i) {
+    row <- slim
+    row$analysis_id <- sprintf("MANY%02d", i)
+    row$store_id <- sprintf("OGS-%05d", 2000 + i)
+    row$id <- paste0(row$store_id, ":", row$analysis_id)
+    row$release_id <- paste0(row$store_id, "-r")
+    row
+  })
+  world$many_releases <- lapply(world$many_analyses, function(a) list(store_id = a$store_id, release_id = a$release_id))
+  world$tophits <- fake_tophits()
   world$mode <- list(paging = "cursor", malformed = FALSE, two_releases = FALSE, leak = FALSE,
-                     plain401 = FALSE, no_analyses = FALSE)
+                     plain401 = FALSE, no_analyses = FALSE, many_stores = FALSE, job = "normal",
+                     page_rows = 1000L, poll_after_ms = 10, delay_ms = 0)
   world$key <- fake_key
   world
 }
 
+# Top hits per Analysis, strongest |z| first, as the API's result rows. The numbers are literal so
+# tests can state their expectations by hand: beta = z * se, pval = 10^log10_p.
+fake_tophits <- function() {
+  hit <- function(store, release, analysis, label, alid, rsid, z, se, log10_p, status = "observed") {
+    parts <- strsplit(alid, ":", fixed = TRUE)[[1]]
+    list(alid = alid, analysis_id = analysis, analysis_label = label, association_status = status,
+         chromosome = parts[[1]], eaf = 0.5, effect_allele = parts[[3]], log10_p = log10_p,
+         other_allele = parts[[4]], position = as.integer(parts[[2]]), release_id = release,
+         rsid = rsid, se = se, store_id = store, z = z)
+  }
+  cad <- function(...) hit("OGS-00011", "OGS-00011-completed", "GCST003116", "Coronary artery disease", ...)
+  bmi <- function(...) hit("OGS-00011", "OGS-00011-completed", "GCST90029007", "Body mass index", ...)
+  list(
+    "OGS-00011:GCST003116" = list(
+      cad("9:22098620:A:G", "rs2891168", -20, 0.0125, -88),
+      cad("9:22098575:A:G", "rs4977574", 16, 0.0125, -57),
+      cad("9:22123767:A:C", "rs10738610", 10, 0.02, -23, "imputed"),
+      cad("9:22106226:A:G", "rs10757275", -8, 0.05, -15),
+      cad("9:22115503:A:G", "rs1333049", 5.6, 0.05, -7.5)
+    ),
+    "OGS-00011:GCST90029007" = list(
+      bmi("16:53767042:A:C", "rs1558902", -40, 0.001, -350),
+      bmi("16:53800000:A:G", "rs9939609", 6, 0.25, -8)
+    )
+  )
+}
+
 served_releases <- function(world) {
-  c(world$releases, if (isTRUE(world$mode$two_releases)) world$extra_releases)
+  c(world$releases, if (isTRUE(world$mode$two_releases)) world$extra_releases,
+    if (isTRUE(world$mode$many_stores)) world$many_releases)
 }
 
 fake_api <- function(world = fake_world()) {
@@ -171,6 +217,135 @@ fake_api <- function(world = fake_world()) {
     req$app$locals$world$mode[[req$params$setting]] <- if (value %in% c("true", "false")) value == "true" else value
     res$send_json(list(ok = TRUE), auto_unbox = TRUE)
   })
+
+  # The job protocol. A Job's status follows the number of times it has been asked about: the
+  # scenario's outcome at once, or, for `queued_running`, queued twice and running once first. The
+  # rows are decided at submission. Resubmitting the same query (and scenario) returns the same Job
+  # with `existing: true`, as the API deduplicates.
+  app$locals$jobs <- new.env()
+  app$locals$job_keys <- new.env()
+  job_status_body <- function(job, mode) {
+    n <- job$polls
+    scenario <- job$scenario
+    waiting <- identical(scenario, "queued_running")
+    status <- if (waiting && n <= 2) "queued" else if (waiting && n == 3) "running" else switch(scenario,
+      never = "running", failed_request = , failed_temporary = , failed_leak = "failed",
+      cancelled = "cancelled", expired = "expired", bad_status = paste("weird", job$token), "succeeded")
+    body <- list(job_id = job$id, status = status, endpoint = "/api/tophits",
+                 release_id = job$release_id, attempts = 1L,
+                 queue_position = if (status == "queued") 4L - n else NULL,
+                 poll_after_seconds = if (status %in% c("queued", "running")) job$poll_after else 0)
+    if (status == "failed") {
+      body$error <- switch(scenario, failed_leak = paste("worker rejected the query for", job$token),
+                           "worker rejected the query")
+      body$error_kind <- switch(scenario, failed_temporary = "temporary",
+                                failed_leak = paste("request", job$token), "request")
+    }
+    if (status == "succeeded" && !identical(scenario, "no_result")) {
+      rows <- length(job$rows) + if (identical(scenario, "short_rows")) 1L else 0L
+      body$result <- list(
+        release_id = job$release_id,
+        manifest = list(row_count = rows, page_count = max(1L, ceiling(length(job$rows) / job$page_rows)),
+                        releases = job$releases),
+        result_url = paste0("/api/jobs/", job$id, "/result"))
+      if (!identical(scenario, "no_metadata")) body$result$metadata <- job$metadata
+      if (identical(scenario, "total_too_big")) body$result$metadata$total <- 99L
+      if (identical(scenario, "total_too_small")) body$result$metadata$total <- 1L
+    }
+    list(status = status, body = body)
+  }
+  app$post("/api/tophits", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    world <- req$app$locals$world
+    body <- req$json %||% list()
+    problems <- request_body_problems(body, "/api/tophits", "post", req$app$locals$openapi)
+    if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
+    threshold <- body$threshold %||% 5e-8
+    if (threshold > 5e-4) {
+      return(fail(res, 400, "unsupported_threshold",
+                  "threshold must be at most 0.0005, the loosest p-value the Top-Hit Index holds"))
+    }
+    limit <- body$limit %||% 1000L
+    ids <- unlist(body$analyses)
+    rows <- list()
+    truncated <- FALSE
+    for (id in ids) {
+      hits <- world$tophits[[id]] %||% list()
+      hits <- Filter(function(h) h$association_status == "observed" || !isTRUE(body$observed_only), hits)
+      hits <- Filter(function(h) 10^h$log10_p <= threshold || h$log10_p < -300, hits)
+      if (length(hits) > limit) truncated <- TRUE
+      rows <- c(rows, utils::head(hits, limit))
+    }
+    releases <- lapply(body$releases, function(r) list(store_id = r$store_id, release_id = r$release_id))
+    token <- sub("^Bearer ", "", req$get_header("Authorization") %||% "")
+    key <- paste(world$mode$job, world$mode$page_rows, as.character(jsonlite::toJSON(body, auto_unbox = TRUE)))
+    existing <- exists(key, envir = req$app$locals$job_keys, inherits = FALSE)
+    if (existing) {
+      job <- get(get(key, envir = req$app$locals$job_keys), envir = req$app$locals$jobs)
+    } else {
+      id <- paste(sample(c(0:9, letters[1:6]), 32, TRUE), collapse = "")
+      id <- paste(substring(id, c(1, 9, 13, 17, 21), c(8, 12, 16, 20, 32)), collapse = "-")
+      job <- list(id = id, polls = 0L, scenario = world$mode$job, rows = rows, releases = releases,
+                  release_id = paste(vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), ""),
+                                     collapse = ","),
+                  page_rows = as.integer(world$mode$page_rows),
+                  poll_after = as.numeric(world$mode$poll_after_ms) / 1000, token = token,
+                  metadata = list(threshold = threshold, observed_only = isTRUE(body$observed_only),
+                                  total = length(rows), truncated = truncated),
+                  served = character(), times = numeric())
+      assign(id, job, envir = req$app$locals$jobs)
+      assign(key, id, envir = req$app$locals$job_keys)
+    }
+    ignored <- if (identical(job$scenario, "ignored")) list("observed_onyl", token) else list()
+    res$set_status(202)$set_header("Retry-After", "1")$set_header("Location", paste0("/api/jobs/", job$id))
+    res$set_header("X-OGDB-Cost-Estimate", "1")
+    res$send_json(list(job_id = job$id, status_url = paste0("/api/jobs/", job$id),
+                       status = if (existing) job_status_body(job)$status else "queued",
+                       query_hash = "sha256:fake", request_fingerprint = "sha256:fake", existing = existing,
+                       queue_position = NULL, poll_after_seconds = job$poll_after,
+                       ignored_fields = ignored),
+                  auto_unbox = TRUE, null = "null")
+  })
+  app$get("/api/jobs/:id", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    env <- req$app$locals$jobs
+    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
+    arrived <- as.numeric(Sys.time())
+    job <- get(req$params$id, envir = env)
+    job$polls <- job$polls + 1L
+    out <- job_status_body(job, req$app$locals$world$mode)
+    job$served <- c(job$served, out$status)
+    job$times <- c(job$times, arrived)
+    assign(job$id, job, envir = env)
+    delay <- as.numeric(req$app$locals$world$mode$delay_ms) / 1000
+    if (delay > 0) Sys.sleep(delay)
+    res$send_json(out$body, auto_unbox = TRUE, null = "null")
+  })
+  app$get("/api/jobs/:id/result", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    env <- req$app$locals$jobs
+    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
+    job <- get(req$params$id, envir = env)
+    delay <- as.numeric(req$app$locals$world$mode$delay_ms) / 1000
+    if (delay > 0) Sys.sleep(delay)
+    if (identical(job$scenario, "result_gone")) return(fail(res, 410, "result_expired", "The result has expired"))
+    page <- as.integer(sub("^page:", "", req$query$cursor %||% "page:0"))
+    first <- page * job$page_rows
+    rows <- job$rows[seq_along(job$rows) > first & seq_along(job$rows) <= first + job$page_rows]
+    final <- first + job$page_rows >= length(job$rows)
+    lines <- vapply(rows, function(r) as.character(jsonlite::toJSON(r, auto_unbox = TRUE, null = "null", digits = NA)), "")
+    out <- list(page_index = page, row_count = length(rows), ndjson = paste(lines, collapse = "\n"),
+                next_cursor = if (final) NULL else paste0("page:", page + 1L), final = final)
+    if (identical(job$scenario, "no_ndjson")) out$ndjson <- NULL
+    if (identical(job$scenario, "bad_ndjson")) out$ndjson <- paste("{not json", job$token)
+    res$send_json(out, auto_unbox = TRUE, null = "null")
+  })
+  # When the fake answered each Job's status requests (seconds), for tests of the waiting.
+  app$get("/_fake/jobs", function(req, res) {
+    env <- req$app$locals$jobs
+    times <- lapply(stats::setNames(nm = ls(env)), function(id) as.list(get(id, envir = env)$times))
+    res$send_json(list(times = times), auto_unbox = TRUE)
+  })
   app$get("/api/status", function(req, res) {
     res$send_json(req$app$locals$world$status, auto_unbox = TRUE, null = "null")
   })
@@ -201,7 +376,7 @@ fake_api <- function(world = fake_world()) {
       token <- sub("^Bearer ", "", req$get_header("Authorization") %||% "")
       world$legacy[["ieu-a-2"]]$reason <- paste("OpenGWAS batch ieu-a is not held by any Store; asked by", token)
     }
-    analyses <- world$analyses
+    analyses <- c(world$analyses, if (isTRUE(world$mode$many_stores)) world$many_analyses)
     ids <- unlist(body$id %||% body$ids)
     if (!is.null(body$releases)) {
       wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")

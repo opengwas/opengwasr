@@ -7,6 +7,10 @@
 #     environment (for example from the gitignored `.Renviron`), delete `vignettes/<name>/`, and
 #     render the vignette. Then grep the new files for the key before committing.
 #
+# After recording, run `shorten_job_ids("<name>")`: a Job's result is saved under its UUID, and the
+# full UUID makes the path too long for a package tarball (R CMD check's portable-paths note).
+# Replay works unchanged, because opengwasr asks for whatever Job id the recorded answer names.
+#
 # Recordings hold response bodies only. The request's Authorization and X-OGDB-User headers are not
 # saved, and `redact_response()` strips them if httptest2 ever does. Catalogue pages are cut down to
 # the columns the vignettes use, and /api/batches loses its validation warnings, to keep the package
@@ -58,6 +62,24 @@ end_recordings <- function() {
     for (name in names(old)) {
       if (is.na(old[[name]])) Sys.unsetenv(name) else do.call(Sys.setenv, stats::setNames(list(old[[name]]), name))
     }
+  }
+  invisible()
+}
+
+# Rewrite every Job id (a UUID) in the recordings `dir` to its first 8 characters, in file names
+# and contents alike, so paths stay under the tarball's 100-byte portable limit.
+shorten_job_ids <- function(dir) {
+  uuid <- "([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+  files <- list.files(dir, recursive = TRUE, full.names = TRUE)
+  for (f in files) {
+    text <- readLines(f, warn = FALSE)
+    if (any(grepl(uuid, text))) writeLines(gsub(uuid, "\\1", text), f)
+  }
+  paths <- list.files(dir, recursive = TRUE, include.dirs = TRUE, full.names = TRUE)
+  # Deepest first, so a directory is renamed after what is in it.
+  for (path in rev(paths[order(nchar(paths))])) {
+    new <- file.path(dirname(path), gsub(uuid, "\\1", basename(path)))
+    if (new != path) file.rename(path, new)
   }
   invisible()
 }

@@ -9,11 +9,11 @@ vignette: >
 
 The OpenGWAS API answers every data query as a **Job**: it queues the query fairly between users, runs it, and keeps the answer for you to collect in pages. opengwasr's query functions hide this. They submit, wait and collect, and return a data frame. This vignette is for when you want to know what happens underneath, or to take control of it: big queries, many queries at once, long waits, interruptions, and queries too large for the API.
 
-> **Status.** Only the setup chunk runs yet: it creates the API Source, and the rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
+> **Status.** The setup chunk and the waiting chunk run, from responses recorded against the development Data API on 22 November 2026. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
 
-```{r credentials, include = FALSE}
+```{r recordings, include = FALSE}
 source("recordings.R")
-vignette_credentials()
+start_recordings("recordings-large-queries-and-jobs")
 ```
 
 ```{r setup}
@@ -68,19 +68,18 @@ While a Job is queued or running, opengwasr shows where it is:
 
 opengwasr asks how the Job is doing only as often as the API suggests, and less often when the API is busy, so waiting never adds to the load. The progress display appears in interactive sessions; set `options(opengwasr.progress = FALSE)` to hide it.
 
-Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by the option `opengwasr.timeout`). Giving up doesn't cancel anything: the Job keeps running, and the error tells you how to collect it.
+Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by the option `opengwasr.timeout`). Giving up doesn't cancel anything: the Job keeps running, and running the same call again reattaches you to it.
 
-```{r waiting, eval = FALSE}
+```{r waiting}
 src_quick <- og_api(timeout = 60)
-top <- og_tophits(src_quick, "OGS-00011:GCST90029007", clump = FALSE)
+top <- og_tophits(src_quick, "OGS-00011:GCST90029007", clump = FALSE, limit = 5)
 ```
 
 ```text
 # illustrative
 Error in `og_tophits()`:
 ! Gave up waiting after 60 s. Job a1513652-85ff-4eac-b4d7-b043b03aaf0a is still queued.
-ℹ Collect it later with `og_job_result(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`, or run the same call again.
-ℹ Cancel it with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`.
+ℹ Run the same call again: the API recognises the query and reattaches you to this Job.
 ```
 
 The error has class `opengwasr_timeout`, and carries the Job ids in `e$job_ids`. A Job that runs and fails stops with class `opengwasr_job_failed`, carrying the API's reason. Its `e$retryable` says whether running it again might help.
@@ -219,3 +218,7 @@ Error in `og_range()`:
 ```
 
 The error has class `opengwasr_too_large`, a kind of `opengwasr_refusal`, and carries the API's `e$cost_estimate` and `e$max_cost`.
+
+```{r end-recordings, include = FALSE}
+end_recordings()
+```

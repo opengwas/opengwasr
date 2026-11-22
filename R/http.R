@@ -1,11 +1,11 @@
 # Building and performing an HTTP request, and mapping every API error response to a classed
 # condition. The one request builder and the one error mapper.
 
-api_request <- function(src, path, query = NULL, body = NULL) {
+api_request <- function(src, path, query = NULL, body = NULL, timeout = NULL) {
   req <- httr2::request(src$url) |>
     httr2::req_url_path_append(path) |>
     httr2::req_user_agent(paste0("opengwasr/", utils::packageVersion("opengwasr"))) |>
-    httr2::req_timeout(src$timeout) |>
+    httr2::req_timeout(min(src$timeout, timeout %||% Inf)) |>
     httr2::req_error(is_error = function(resp) FALSE)
   req <- api_authorise(src, req)
   if (length(query) > 0) req <- httr2::req_url_query(req, !!!query)
@@ -19,11 +19,14 @@ api_request <- function(src, path, query = NULL, body = NULL) {
 #'
 #' @param path A path under the API's base URL, such as `"api/gwasinfo"`.
 #' @param body A list sent as a JSON body (a POST), or `NULL` (a GET).
+#' @param timeout Seconds this one call may take, at most the Source's timeout. The Job client passes
+#'   what is left of a call's overall budget.
 #' @noRd
-api_response <- function(src, path, query = NULL, body = NULL, call = rlang::caller_env()) {
+api_response <- function(src, path, query = NULL, body = NULL, call = rlang::caller_env(),
+                         timeout = NULL) {
   force(call)
   resp <- tryCatch(
-    httr2::req_perform(api_request(src, path, query, body)),
+    httr2::req_perform(api_request(src, path, query, body, timeout)),
     httr2_failure = function(e) {
       # No `parent`: the failure holds the authenticated request, and so the key.
       og_abort(c(paste0("Can't reach the OpenGWAS API at ", src$url, "."),
@@ -60,15 +63,17 @@ api_parse <- function(resp, simplify = FALSE, call = rlang::caller_env()) {
 }
 
 # The API's error catalogue (docs/guide/errors.qmd) as classes. A code not listed here becomes
-# `opengwasr_api_error`. #6 adds the busy (429, 503), too-large (413) and result-expired (410) rows,
-# and #10 the LD refusal (422).
+# `opengwasr_api_error`. #6 added the unsupported-threshold (400) and result-expired (410) rows;
+# #9 and #10 add the busy (429, 503), too-large (413) and LD refusal (422) rows.
 api_error_classes <- list(
   unauthorized = "opengwasr_auth",
   analysis_not_found = "opengwasr_unknown_analysis",
   analysis_retired = c("opengwasr_retired_analysis", "opengwasr_unknown_analysis"),
   ambiguous_analysis = "opengwasr_ambiguous_analysis",
   release_not_found = "opengwasr_unknown_release",
-  release_selection_required = "opengwasr_release_selection_required"
+  release_selection_required = "opengwasr_release_selection_required",
+  unsupported_threshold = c("opengwasr_unsupported_threshold", "opengwasr_refusal"),
+  result_expired = "opengwasr_result_expired"
 )
 
 # Raise the classed condition for an error response. Every condition carries `status`,
@@ -91,6 +96,11 @@ api_abort <- function(src, resp, call = rlang::caller_env()) {
                        x = paste0("API: ", api_message)),
     opengwasr_ambiguous_analysis = c("An identifier names more than one Analysis.",
                                      x = paste0("API: ", api_message)),
+    opengwasr_unsupported_threshold = c(paste0("The API refused `threshold`: ", api_message, "."),
+                                        i = "Each GWAS Store indexes 5e-08, 5e-06 and 5e-04."),
+    opengwasr_result_expired = c("The Job's result is no longer available: it was already collected, or it expired.",
+                                 i = "Run the query again; the API will run it afresh.",
+                                 x = paste0("API: ", api_message)),
     c(paste0("The OpenGWAS API refused the request (", status, ")."), x = paste0("API: ", api_message))
   )
   fields <- list(status = status, api_error = code, api_message = api_message, api_body = body)

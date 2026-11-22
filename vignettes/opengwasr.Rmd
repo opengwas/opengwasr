@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), effects and p-values, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
@@ -197,32 +197,19 @@ og_alid(my_gwas, reference = "other_allele")
 
 `og_tophits()` returns each Analysis's Associations at or below a p-value `threshold` (default `5e-8`), strongest first. It **clumps them by default**, keeping one variant per independent signal; the [LD operations](ld.html#clumping) vignette explains how. Here, `clump = FALSE` shows every top hit:
 
-```{r tophits-unclumped, eval = FALSE}
-top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE)
+```{r tophits-unclumped}
+top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE, limit = 5)
 head(top[, c("rsid", "alid", "beta", "se", "pval", "association_status")], 4)
 ```
 
-```text
-# illustrative
-Warning message:
-OGS-00011:GCST003116 has more than 1,000 top hits at p <= 5e-08; only the strongest 1,000 were returned.
-ℹ Raise `limit` (at most 10,000) for more.
-
-       rsid           alid       beta          se         pval association_status
-  rs2891168 9:22098620:A:G -0.1933591 0.009185791 2.296241e-98           observed
-  rs4977574 9:22098575:A:G -0.1929106 0.009185791 6.425124e-98           observed
- rs10738610 9:22123767:A:C -0.1936836 0.009292603 1.772656e-96           observed
- rs10757275 9:22106226:A:G  0.1930436 0.009269714 2.558808e-96           observed
-```
-
-- `limit` (default 1,000) caps the top hits returned per Analysis. When it cuts any off, you get the warning above.
+- `limit` (default 1,000, here 5) caps the top hits returned per Analysis. When it cuts any off, you get the warning above.
 - `threshold` must be one the GWAS Store indexes. Each GWAS Store indexes `5e-8`, `5e-6` and `5e-4`, and refuses anything looser:
 
 ```text
 # illustrative
 Error in `og_tophits()`:
-! The API refused `threshold = 0.001`: threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds.
-ℹ Thresholds this GWAS Store indexes: 5e-08, 5e-06 and 5e-04.
+! The API refused `threshold`: threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds.
+ℹ Each GWAS Store indexes 5e-08, 5e-06 and 5e-04.
 ```
 
 That error has class `opengwasr_unsupported_threshold`, a kind of `opengwasr_refusal`.
@@ -354,17 +341,9 @@ Every function that returns Associations (`og_tophits()`, `og_associations()`, `
 
 `z` and `se` are the GWAS Store's own. opengwasr adds `beta` = `z * se`, and computes `pval` from the p-value the API sends, so it matches the API exactly. All of them are computed the same way everywhere.
 
-```{r effects-and-p-values, eval = FALSE}
+```{r effects-and-p-values}
 top <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE, limit = 3)
 top[, c("rsid", "z", "se", "beta", "pval")]
-```
-
-```text
-# illustrative
-       rsid        z         se        beta pval
- rs56094641 -38.5342 0.00196838 -0.07585011    0
- rs11642015 -38.5327 0.00196838 -0.07584705    0
- rs62048402  38.5273 0.00196838  0.07583645    0
 ```
 
 When |z| is above about 38.5, the p-value is smaller than R can represent (about 1e-323), so `pval` underflows to 0. `z` stays exact, so rank or filter the strongest signals by `abs(z)`, not by `pval`.
@@ -458,20 +437,10 @@ Every Association carries the `store_id` and `release_id` it came from, and clum
 - For a data frame from a query function: the call and its arguments, the Store Releases that answered, the Job ids, and the API's counts, including whether `limit` cut anything off (`total`, `truncated`). For clumped top hits it adds how many top hits were considered, how many the LD Store didn't hold (`absent`), and how many index variants resulted.
 - For an LD matrix from `og_ld_matrix()`: the LD used, the Job ids, and the variants the LD Store didn't hold (`absent`).
 
-It returns a list, and prints as below. It is attached to the object a query function returns, so it doesn't survive `rbind()`, `merge()` or most subsetting; keep it, or its counts, before you combine data frames.
+It returns a list, and prints as below. It is attached to the data frame a query function returns and describes exactly those rows. After you combine data frames (`rbind()`, `merge()`) or subset rows, `og_provenance()` warns (class `opengwasr_provenance_stale`) and returns `NULL` when the rows no longer match, and stops with class `opengwasr_no_provenance` if the operation dropped the attribute altogether; keep it, or its counts, before you combine data frames.
 
-```{r provenance, eval = FALSE}
+```{r provenance}
 og_provenance(top)
-```
-
-```text
-# illustrative
-── opengwasr provenance ─────────────────────
-• Query: og_tophits(threshold = 5e-08, limit = 3, observed_only = FALSE, clump = FALSE)
-• Store Releases: OGS-00011/OGS-00011-completed
-• Jobs: fc93f06c-52b9-4e7f-b657-13926aff0d29
-• Top hits: 3 returned (truncated)
-• Retrieved: 2026-11-21 23:20:32 UTC
 ```
 
 Record the Store Releases alongside your analysis. They identify exactly which data answered.

@@ -1,0 +1,65 @@
+{
+    "job_id": "c800eace",
+    "query_hash": "sha256:f529b92f72bf3d113fe58aedf22e675cdb8232c55217eb1f3df31fb8383fdd4d",
+    "status": "succeeded",
+    "endpoint": "/api/tophits",
+    "release_id": "OGS-00011/OGS-00011-completed",
+    "created_at": "2026-11-22T17:55:09.881823+00:00",
+    "started_at": "2026-11-22T17:55:09.887676+00:00",
+    "completed_at": "2026-11-22T17:55:10.945699+00:00",
+    "expires_at": "2026-11-22T18:55:10.941504+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 5,
+            "total_rows": 5,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 1884,
+            "total_bytes": 1884,
+            "sha256": "40fb27bc8911d9346431e4b64143a537c967ba2b24d082f74bf8caad32316d72",
+            "page_sha256": [
+                "40fb27bc8911d9346431e4b64143a537c967ba2b24d082f74bf8caad32316d72"
+            ],
+            "retention_expires_at": "2026-11-22T18:55:10.941504+00:00",
+            "page_encoding": "text",
+            "job_id": "c800eace",
+            "fingerprint": "sha256:f529b92f72bf3d113fe58aedf22e675cdb8232c55217eb1f3df31fb8383fdd4d",
+            "release_id": "OGS-00011/OGS-00011-completed",
+            "releases": [
+                {
+                    "store_id": "OGS-00011",
+                    "release_id": "OGS-00011-completed"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/c800eace/result",
+        "metadata": {
+            "threshold": 5e-08,
+            "observed_only": false,
+            "total": 5,
+            "truncated": true
+        }
+    },
+    "compute": {
+        "cpu_seconds": 1.019608,
+        "run_seconds": 1.043452,
+        "queue_seconds": 0.005853,
+        "attempts": 1,
+        "rows": 5,
+        "bytes": 1884
+    },
+    "status_url": "/api/jobs/c800eace",
+    "poll_after_seconds": 0.0
+}

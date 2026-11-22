@@ -101,9 +101,11 @@ nrow(observed)
 
 ### Continuous traits are per SD {#per-sd}
 
-ieugwasr returned effects on whatever scale each source published: per SD for some continuous traits, in natural units (kg/m², mmol/L) for others. opengwasr returns continuous traits **per SD** by default, so effects are comparable across Analyses, and says so in `effect_scale` on every Association. Binary traits are log odds as before.
+ieugwasr returned effects on whatever scale each source published: per SD for some continuous traits, in natural units (kg/m², mmol/L) for others. opengwasr returns continuous traits **per SD** by default, so effects are comparable across Analyses, and says so in `effect_scale` on every Association. Binary traits are log odds as before, except the 1,846 binary `ukb-b-*` Analyses that the GWAS Store holds per SD: `effect_scale` says which.
 
 So MR estimates for a continuous exposure are now per SD of the exposure. For natural units, pass `original_units = TRUE`. opengwasr rescales by the Analysis's recorded phenotype SD, and refuses when there isn't one, including for binary Analyses stored per SD.
+
+The chunk below is still illustrative until `og_associations()` is built.
 
 ```{r per-sd, eval = FALSE}
 og_associations(src, "rs1421085", "OGS-00011:GCST90624700",

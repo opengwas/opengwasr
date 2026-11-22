@@ -101,7 +101,22 @@ fake_world <- function(n_synthetic = 1001) {
     row$analysis_label <- paste("Ambiguous trait in", store)
     row
   })
+  # A binary Analysis stored per SD (the 1,846 `ukb-b-*` binary Analyses in the dev catalogue).
+  binary_sd <- template
+  binary_sd$analysis_id <- "ukb-b-13745"
+  binary_sd$id <- "OGS-00009:ukb-b-13745"
+  binary_sd$store_id <- "OGS-00009"
+  binary_sd$release_id <- "OGS-00009-completed"
+  binary_sd$analysis_label <- "Binary trait stored per SD"
+  binary_sd$outcome_type <- "binary"
+  binary_sd$sample_size_kind <- "total"
+  binary_sd$sample_size <- 442169L
+  binary_sd$n_cases <- 125001L
+  binary_sd["original_sd"] <- list(NULL)
+  binary_sd$original_sd_method <- "declared_standardised"
+  binary_sd$original_effect_scale <- "sd"
   world$analyses <- c(world$analyses, ambiguous, synthetic)
+  world$binary_sd <- list(binary_sd)  # served only under the `binary_sd` scenario
   world$retired <- list(list(id = "OGS-00013:OLD1", catalog_id = "OGS-00013:OLD1",
                              superseded_by = "OGS-00014:NEW1"),
                         list(id = "OGS-00013:SPLIT", catalog_id = "OGS-00013:SPLIT",
@@ -149,7 +164,19 @@ fake_tophits <- function() {
   }
   cad <- function(...) hit("OGS-00011", "OGS-00011-completed", "GCST003116", "Coronary artery disease", ...)
   bmi <- function(...) hit("OGS-00011", "OGS-00011-completed", "GCST90029007", "Body mass index", ...)
+  ukb <- function(analysis, ...) hit("OGS-00009", "OGS-00009-completed", analysis, "ukb trait", ...)
   list(
+    "OGS-00009:ukb-b-19953" = list(
+      ukb("ukb-b-19953", "1:100:A:G", "rs100", 8, 0.05, -15),
+      ukb("ukb-b-19953", "2:200:A:G", "rs200", -6, 0.1, -8.5)
+    ),
+    # Molecular Analyses carry a per-Association N on some rows (the dev API's ENSG rows do).
+    "OGS-00027:ENSG00000000419" = list(
+      c(hit("OGS-00027", "OGS-00027", "ENSG00000000419", "ENSG00000000419", "X:100:A:G", "rs1", -9, 0.1, -18), list(n = 30694L)),
+      c(hit("OGS-00027", "OGS-00027", "ENSG00000000419", "ENSG00000000419", "X:200:A:G", "rs2", 8.6, 0.1, -17), list(n = 30508L)),
+      hit("OGS-00027", "OGS-00027", "ENSG00000000419", "ENSG00000000419", "X:300:A:G", "rs3", 6, 0.1, -9)
+    ),
+    "OGS-00009:ukb-b-13745" = list(ukb("ukb-b-13745", "3:300:A:G", "rs300", 7, 0.02, -11)),
     "OGS-00011:GCST003116" = list(
       cad("9:22098620:A:G", "rs2891168", -20, 0.0125, -88),
       cad("9:22098575:A:G", "rs4977574", 16, 0.0125, -57),
@@ -376,7 +403,8 @@ fake_api <- function(world = fake_world()) {
       token <- sub("^Bearer ", "", req$get_header("Authorization") %||% "")
       world$legacy[["ieu-a-2"]]$reason <- paste("OpenGWAS batch ieu-a is not held by any Store; asked by", token)
     }
-    analyses <- c(world$analyses, if (isTRUE(world$mode$many_stores)) world$many_analyses)
+    analyses <- c(world$analyses, if (isTRUE(world$mode$many_stores)) world$many_analyses,
+                  if (isTRUE(world$mode$binary_sd)) world$binary_sd)
     ids <- unlist(body$id %||% body$ids)
     if (!is.null(body$releases)) {
       wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")

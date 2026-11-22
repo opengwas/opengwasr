@@ -10,7 +10,8 @@ rel <- "OGS-00011/OGS-00011-completed"
 # The columns every Association-returning function shares (vignette: What the columns mean).
 expected_columns <- c("id", "store_id", "analysis_id", "analysis_label", "alid", "rsid", "chromosome",
                       "position", "effect_allele", "other_allele", "eaf", "beta", "se", "z", "pval",
-                      "effect_scale", "association_status", "release_id")
+                      "effect_scale", "n", "sample_size_kind", "ncase", "ncontrol", "association_status",
+                      "release_id")
 
 # Waiting costs nothing here: the fake asks for a poll every 10 ms.
 withr::local_options(opengwasr.poll_cap = 0.05, opengwasr.progress = FALSE)
@@ -300,9 +301,173 @@ test_that("clumping and original units say which ticket brings them", {
   expect_s3_class(e, "opengwasr_error")
   expect_match(conditionMessage(e), "#13", fixed = TRUE)
   expect_error(og_tophits(src, cad, clump = TRUE), class = "opengwasr_not_implemented")
-  e <- expect_error(og_tophits(src, cad, clump = FALSE, original_units = TRUE),
-                    class = "opengwasr_not_implemented")
-  expect_match(conditionMessage(e), "#8", fixed = TRUE)
+})
+
+# Sample size and original units (#8).
+ukb <- "OGS-00009:ukb-b-19953"
+ukb_rel <- c(rel, "OGS-00009/OGS-00009-completed")
+# The dev catalogue has more top hits than these tests ask for; the cut-off isn't what they test.
+top_hits <- function(...) {
+  withCallingHandlers(og_tophits(..., clump = FALSE), opengwasr_truncated = function(w) invokeRestart("muffleWarning"))
+}
+
+test_api("every top hit carries n, sample_size_kind, ncase and ncontrol from the Analysis metadata", {
+  top <- top_hits(src, c(cad, bmi), limit = 5, releases = rel)
+  expect_true(all(c("n", "sample_size_kind", "ncase", "ncontrol") %in% names(top)))
+  expect_false(anyNA(top$n))
+  expect_equal(unique(top$n[top$id == cad]), 187599)
+  expect_equal(unique(top$sample_size_kind[top$id == cad]), "case_control")
+  expect_equal(unique(top$ncase[top$id == cad]), 61289)
+  expect_equal(unique(top$ncontrol[top$id == cad]), 126310)
+  expect_equal(unique(top$n[top$id == bmi]), 532396)
+  expect_equal(unique(top$sample_size_kind[top$id == bmi]), "total")
+  expect_true(all(is.na(top$ncase[top$id == bmi])) && all(is.na(top$ncontrol[top$id == bmi])))
+})
+
+ensg <- "OGS-00027:ENSG00000000419"
+ensg_rel <- "OGS-00027/OGS-00027"
+
+test_api("a per-Association N from the rows is kept, and only a missing one falls back to the metadata", {
+  top <- top_hits(src, ensg, limit = 3, releases = ensg_rel)
+  expect_false(anyNA(top$n))
+  expect_equal(unique(top$sample_size_kind), "variant_level")
+  if (backend == "fake") {
+    # Rows carry N 30694 and 30508; the third has none, so the Analysis's sample_size (30895) fills in.
+    expect_equal(top$n, c(30694, 30508, 30895))
+  } else {
+    # Live: variant-level N differs from the Analysis's 30,895 for some top hits.
+    expect_true(any(top$n != 30895))
+  }
+})
+
+test_api("provenance records original_units, so rescaled and default answers differ", {
+  plain <- top_hits(src, bmi, limit = 6, releases = rel)
+  scaled <- top_hits(src, bmi, limit = 6, releases = rel, original_units = TRUE)
+  expect_false(og_provenance(plain)$args$original_units)
+  expect_true(og_provenance(scaled)$args$original_units)
+  expect_match(og_provenance(scaled)$query, "original_units = TRUE", fixed = TRUE)
+  expect_false(identical(og_provenance(plain)$query, og_provenance(scaled)$query))
+})
+
+test_that("a per-Association N in the rows wins over the Analysis's sample_size", {
+  rows <- data.frame(store_id = "OGS-00011", analysis_id = c("GCST003116", "GCST003116"), z = c(5, 4),
+                     se = 0.1, log10_p = c(-7, -5), n = c(1000, NA))
+  info <- og_analyses(fake_source(fake), cad, releases = rel)
+  shaped <- getFromNamespace("shape_associations", "opengwasr")(rows, info)
+  expect_equal(shaped$n, c(1000, 187599))
+})
+
+test_api("original_units = TRUE rescales a per-SD continuous Analysis by original_sd", {
+  sd_top <- top_hits(src, bmi, limit = 6, releases = rel)
+  top <- top_hits(src, bmi, limit = 6, releases = rel, original_units = TRUE)
+  sd <- og_analyses(src, bmi, releases = rel)$original_sd
+  expect_equal(unique(top$effect_scale), "original")
+  expect_equal(top$beta, sd_top$beta * sd)
+  expect_equal(top$se, sd_top$se * sd)
+  expect_equal(top$z, sd_top$z)
+  expect_equal(top$pval, sd_top$pval)
+  if (backend == "fake") {
+    # original_sd 0.9931; beta = z * se = -0.04 and 1.5 per SD.
+    expect_equal(top$beta, c(-0.039724, 1.48965))
+    expect_equal(top$se, c(0.0009931, 0.248275))
+  }
+  expect_equal(og_provenance(top)$total, nrow(top))
+})
+
+test_api("original_units = TRUE leaves log-odds effects unchanged", {
+  plain <- top_hits(src, cad, limit = 5, releases = rel)
+  top <- top_hits(src, cad, limit = 5, releases = rel, original_units = TRUE)
+  expect_equal(top$beta, plain$beta)
+  expect_equal(top$se, plain$se)
+  expect_equal(unique(top$effect_scale), "log_or")
+})
+
+test_api("original_units = TRUE mixes a rescaled and an unchanged Analysis", {
+  top <- top_hits(src, c(cad, bmi), limit = 5, releases = rel, original_units = TRUE)
+  expect_equal(unique(top$effect_scale[top$id == cad]), "log_or")
+  expect_equal(unique(top$effect_scale[top$id == bmi]), "original")
+})
+
+test_api("original_units = TRUE refuses Analyses with no original_sd, naming them", {
+  e <- expect_error(
+    top_hits(src, c(bmi, ukb), limit = 5, releases = ukb_rel, original_units = TRUE),
+    class = "opengwasr_original_units_unavailable"
+  )
+  expect_s3_class(e, "opengwasr_refusal")
+  expect_equal(e$ids, ukb)
+  expect_equal(e$reason, "no_original_sd")
+})
+
+test_that("a refused original_units call submits no Job", {
+  src <- fake_source(fake)
+  clock <- local_virtual_clock()
+  expect_error(og_tophits(src, c(bmi, ukb), clump = FALSE, releases = ukb_rel, original_units = TRUE),
+               class = "opengwasr_original_units_unavailable")
+  expect_false(any(grepl("tophits|jobs", vapply(clock$requests, function(r) r$path, ""))))
+})
+
+test_that("original_units = TRUE refuses a binary Analysis stored per SD, even when original_sd is set", {
+  src <- fake_source(fake)
+  fake_set(fake, "binary_sd", "true", "false")
+  bin <- "OGS-00009:ukb-b-13745"
+  e <- expect_error(
+    top_hits(src, bin, releases = ukb_rel, original_units = TRUE),
+    class = "opengwasr_original_units_unavailable"
+  )
+  expect_equal(e$ids, bin)
+  expect_equal(e$reason, "binary_per_sd")
+  # The rule needs no original_sd: a binary per-SD Analysis that has one is refused too.
+  info <- og_analyses(src, bin, releases = ukb_rel)
+  info$original_sd <- 2
+  rows <- data.frame(store_id = "OGS-00009", analysis_id = "ukb-b-13745", z = 7, se = 0.1, log10_p = -11)
+  e2 <- expect_error(getFromNamespace("shape_associations", "opengwasr")(rows, info, original_units = TRUE),
+                     class = "opengwasr_original_units_unavailable")
+  expect_equal(e2$ids, bin)
+  expect_equal(e2$reason, "binary_per_sd")
+})
+
+test_that("an Analysis stored per SD is rescaled only when its trait is known to be continuous with an original_sd", {
+  shape <- getFromNamespace("shape_associations", "opengwasr")
+  rows <- data.frame(store_id = "OGS-00011", analysis_id = "GCST90029007", z = 4, se = 0.5, log10_p = -5)
+  info <- og_analyses(fake_source(fake), bmi, releases = rel)
+  ok <- shape(rows, info, original_units = TRUE)
+  expect_equal(c(ok$beta, ok$se), c(4 * 0.5 * 0.9931, 0.5 * 0.9931))
+  expect_equal(ok$effect_scale, "original")
+  refused <- function(info, reason) {
+    e <- expect_error(shape(rows, info, original_units = TRUE), class = "opengwasr_original_units_unavailable")
+    expect_equal(e$ids, bmi)
+    expect_equal(e$reason, reason)
+  }
+  no_sd <- info
+  no_sd$original_sd <- NA_real_
+  refused(no_sd, "no_original_sd")
+  # With the trait type absent or unknown, an Analysis stored per SD is refused, not rescaled by NA.
+  no_type <- info
+  no_type$outcome_type <- NULL
+  refused(no_type, "unknown_trait_type")
+  no_type_no_sd <- no_type
+  no_type_no_sd$original_sd <- NA_real_
+  refused(no_type_no_sd, "no_original_sd")
+  na_type <- info
+  na_type$outcome_type <- NA_character_
+  refused(na_type, "unknown_trait_type")
+  # Log-odds Analyses never need either field.
+  log_or <- og_analyses(fake_source(fake), cad, releases = rel)
+  log_or$outcome_type <- NULL
+  log_or$original_sd <- NULL
+  lo <- shape(data.frame(store_id = "OGS-00011", analysis_id = "GCST003116", z = 4, se = 0.5, log10_p = -5),
+              log_or, original_units = TRUE)
+  expect_equal(c(lo$beta, lo$se), c(2, 0.5))
+  expect_equal(lo$effect_scale, "log_or")
+})
+
+test_api("a binary Analysis stored per SD is refused live", {
+  skip_if(backend == "fake")
+  e <- expect_error(
+    top_hits(src, "OGS-00009:ukb-b-13745", limit = 5, releases = ukb_rel, original_units = TRUE),
+    class = "opengwasr_original_units_unavailable"
+  )
+  expect_equal(e$ids, "OGS-00009:ukb-b-13745")
 })
 
 test_that("more Store Releases than one Job holds is refused, naming the splitting ticket", {
@@ -336,3 +501,4 @@ test_that("og_tophits() is a Source generic, and checks its arguments", {
 test_that("og_provenance() says so when a data frame has none", {
   expect_error(og_provenance(data.frame(a = 1)), class = "opengwasr_no_provenance")
 })
+

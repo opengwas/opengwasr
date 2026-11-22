@@ -63,6 +63,10 @@ test_api("og_tophits() returns top hits: columns, mixed scales, underflow, trunc
   expect_true(is.numeric(prov$cost_estimate) && prov$cost_estimate > 0)
   expect_match(prov$query, "og_tophits(", fixed = TRUE)
   expect_match(prov$query, "limit = 3", fixed = TRUE)
+  # The query's own arguments as given, in order; the inputs only in `args`, `releases` as resolved.
+  expect_equal(prov$query, "og_tophits(threshold = 5e-08, limit = 3, observed_only = FALSE, clump = FALSE, original_units = FALSE)")
+  expect_equal(names(prov$args), c("analyses", "threshold", "limit", "observed_only", "clump", "original_units", "releases"))
+  expect_equal(prov$args$releases, list(list(store_id = "OGS-00011", release_id = "OGS-00011-completed")))
   expect_s3_class(prov$retrieved, "POSIXct")
   expect_output(print(prov), "Store Releases")
 
@@ -438,6 +442,8 @@ test_that("more Store Releases than one Job holds are split (test-split.R has th
   expect_length(og_provenance(top)$job_ids, 1)
   top <- og_tophits(src, ids, clump = FALSE, releases = pins)
   expect_length(og_provenance(top)$job_ids, 2)
+  # The API sends rsid "." for a variant with no rsID; every Association query returns NA.
+  expect_true(all(is.na(top$rsid)))
 })
 
 test_that("og_tophits() is a Source generic, and checks its arguments", {

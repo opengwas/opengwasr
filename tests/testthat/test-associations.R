@@ -66,6 +66,8 @@ test_api("ALIDs in Analyses: columns, Imputed included by default, observed_only
   expect_false(prov$truncated)
   expect_match(prov$query, "og_associations(", fixed = TRUE)
   expect_match(prov$query, "observed_only = FALSE", fixed = TRUE)
+  expect_equal(prov$query, "og_associations(observed_only = FALSE, original_units = FALSE)")
+  expect_equal(names(prov$args), c("variants", "analyses", "observed_only", "original_units", "releases"))
   expect_true(rel %in% prov$store_releases)
   expect_warning(og_provenance(assoc[1:2, ]), class = "opengwasr_provenance_stale")
 })

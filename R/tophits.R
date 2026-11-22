@@ -73,9 +73,8 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
 # `opengwasr_invalid_request` outside 0 to 1).
 check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = rlang::caller_env()) {
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
-  if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold)) bad("`threshold` must be one number.")
-  if (!is.numeric(limit) || length(limit) != 1 || is.na(limit) || limit != round(limit) ||
-      limit < 1 || limit > max_tophits_per_analysis) {
+  check_threshold_limit(threshold, limit, call)
+  if (limit < 1 || limit > max_tophits_per_analysis) {
     bad(paste0("`limit` must be one whole number from 1 to ", format(max_tophits_per_analysis, big.mark = ","), "."))
   }
   if (!is_flag(clump)) bad("`clump` must be `TRUE` or `FALSE`.")
@@ -84,6 +83,16 @@ check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = 
   }
   if (!is.null(ld) || !is.null(r2) || !is.null(kb)) {
     bad("`ld`, `r2` and `kb` only apply with `clump = TRUE`.")
+  }
+}
+
+# Kept: the R types of `threshold` and `limit` (shared by og_tophits() and og_phewas()); their
+# ranges are the API's to check.
+check_threshold_limit <- function(threshold, limit, call = rlang::caller_env()) {
+  bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
+  if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold)) bad("`threshold` must be one number.")
+  if (!is.numeric(limit) || length(limit) != 1 || is.na(limit) || limit != round(limit)) {
+    bad("`limit` must be one whole number.")
   }
 }
 

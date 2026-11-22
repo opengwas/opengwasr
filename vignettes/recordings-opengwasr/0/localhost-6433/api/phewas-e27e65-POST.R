@@ -1,0 +1,10 @@
+structure(list(method = "POST", url = "http://localhost:6433/api/phewas", 
+    status_code = 202L, headers = structure(list(date = "Sun, 22 Nov 2026 22:58:32 GMT", 
+        server = "uvicorn", location = "/api/jobs/5f397cd1", 
+        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=11, run;dur=444, cpu;dur=459", 
+        `x-ogdb-cost` = "job=\"5f397cd1\", cpu_ms=459, run_ms=444, queue_ms=11, attempts=1, rows=0, bytes=0", 
+        `content-length` = "398", `content-type` = "application/json", 
+        `x-request-id` = "28d4c9b4"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"5f397cd1\",\"status_url\":\"/api/jobs/5f397cd1\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:0c90ea804bb9d678ef9c493b96a0af98ad471f18db23fd4e9b383f5d8816f496\",\"query_hash\":\"sha256:0c90ea804bb9d678ef9c493b96a0af98ad471f18db23fd4e9b383f5d8816f496\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 9.1e-05, 
+    starttransfer = 0.007694, total = 0.007863), cache = new.env(parent = emptyenv())), class = "httr2_response")

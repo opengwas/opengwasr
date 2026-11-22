@@ -16,7 +16,7 @@ A list of class \code{og_provenance}:
 \item \code{store_releases}: the Store Releases that answered, as \verb{<store_id>/<release_id>}.
 \item \code{job_ids}: the API's Job ids; \code{existing}: whether the API reattached you to a Job it already had.
 \item \code{cost_estimate}: the API's cost estimate for the Jobs, summed.
-\item \code{total}, \code{truncated}: how many Associations the API returned, and whether \code{limit} cut any off.
+\item \code{total}, \code{truncated}: how many Associations matched (what the API counted), and whether \code{limit} cut any off; \code{returned}: the rows of \code{x}.
 \item \code{retrieved}: when the answer was read, as a \code{POSIXct}.
 }
 

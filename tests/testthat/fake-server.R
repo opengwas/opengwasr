@@ -164,6 +164,7 @@ fake_world <- function(n_synthetic = 1001) {
   world$tophits <- fake_tophits()
   world$variants <- fake_variants()
   world$associations <- fake_associations()
+  world$ranges <- list()
   # The Analyses the splitting tests spread queries over (first 120 synthetic, and the 11 of
   # `many_stores`) each hold the variant every one of them shares (3:1000:A:C) and one of their own.
   # The same rows are their top hits.
@@ -185,6 +186,17 @@ fake_world <- function(n_synthetic = 1001) {
     a <- world$many_analyses[[i]]
     world$associations[[a$id]] <- world$tophits[[a$id]] <- held(a, i, sprintf("4:%d:A:G", 100 + i))
   }
+  # Rows only `POST /api/associations/range` serves (so no other query's answer changes): each of
+  # the first 25 synthetic Analyses and the first MANY Analysis hold two more variants on
+  # chromosome 3, 12 Mb and 25 Mb along, and one on chromosome 4.
+  far <- function(a, i, alid) held(a, i, alid)[[1]]
+  for (i in seq_len(min(n_synthetic, 25))) {
+    a <- synthetic[[i]]
+    world$ranges[[a$id]] <- list(far(a, i, sprintf("3:%d:A:G", 12000000 + i)),
+                                 far(a, i, sprintf("3:%d:A:G", 25000000 + i)),
+                                 far(a, i, sprintf("4:%d:A:G", 500 + i)))
+  }
+  world$ranges[["OGS-00011:GCST003116"]] <- world$tophits[["OGS-00011:GCST003116"]]  # five on chromosome 9
   # Limits: the Job routes enforce the contract's array limits (100 Analyses, 1,000 variants, 10 Store
   # Releases) as the API does; `lift_limits` lifts them, for the reference run of a split query.
   world$mode <- list(paging = "cursor", lift_limits = FALSE, malformed = FALSE, two_releases = FALSE, leak = FALSE,
@@ -384,6 +396,7 @@ fake_api <- function(world = fake_world()) {
   app$locals$jobs <- new.env()
   app$locals$job_keys <- new.env()
   app$locals$bodies <- new.env()
+  app$locals$gwasinfo <- new.env()
   app$locals$events <- new.env()
   app$locals$events$log <- list()
   # The array limits are part of the request contract; a test may lift them.
@@ -635,6 +648,65 @@ fake_api <- function(world = fake_world()) {
       list(rows = rows, metadata = list(r2 = body$r2, window_bp = body$kb * 1000, variants = length(held)))
     })
   })
+  # One variant across Analyses (`variant` is an ALID: opengwasr resolves rsIDs itself). The rows are
+  # the variant's Associations in the Analyses of the Store Releases asked for (or of `analyses`) at
+  # p <= `threshold`, strongest first, at most `limit`; `total` counts those that pass.
+  app$post("/api/phewas", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    world <- req$app$locals$world
+    body <- req$json %||% list()
+    received(req, "/api/phewas", body)
+    problems <- body_problems(req, body, "/api/phewas")
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
+    held <- world$associations[unlist(body$analyses) %||% names(world$associations)]
+    rows <- list()
+    for (id in names(held)) {
+      rows <- c(rows, Filter(function(h) {
+        h$alid == body$variant && paste0(h$store_id, "/", h$release_id) %in% wanted &&
+          10^h$log10_p <= (body$threshold %||% 1e-8) &&
+          (h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE))
+      }, held[[id]]))
+    }
+    limit <- body$limit %||% 1000L
+    submit_job(req, res, "/api/phewas", body, utils::head(rows, limit),
+               list(threshold = body$threshold %||% 1e-8, observed_only = isTRUE(body$observed_only %||% TRUE),
+                    total = length(rows), returned = min(length(rows), limit), truncated = length(rows) > limit))
+  })
+  # Every Association in a window of one chromosome, in the Analyses asked for, Analysis by Analysis in
+  # genome order. A window over 10 Mb is refused as the API refuses it, unless limits are lifted.
+  app$post("/api/associations/range", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    world <- req$app$locals$world
+    body <- req$json %||% list()
+    received(req, "/api/associations/range", body)
+    problems <- body_problems(req, body, "/api/associations/range")
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (!isTRUE(world$mode$lift_limits) && body$end - body$start + 1 > 1e7) return(fail(req, res, "request_too_large"))
+    rows <- list()
+    for (id in unlist(body$analyses %||% body$ids)) {
+      hits <- Filter(function(h) h$chromosome == body$chromosome && h$position >= body$start && h$position <= body$end &&
+                       (h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE)),
+                     c(world$associations[[id]], world$ranges[[id]]))
+      rows <- c(rows, hits[order(vapply(hits, function(h) h$position, 0))])
+    }
+    submit_job(req, res, "/api/associations/range", body, rows, NULL)
+  })
+  # Positions (`chromosome:position`, a `chr` prefix optional) to the variants there, in each Store
+  # Release asked for: one row per ALID, so a position holding two alleles gives several.
+  app$post("/api/variants/chrpos", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    world <- req$app$locals$world
+    body <- req$json %||% list()
+    received(req, "/api/variants/chrpos", body)
+    problems <- body_problems(req, body, "/api/variants/chrpos")
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
+    positions <- sub("^chr", "", unlist(body$positions))
+    rows <- Filter(function(v) paste0(v$chromosome, ":", v$position) %in% positions &&
+                     paste0(v$store_id, "/", v$release_id) %in% wanted, world$variants)
+    submit_job(req, res, "/api/variants/chrpos", body, rows, NULL)
+  })
   app$get("/api/jobs/:id", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     if (busy_refusal(req, res, "status")) return()
@@ -690,6 +762,12 @@ fake_api <- function(world = fake_world()) {
   })
   # When the fake answered each Job's status requests (seconds), for tests of the waiting.
   # The bodies submitted to Job endpoints, oldest first.
+  app$get("/_fake/gwasinfo", function(req, res) {
+    env <- req$app$locals$gwasinfo
+    keys <- ls(env)
+    keys <- keys[order(as.integer(sub("^g", "", keys)))]
+    res$send_json(lapply(keys, function(k) get(k, envir = env)), auto_unbox = TRUE, null = "null")
+  })
   app$get("/_fake/bodies", function(req, res) {
     env <- req$app$locals$bodies
     keys <- ls(env)
@@ -726,6 +804,8 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     if (identical(toupper(req$method), "POST")) {
+      # The ids asked for, for tests of which Analyses a query looked up (GET /_fake/gwasinfo).
+      assign(paste0("g", length(ls(req$app$locals$gwasinfo))), body, envir = req$app$locals$gwasinfo)
       problems <- request_body_problems(body, "/api/gwasinfo", "post", req$app$locals$openapi)
       if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     }

@@ -16,6 +16,9 @@ reference:
 - title: Associations
   contents:
   - og_associations
+  - og_phewas
+  - og_range
+  - og_variants_rsid
 - title: LD
   contents:
   - og_ld_stores

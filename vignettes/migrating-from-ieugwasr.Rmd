@@ -13,7 +13,14 @@ opengwasr replaces ieugwasr as the way R reaches OpenGWAS data. ieugwasr talks t
 
 opengwasr is not a drop-in replacement for ieugwasr. Its functions are named after the new API's own terms (Analysis, Association, GWAS Store, LD Store), and they behave differently where the new data differ. Familiar names that quietly behaved differently would be worse.
 
-> **Status.** No code in this vignette runs yet. It fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026. ieugwasr code is shown for comparison only.
+> **Status.** Only the ALIDs section runs (its output is replayed from responses recorded against the development Data API on 22 November 2026). The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026. ieugwasr code is shown for comparison only.
+
+```{r recordings, include = FALSE}
+source("recordings.R")
+start_recordings("recordings-migrating")
+library(opengwasr)
+src <- og_api()
+```
 
 ## A typical workflow, before and after {#workflow}
 
@@ -72,7 +79,7 @@ Other ieugwasr functions:
 | ieugwasr | opengwasr | What changed |
 |---|---|---|
 | `api_status()`, `user()` | `og_status(src)`, `og_user(src)` | `og_user()` reports your allowance. |
-| `phewas(variants, pval = 1e-5, batch)` | `og_phewas(src, variant, threshold = 1e-8, releases)` | One variant per call. The default threshold is 1e-8; pass `threshold = 1e-5` for ieugwasr's. `batch` becomes `releases` (GWAS Store ids). |
+| `phewas(variants, pval = 1e-5, batch)` | `og_phewas(src, variants, threshold = 1e-8, releases)` | `variants` are rsIDs and ALIDs, as in ieugwasr; each rsID runs one PheWAS per ALID it names, combined in the order given. The default threshold is 1e-8; pass `threshold = 1e-5` for ieugwasr's. `batch` becomes `releases` (GWAS Store ids). |
 | `variants_rsid()`, `variants_chrpos(chrpos, radius)` | `og_variants_rsid(src, rsids)`, `og_variants_chrpos(src, positions)` | Return ALIDs from the GWAS Stores' own variant tables, not dbSNP records. Positions are on GRCh38 and exact: there is no `radius`. |
 | `ld_clump_local()`, `ld_matrix_local()` | `og_clump()`, `og_ld_matrix()` with `ld = og_plink_reference(path)` | The same functions as for LD Stores. |
 | `variants_gene()` | none | The new API has no gene annotation. |
@@ -156,15 +163,8 @@ og_ld_stores(src)[, c("ld_store", "ancestry", "t_far")]
 
 Legacy OpenGWAS identified variants by rsID, with GRCh37 positions. The new GWAS Stores identify them by **ALID**, `chromosome:position:A1:A2` on GRCh38, with `A1` the effect allele ([ALIDs](opengwasr.html#alids) explains them in full). Every Association has both `alid` and `rsid`. opengwasr accepts either, translates rsIDs for you, and returns every ALID an rsID matches rather than choosing one. `rs1421085`, for example, matches two ALIDs in OGS-00011. `position` values are GRCh38, so they differ from the ones in old outputs. PLINK References, usually GRCh37, are matched by rsID.
 
-```{r alids, eval = FALSE}
+```{r alids}
 og_variants_rsid(src, "rs1421085", releases = "OGS-00011")[, c("rsid", "alid")]
-```
-
-```text
-# illustrative
-      rsid            alid
- rs1421085 16:53767042:A:G
- rs1421085 16:53767042:C:T
 ```
 
 ### `beta` and `pval` are computed for you {#derived-beta-pval}
@@ -180,4 +180,8 @@ head(exposure[, c("rsid", "z", "se", "beta", "pval")], 2)
        rsid        z         se        beta          pval
  rs56094641 -36.4907 0.00201634 -0.07357775 1.555977e-291
   rs6567160  23.1299 0.00233775  0.05407187 2.317582e-118
+```
+
+```{r end-recordings, include = FALSE}
+end_recordings()
 ```

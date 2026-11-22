@@ -105,7 +105,7 @@ association_query <- function(src, path, analyses, observed_only, original_units
 # silently.
 method_arguments <- function(method, fn) {
   if (!exists(".Generic", envir = method, inherits = FALSE)) {
-    og_abort(c("`association_query()` must be called directly by a query method (an S3 method).",
+    og_abort(c("A query engine (`association_query()`, `ld_query()`) must be called directly by a query method (an S3 method).",
                i = "Provenance records the method's arguments from its frame. This is a bug in opengwasr."),
              class = "opengwasr_internal")
   }

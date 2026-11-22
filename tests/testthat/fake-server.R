@@ -122,6 +122,13 @@ fake_world <- function(n_synthetic = 1001) {
   binary_sd["original_sd"] <- list(NULL)
   binary_sd$original_sd_method <- "declared_standardised"
   binary_sd$original_effect_scale <- "sd"
+  # An AFR Analysis (served under the `afr_analysis` scenario), for LD matched by ancestry.
+  afr <- template
+  afr$analysis_id <- "GCST90475090"
+  afr$id <- "OGS-00011:GCST90475090"
+  afr$analysis_label <- "HbA1c in African ancestry"
+  afr$assigned_ancestry <- "AFR"
+  world$afr_analysis <- list(afr)
   world$analyses <- c(world$analyses, ambiguous, synthetic)
   world$binary_sd <- list(binary_sd)  # served only under the `binary_sd` scenario
   world$retired <- list(list(id = "OGS-00013:OLD1", catalog_id = "OGS-00013:OLD1",
@@ -185,7 +192,44 @@ fake_world <- function(n_synthetic = 1001) {
                      page_rows = 1000L, poll_after_ms = 10, delay_ms = 0,
                      busy = "none", busy_times = 0L, busy_after = 3L, busy_route = "submit")
   world$key <- fake_key
+  world$ld_stores <- fake_ld_stores()
   world
+}
+
+# The LD Stores, as `GET /api/ld/stores` gives them (the real five, with their real limits). Under the
+# `ld_declared_default` scenario the API declares a default; under `ld_two_eur` a second EUR store is served.
+fake_ld_stores <- function() {
+  store <- function(ancestry, n, t_far, n_variants) {
+    list(store = paste0("hgdp1kgp-v2-", ancestry, "-k10"), ancestry = ancestry, ready = TRUE,
+         panel = paste0("hgdp1kgp-v2-", ancestry), n = n, k = 10L, t_far = t_far, near_bp = 3000000L,
+         far_bp = 10000000L, n_variants = n_variants, format_version = "0.1.0", ogld_version = "0.1.0")
+  }
+  list(store("EUR", 665L, 0.03186544, 8586889L), store("AFR", 608L, 0.03490787, 14374341L),
+       store("EAS", 724L, 0.02922861, 7837854L), store("SAS", 672L, 0.03152799, 8879035L),
+       store("AMR", 341L, 0.06315152, 7561067L))
+}
+
+# The fake LD Stores hold every variant on a chromosome 1 to 22 except those whose position ends in
+# 999 (so a test can ask for absent ones). r between two held variants is deterministic and
+# symmetric: 1 on the diagonal, else a signed value that decays with distance. The LD Store holds
+# it within `near_bp`, beyond that only where r^2 reaches `t_far`, and nothing beyond `far_bp` or
+# across chromosomes (`NA`, which the API sends as null).
+fake_ld_holds <- function(alid) {
+  parts <- strsplit(alid, ":", fixed = TRUE)[[1]]
+  suppressWarnings(as.integer(parts[[1]])) %in% 1:22 && as.numeric(parts[[2]]) %% 1000 != 999
+}
+fake_ld_r <- function(a, b, store) {
+  pa <- strsplit(a, ":", fixed = TRUE)[[1]]
+  pb <- strsplit(b, ":", fixed = TRUE)[[1]]
+  if (identical(a, b)) return(1)
+  if (!identical(pa[[1]], pb[[1]])) return(NA_real_)
+  x <- as.numeric(pa[[2]])
+  y <- as.numeric(pb[[2]])
+  d <- abs(x - y)
+  if (d > store$far_bp) return(NA_real_)
+  r <- ((x * y) %% 1000 / 500 - 1) * exp(-d / 2e6)
+  if (d > store$near_bp && r^2 < store$t_far) return(NA_real_)
+  round(r, 6)
 }
 
 # Top hits per Analysis, strongest |z| first, as the API's result rows. The numbers are literal so
@@ -497,6 +541,100 @@ fake_api <- function(world = fake_world()) {
                      paste0(v$store_id, "/", v$release_id) %in% wanted, world$variants)
     submit_job(req, res, "/api/variants/rsid", body, rows, NULL)
   })
+
+  # LD. `GET /api/ld/stores`, and Jobs for the matrix and proxies, which name an LD Store by `store`
+  # or `ancestry` (never a fallback: a request naming neither is answered from EUR, as the API does).
+  ld_served <- function(req) {
+    stores <- req$app$locals$world$ld_stores
+    mode <- req$app$locals$world$mode
+    if (isTRUE(mode$ld_two_eur)) {
+      second <- stores[[1]]
+      second$store <- "hgdp1kgp-v2-EUR-k10-b"
+      stores <- c(stores, list(second))
+    }
+    if (isTRUE(mode$ld_not_ready)) {
+      stores <- lapply(stores, function(s) { if (s$ancestry == "AMR") { s$ready <- FALSE; s$error <- "still building" }; s })
+    }
+    if (isTRUE(mode$ld_declared_default)) {
+      stores <- lapply(stores, function(s) { s$default <- !endsWith(s$store, "-b"); s })
+    }
+    stores
+  }
+  ld_store_of <- function(req, res, body) {
+    named <- body$store %||% NULL
+    found <- Filter(function(s) identical(s$store, named) || (is.null(named) && identical(s$ancestry, body$ancestry %||% "EUR")),
+                    ld_served(req))
+    if (length(found) == 0) {
+      fail(req, res, "invalid_request")
+      return(NULL)
+    }
+    found[[1]]
+  }
+  app$get("/api/ld/stores", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    res$send_json(list(stores = ld_served(req)), auto_unbox = TRUE, null = "null")
+  })
+  # The 422 a store gives for a request it can't answer exactly (`r2` below `t_far` over more than `near_bp`).
+  ld_refusal <- function(req, res, store, body) {
+    if (is.numeric(body$r2) && is.numeric(body$kb) && body$r2 < store$t_far && body$kb * 1000 > store$near_bp) {
+      error <- req$app$locals$errors[["ld_refusal"]]
+      error$body[c("store", "ancestry", "t_far", "near_bp", "far_bp")] <-
+        store[c("store", "ancestry", "t_far", "near_bp", "far_bp")]
+      res$set_status(error$status)$send_json(error$body, auto_unbox = TRUE, null = "null", digits = NA)
+      return(TRUE)
+    }
+    FALSE
+  }
+  ld_job <- function(req, res, endpoint, make_rows) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    if (busy_refusal(req, res, "submit")) return()
+    body <- req$json %||% list()
+    received(req, endpoint, body)
+    problems <- body_problems(req, body, endpoint)
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    store <- ld_store_of(req, res, body)
+    if (is.null(store)) return()
+    if (identical(endpoint, "/api/ld/matrix") && length(body$alids) > 500 && !isTRUE(req$app$locals$world$mode$lift_limits)) {
+      return(fail(req, res, "invalid_request", problems = "at most 500 alids"))
+    }
+    if (identical(endpoint, "/api/ld/proxies") && ld_refusal(req, res, store, body)) return()
+    alids <- unlist(body$alids)
+    held <- alids[vapply(alids, fake_ld_holds, NA)]
+    made <- make_rows(held, store, body)
+    metadata <- c(list(store = store$store, ancestry = store$ancestry, t_far = store$t_far, near_bp = store$near_bp,
+                       far_bp = store$far_bp, absent = as.list(setdiff(alids, held))), made$metadata)
+    # The real API reports the LD Store as the Store Release a Job read.
+    read <- list(list(store_id = store$store, release_id = store$store))
+    submit_job(req, res, endpoint, c(body, list(releases = read)), made$rows, metadata)
+  }
+  app$post("/api/ld/matrix", function(req, res) {
+    ld_job(req, res, "/api/ld/matrix", function(held, store, body) {
+      rows <- lapply(held, function(a) {
+        parts <- strsplit(a, ":", fixed = TRUE)[[1]]
+        list(a1 = parts[[3]], a2 = parts[[4]], alid = a, chromosome = parts[[1]], position = as.integer(parts[[2]]),
+             r = lapply(held, function(b) { r <- fake_ld_r(a, b, store); if (is.na(r)) NULL else r }))
+      })
+      list(rows = rows, metadata = list(variants = length(held)))
+    })
+  })
+  # Proxies of a held variant: held variants 100 bp either side and 250 bp and 300 bp away, with r of
+  # sign(offset) * (1 - |offset| / 2000) (0.95, 0.875, 0.85), kept at r^2 >= `r2` within `kb`,
+  # strongest first. Not the matrix's r: the fake only needs proxies a test can state by hand.
+  app$post("/api/ld/proxies", function(req, res) {
+    ld_job(req, res, "/api/ld/proxies", function(held, store, body) {
+      rows <- list()
+      for (a in held) {
+        parts <- strsplit(a, ":", fixed = TRUE)[[1]]
+        for (offset in c(-100, 100, 250, -300)) {
+          proxy <- paste(parts[[1]], format(as.numeric(parts[[2]]) + offset, scientific = FALSE), "A", "G", sep = ":")
+          r <- sign(offset) * (1 - abs(offset) / 2000)
+          if (!fake_ld_holds(proxy) || identical(a, proxy) || r^2 < body$r2 || abs(offset) > body$kb * 1000) next
+          rows[[length(rows) + 1]] <- list(distance = abs(offset), proxy = proxy, query = a, r = r, r2 = r^2)
+        }
+      }
+      list(rows = rows, metadata = list(r2 = body$r2, window_bp = body$kb * 1000, variants = length(held)))
+    })
+  })
   app$get("/api/jobs/:id", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     if (busy_refusal(req, res, "status")) return()
@@ -598,7 +736,8 @@ fake_api <- function(world = fake_world()) {
       world$legacy[["ieu-a-2"]]$reason <- paste("OpenGWAS batch ieu-a is not held by any Store; asked by", token)
     }
     analyses <- c(world$analyses, if (isTRUE(world$mode$many_stores)) world$many_analyses,
-                  if (isTRUE(world$mode$binary_sd)) world$binary_sd)
+                  if (isTRUE(world$mode$binary_sd)) world$binary_sd,
+                  if (isTRUE(world$mode$afr_analysis)) world$afr_analysis)
     ids <- unlist(body$id %||% body$ids)
     if (!is.null(body$releases)) {
       wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")

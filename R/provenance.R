@@ -87,6 +87,7 @@ attach_provenance <- function(x, query, args, jobs, ...) {
 # The number of rows and a hash of their identity columns, so provenance can tell the rows it
 # describes from other rows.
 provenance_fingerprint <- function(x) {
+  if (is.matrix(x)) return(rlang::hash(list(dim(x), dimnames(x))))  # an LD matrix: named by ALID
   rlang::hash(list(nrow(x), x$id, x$alid))
 }
 
@@ -107,6 +108,8 @@ format.og_provenance <- function(x, ...) {
     paste0("\u2500\u2500 opengwasr provenance ", strrep("\u2500", 17)),
     paste0("\u2022 Query: ", x$query),
     paste0("\u2022 Store Releases: ", paste(x$store_releases, collapse = ", ")),
+    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", x$ld, " (", x$ld_choice, "); ",
+                               length(x$absent), " variant(s) absent"),
     paste0("\u2022 Jobs: ", paste(x$job_ids, collapse = ", ")),
     counts,
     paste0("\u2022 Retrieved: ", retrieved)

@@ -19,7 +19,7 @@
 # `log10_p` is then dropped, so results carry one p-value. If a later API sends `beta` or `pval`,
 # they pass through untouched (the epic's one exception). `effect_scale` always comes from the
 # Analysis's metadata (`stored_effect_scale`, "sd" or "log_or"), never from a row; `id` is the
-# Analysis's canonical id.
+# Analysis's canonical id. `rsid` is NA for a variant with no rsID (the API sends ".").
 
 # The columns every function that returns Associations leads with, in this order
 # (vignette: What the columns mean). Columns the API sends beyond these follow.
@@ -39,6 +39,7 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   if (original_units) check_original_units(analyses, call)
   if (nrow(rows) == 0) rows <- empty_associations()
   rows$id <- canonical_ids(rows)
+  if (!is.null(rows$rsid)) rows$rsid[rows$rsid %in% "."] <- NA_character_  # the API sends "." for none
   if (is.null(rows$beta)) rows$beta <- rows$z * rows$se
   if (is.null(rows$pval)) rows$pval <- 10^rows$log10_p
   rows$log10_p <- NULL

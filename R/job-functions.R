@@ -137,13 +137,32 @@ og_job_result <- function(src, job, raw = FALSE) {
     deadline <- local_query(src, query = FALSE)
     rows <- tryCatch(
       collect_job(src, utils::modifyList(list(job_id = ids), job_status(src, ids, deadline)), deadline,
-                  "rows", rlang::current_env())$rows,
+                  rlang::current_env())$rows,
       interrupt = function(e) job_interrupted(ids, call = rlang::current_env())
     )
     return(structure(rows, class = c("og_job_raw", "data.frame")))
   }
+  if (isTRUE(job$partial)) {
+    og_abort(c(paste0("Only ", length(job$job_ids), " of the query's Jobs were submitted, so there is no whole answer to collect."),
+               i = "Cancel them with `og_job_cancel()`, or run the same call again: the API reattaches to Jobs it already has."),
+             class = "opengwasr_argument")
+  }
   deadline <- local_query(src, query = FALSE)
-  collect_plan(src, job, deadline, fetch = TRUE, call = rlang::current_env())
+  call <- rlang::current_env()
+  # Wait for every Job, read its rows, and finish the plan pinned at submission. The handle's Jobs are
+  # their submit answers, which hold no result, so each is looked up first.
+  results <- tryCatch(
+    lapply(job$jobs, function(j) {
+      collect_job(src, utils::modifyList(j, job_status(src, j$job_id, deadline, call)), deadline, call)
+    }),
+    interrupt = function(e) job_interrupted(job$job_ids, job, call),
+    opengwasr_timeout = function(e) {
+      e$jobs <- job
+      e$footer <- c(i = "Collect it with `og_job_result(src, e$jobs)`.")
+      rlang::cnd_signal(e)
+    }
+  )
+  job$plan$finish(results)
 }
 
 #' @rdname og_submit

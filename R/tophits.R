@@ -59,66 +59,19 @@ og_tophits <- function(src, analyses, threshold = 5e-8, limit = 1000, observed_o
 og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
                                      observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
                                      kb = NULL, original_units = FALSE, releases = NULL) {
-  # The call's one deadline starts here, so finding the Store Releases and Analyses counts.
-  deadline <- local_query(src)
-  check_tophits_arguments(analyses, threshold, limit, observed_only, clump, ld, r2, kb, original_units)
-  releases <- resolve_releases(src, releases)
-  info <- analyses_lookup(src, analyses, releases)
-  if (original_units) check_original_units(info)  # refuse before the Job runs, not after
-  releases <- releases_of_analyses(releases, info)
-
-  args <- list(threshold = threshold, limit = limit, observed_only = observed_only, clump = clump,
-               original_units = original_units)
-  # One Job takes at most 100 Analyses from 10 GWAS Stores, and returns at most 100,000 rows: a bigger
-  # request is split by those (Analyses grouped by GWAS Store; `limit` x Analyses within the row cap).
-  # `limit` applies to each Analysis, so no split changes it.
-  limits <- job_limits()
-  pieces <- split_pieces(list(
-    analyses = split_dim(nrow(info), tophits_analyses_per_job(limit, limits), group = info$store_id, group_limit = limits$releases)
-  ))
-  requests <- lapply(pieces, function(p) {
-    list(path = "api/tophits",
-         body = list(analyses = as.list(info$id[p$analyses]), threshold = threshold, limit = as.integer(limit),
-                     observed_only = observed_only,
-                     releases = piece_releases(releases, info$store_id, p$analyses)))
-  })
-  # What the answer is shaped from is pinned here, at plan time: `og_job_result()` finishes the
-  # same plan later, however long after.
-  plan <- query_plan(requests, unit = "Associations", finish = function(results) {
-    for (out in results) check_tophits_metadata(out$job, nrow(out$rows))
-    jobs <- lapply(results, `[[`, "job")
-    if (any(vapply(jobs, function(j) j$truncated, NA))) warn_truncated(info$id, threshold, limit)
-    found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
-    rows <- if (length(found) == 0) data.frame() else bind_frames(found)
-    shaped <- order_by_analysis(shape_associations(rows, info, original_units), info$id)
-    attach_provenance(shaped,
-                      query = provenance_query("og_tophits", args),
-                      args = c(list(analyses = analyses), args, list(releases = releases)),
-                      jobs = jobs)
-  })
-  run_query(src, plan, deadline)
-}
-
-# The API says how many top hits it returned and whether `limit` cut any off. An answer that doesn't
-# say, or says something the rows contradict, can't be trusted not to be partial.
-check_tophits_metadata <- function(job, rows, call = rlang::caller_env()) {
-  total <- job$total
-  truncated <- job$truncated
-  whole <- is.numeric(total) && length(total) == 1 && !is.na(total) && total >= 0 && total == round(total)
-  ok <- whole && is.logical(truncated) && length(truncated) == 1 && !is.na(truncated) &&
-    total >= rows && (truncated || total == rows)
-  if (!ok) {
-    job_invalid("Its `total` and `truncated` are missing or don't fit the top hits that were read.",
-                job$job_id, call)
-  }
+  check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
+  # `limit` applies to each Analysis, so no split changes it; a Job's rows (`limit` x Analyses) must
+  # fit the row cap.
+  association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
+                    body = list(threshold = threshold, limit = as.integer(limit)),
+                    analyses_per_job = tophits_analyses_per_job(limit), order = "api",
+                    truncated = function(ids) truncated_message(ids, threshold, limit))
 }
 
 # Kept: R argument types and shapes, and `limit`'s range, which the splitter needs to size Jobs.
 # Which thresholds are allowed is the API's to say (`opengwasr_unsupported_threshold`, or
 # `opengwasr_invalid_request` outside 0 to 1).
-check_tophits_arguments <- function(analyses, threshold, limit, observed_only, clump, ld, r2, kb,
-                                    original_units, call = rlang::caller_env()) {
-  check_query_arguments(analyses, observed_only, original_units, call)
+check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = rlang::caller_env()) {
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
   if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold)) bad("`threshold` must be one number.")
   if (!is.numeric(limit) || length(limit) != 1 || is.na(limit) || limit != round(limit) ||
@@ -134,34 +87,18 @@ check_tophits_arguments <- function(analyses, threshold, limit, observed_only, c
   }
 }
 
-# The arguments every Association query shares: `analyses`, `observed_only` and `original_units`.
-# Kept: R argument types, which the API can't see (they are never sent as typed).
-check_query_arguments <- function(analyses, observed_only, original_units, call = rlang::caller_env()) {
-  bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
-  if (!is.character(analyses) || length(analyses) == 0 || anyNA(analyses) || any(!nzchar(analyses))) {
-    bad("`analyses` must be a character vector of Analysis identifiers, with no missing values.")
-  }
-  if (!is_flag(observed_only)) bad("`observed_only` must be `TRUE` or `FALSE`.")
-  if (!is_flag(original_units)) bad("`original_units` must be `TRUE` or `FALSE`.")
-}
-
-is_flag <- function(x) is.logical(x) && length(x) == 1 && !is.na(x)
-
 # A feature the vignettes promise and a later ticket builds.
 not_implemented <- function(what, ticket, advice, call) {
   og_abort(c(paste0(what, " isn't available yet: opengwasr ticket ", ticket, " builds it."), i = advice),
            class = "opengwasr_not_implemented", ticket = ticket, call = call)
 }
 
-warn_truncated <- function(ids, threshold, limit, call = rlang::caller_env()) {
+# What the `opengwasr_truncated` warning says when `limit` cut an Analysis's top hits off.
+truncated_message <- function(ids, threshold, limit) {
   who <- if (length(ids) == 1) ids else paste0("At least one of the ", length(ids), " Analyses")
-  og_warn(
-    c(paste0(who, " has more than ", format(limit, big.mark = ","), " top hits at p <= ",
-             format(threshold), "; only the strongest ", format(limit, big.mark = ","),
-             " were returned."),
-      i = if (limit < max_tophits_per_analysis) {
-        paste0("Raise `limit` (at most ", format(max_tophits_per_analysis, big.mark = ","), ") for more.")
-      }),
-    class = "opengwasr_truncated", n_analyses = length(ids), call = call
-  )
+  c(paste0(who, " has more than ", format(limit, big.mark = ","), " top hits at p <= ",
+           format(threshold), "; only the strongest ", format(limit, big.mark = ","), " were returned."),
+    i = if (limit < max_tophits_per_analysis) {
+      paste0("Raise `limit` (at most ", format(max_tophits_per_analysis, big.mark = ","), ") for more.")
+    })
 }

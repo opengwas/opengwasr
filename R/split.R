@@ -1,10 +1,10 @@
 # The splitter: turns a request over one Job's shape limits into several requests of one plan.
 #
 # Pure functions from the dimensions of a request and the limits of a Job (R/jobs.R) to the pieces,
-# as indices, in a stable order. A query method calls it in preparation, builds one request per
-# piece, and its `finish()` puts the rows back together (see R/query-plan.R); run_query() runs the
-# pieces with at most `src$max_in_flight` Jobs in flight. The splitter never looks at a cost
-# refusal: a 413 is never split round (ADR 0002).
+# as indices, in a stable order. association_query() (or a query of another kind, in preparation)
+# builds one request per piece and puts the rows back together in its plan's `finish()`;
+# run_query() runs the pieces with at most `src$max_in_flight` Jobs in flight. The splitter never
+# looks at a cost refusal: a 413 is never split round (ADR 0002).
 #
 #   split_dim(n, limit, group = NULL, group_limit = NULL)   one dimension of a request of `n` items
 #   split_pieces(dims)        Cartesian product of the dimensions' chunks: a list of pieces, each a

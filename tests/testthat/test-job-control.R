@@ -26,7 +26,7 @@ fake_query <- function(src, ids, nested = FALSE) {
                                            observed_only = FALSE, releases = release))
   })
   pinned <- ids
-  plan <- query_plan(requests, unit = "Associations", finish = function(results) {
+  plan <- query_plan(requests, finish = function(results) {
     list(ids = pinned, rows = vapply(results, function(r) nrow(r$rows), 1L),
          jobs = vapply(results, function(r) r$job$job_id, ""))
   })

@@ -56,7 +56,7 @@ og_provenance <- function(x) {
 #' @param x The result data frame.
 #' @param query The call as text, such as `"og_tophits(limit = 3)"`.
 #' @param args The call's arguments, as a list.
-#' @param jobs The `job` element of each run_job() that produced `x`.
+#' @param jobs The `job` element of each collected Job that produced `x`.
 #' @param ... Further fields, for functions with more to record (clumping, LD).
 #' @noRd
 attach_provenance <- function(x, query, args, jobs, ...) {

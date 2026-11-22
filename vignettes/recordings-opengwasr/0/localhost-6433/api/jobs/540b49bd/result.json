@@ -1,0 +1,45 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 10,
+        "total_rows": 10,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 3713,
+        "total_bytes": 3713,
+        "sha256": "742504addf86670c43729364843790242ff57534144e6cc1c9f03f778ee66c8c",
+        "page_sha256": [
+            "742504addf86670c43729364843790242ff57534144e6cc1c9f03f778ee66c8c"
+        ],
+        "retention_expires_at": "2026-11-22T18:51:47.868142+00:00",
+        "page_encoding": "text",
+        "job_id": "540b49bd",
+        "fingerprint": "sha256:2cc05d402fd2aedf1740d63a320d0a7e213d52ebfd2c831257c505591f0920ff",
+        "release_id": "OGS-00011/OGS-00011-completed,OGS-00027/OGS-00027",
+        "releases": [
+            {
+                "store_id": "OGS-00011",
+                "release_id": "OGS-00011-completed"
+            },
+            {
+                "store_id": "OGS-00027",
+                "release_id": "OGS-00027"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 10,
+    "byte_count": 3713,
+    "sha256": "742504addf86670c43729364843790242ff57534144e6cc1c9f03f778ee66c8c",
+    "ndjson": "{\"alid\":\"9:22098620:A:G\",\"analysis_id\":\"GCST003116\",\"analysis_label\":\"Coronary artery disease\",\"association_status\":\"observed\",\"chromosome\":\"9\",\"eaf\":0.5117147564888,\"effect_allele\":\"A\",\"log10_p\":-97.63898249463591,\"other_allele\":\"G\",\"position\":22098620,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs2891168\",\"se\":0.009185791015625,\"store_id\":\"OGS-00011\",\"z\":-21.0498046875}\n{\"alid\":\"9:22098575:A:G\",\"analysis_id\":\"GCST003116\",\"analysis_label\":\"Coronary artery disease\",\"association_status\":\"observed\",\"chromosome\":\"9\",\"eaf\":0.5112437009811401,\"effect_allele\":\"A\",\"log10_p\":-97.1921185082274,\"other_allele\":\"G\",\"position\":22098575,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs4977574\",\"se\":0.009185791015625,\"store_id\":\"OGS-00011\",\"z\":-21.0009765625}\n{\"alid\":\"9:22123767:A:C\",\"analysis_id\":\"GCST003116\",\"analysis_label\":\"Coronary artery disease\",\"association_status\":\"observed\",\"chromosome\":\"9\",\"eaf\":0.503032386302948,\"effect_allele\":\"A\",\"log10_p\":-95.75137544832084,\"other_allele\":\"C\",\"position\":22123767,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs10738610\",\"se\":0.0092926025390625,\"store_id\":\"OGS-00011\",\"z\":-20.8427734375}\n{\"alid\":\"9:22106226:A:G\",\"analysis_id\":\"GCST003116\",\"analysis_label\":\"Coronary artery disease\",\"association_status\":\"observed\",\"chromosome\":\"9\",\"eaf\":0.4940797686576843,\"effect_allele\":\"A\",\"log10_p\":-95.59196233356077,\"other_allele\":\"G\",\"position\":22106226,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs10757275\",\"se\":0.00926971435546875,\"store_id\":\"OGS-00011\",\"z\":20.8251953125}\n{\"alid\":\"9:22124124:A:T\",\"analysis_id\":\"GCST003116\",\"analysis_label\":\"Coronary artery disease\",\"association_status\":\"observed\",\"chromosome\":\"9\",\"eaf\":0.4977124035358429,\"effect_allele\":\"A\",\"log10_p\":-95.45922034656141,\"other_allele\":\"T\",\"position\":22124124,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs1333046\",\"se\":0.00928497314453125,\"store_id\":\"OGS-00011\",\"z\":20.810546875}\n{\"alid\":\"20:50957273:A:G\",\"analysis_id\":\"ENSG00000000419\",\"analysis_label\":\"DPM1\",\"association_status\":\"observed\",\"chromosome\":\"20\",\"eaf\":0.38740700483322144,\"effect_allele\":\"A\",\"log10_p\":-18.615542979244704,\"n\":30895,\"other_allele\":\"G\",\"position\":50957273,\"release_id\":\"OGS-00027\",\"rsid\":\"rs2426214\",\"se\":0.00824737548828125,\"store_id\":\"OGS-00027\",\"z\":-8.9921875}\n{\"alid\":\"20:50937815:A:T\",\"analysis_id\":\"ENSG00000000419\",\"analysis_label\":\"DPM1\",\"association_status\":\"observed\",\"chromosome\":\"20\",\"eaf\":0.6085090041160583,\"effect_allele\":\"A\",\"log10_p\":-17.464814498740743,\"n\":30694,\"other_allele\":\"T\",\"position\":50937815,\"release_id\":\"OGS-00027\",\"rsid\":\"rs6020858\",\"se\":0.00826263427734375,\"store_id\":\"OGS-00027\",\"z\":8.6962890625}\n{\"alid\":\"20:50958797:A:C\",\"analysis_id\":\"ENSG00000000419\",\"analysis_label\":\"DPM1\",\"association_status\":\"observed\",\"chromosome\":\"20\",\"eaf\":0.606971025466919,\"effect_allele\":\"A\",\"log10_p\":-17.178371293756328,\"n\":30508,\"other_allele\":\"C\",\"position\":50958797,\"release_id\":\"OGS-00027\",\"rsid\":\"rs2281282\",\"se\":0.00827789306640625,\"store_id\":\"OGS-00027\",\"z\":8.62109375}\n{\"alid\":\"20:50975120:C:T\",\"analysis_id\":\"ENSG00000000419\",\"analysis_label\":\"DPM1\",\"association_status\":\"observed\",\"chromosome\":\"20\",\"eaf\":0.4159809947013855,\"effect_allele\":\"C\",\"log10_p\":-16.931101578071896,\"n\":30774,\"other_allele\":\"T\",\"position\":50975120,\"release_id\":\"OGS-00027\",\"rsid\":\"rs2426226\",\"se\":0.00817108154296875,\"store_id\":\"OGS-00027\",\"z\":-8.5556640625}\n{\"alid\":\"20:50970428:C:T\",\"analysis_id\":\"ENSG00000000419\",\"analysis_label\":\"DPM1\",\"association_status\":\"observed\",\"chromosome\":\"20\",\"eaf\":0.42092299461364746,\"effect_allele\":\"C\",\"log10_p\":-16.747768091657395,\"n\":30773,\"other_allele\":\"T\",\"position\":50970428,\"release_id\":\"OGS-00027\",\"rsid\":\"rs2426220\",\"se\":0.00815582275390625,\"store_id\":\"OGS-00027\",\"z\":-8.5068359375}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

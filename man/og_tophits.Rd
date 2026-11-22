@@ -34,7 +34,11 @@ og_tophits(
 
 \item{ld, r2, kb}{Clumping settings, used only with \code{clump = TRUE}.}
 
-\item{original_units}{Give \code{beta} and \code{se} in the trait's original units. Not yet available.}
+\item{original_units}{Give \code{beta} and \code{se} in the trait's original units: Analyses stored per SD are
+multiplied by their recorded phenotype SD (\code{original_sd}), and log-odds Analyses are unchanged. It
+refuses, with class \code{opengwasr_original_units_unavailable} and before any query runs, when an
+Analysis is stored per SD and isn't a continuous trait with an \code{original_sd}; \code{ids} and \code{reason}
+on the error say which and why.}
 
 \item{releases}{Store Releases to use, as in \code{\link[=og_analyses]{og_analyses()}}.}
 }
@@ -47,13 +51,15 @@ Returns each Analysis's Associations at or below a p-value \code{threshold}, str
 \code{vignette("large-queries-and-jobs")}).
 }
 \details{
-Clumping (\code{clump = TRUE}, the default once it is built) and \code{original_units = TRUE} aren't
-available yet: asking for either raises an error of class \code{opengwasr_not_implemented}. Pass
+Clumping (\code{clump = TRUE}, the default once it is built) isn't available yet: asking for it raises
+an error of class \code{opengwasr_not_implemented}. Pass
 \code{clump = FALSE} for every top hit. \code{ld}, \code{r2} and \code{kb} only mean something with clumping.
 
 The columns are those the vignette section "What the columns mean" lists: the Analysis \code{id}, the variant, \code{beta} (\code{z * se}), \code{se}, \code{z}, \code{pval}, \code{effect_scale}
-(\code{"sd"} or \code{"log_or"}, from the Analysis's stored effect scale), \code{association_status} and the
-\code{store_id} and \code{release_id} each Association came from. \code{pval} underflows to 0 when \verb{|z|} is
+(\code{"sd"} or \code{"log_or"} from the Analysis's stored effect scale, or \code{"original"} with
+\code{original_units = TRUE}), \code{n}, \code{sample_size_kind}, \code{ncase} and \code{ncontrol}, \code{association_status} and
+the \code{store_id} and \code{release_id} each Association came from. \code{n} is the Association's own sample size
+where the API sends one, otherwise the Analysis's \code{sample_size}; the other three describe the Analysis. \code{pval} underflows to 0 when \verb{|z|} is
 above about 38.5; \code{z} stays exact, so rank the strongest signals by \code{abs(z)}.
 
 When \code{limit} cuts any Analysis's top hits off, you get a warning of class

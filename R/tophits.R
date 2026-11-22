@@ -4,13 +4,15 @@
 #' `limit` per Analysis. The query runs as a Job on the API, and `og_tophits()` waits for it (see
 #' `vignette("large-queries-and-jobs")`).
 #'
-#' Clumping (`clump = TRUE`, the default once it is built) and `original_units = TRUE` aren't
-#' available yet: asking for either raises an error of class `opengwasr_not_implemented`. Pass
+#' Clumping (`clump = TRUE`, the default once it is built) isn't available yet: asking for it raises
+#' an error of class `opengwasr_not_implemented`. Pass
 #' `clump = FALSE` for every top hit. `ld`, `r2` and `kb` only mean something with clumping.
 #'
 #' The columns are those the vignette section "What the columns mean" lists: the Analysis `id`, the variant, `beta` (`z * se`), `se`, `z`, `pval`, `effect_scale`
-#' (`"sd"` or `"log_or"`, from the Analysis's stored effect scale), `association_status` and the
-#' `store_id` and `release_id` each Association came from. `pval` underflows to 0 when `|z|` is
+#' (`"sd"` or `"log_or"` from the Analysis's stored effect scale, or `"original"` with
+#' `original_units = TRUE`), `n`, `sample_size_kind`, `ncase` and `ncontrol`, `association_status` and
+#' the `store_id` and `release_id` each Association came from. `n` is the Association's own sample size
+#' where the API sends one, otherwise the Analysis's `sample_size`; the other three describe the Analysis. `pval` underflows to 0 when `|z|` is
 #' above about 38.5; `z` stays exact, so rank the strongest signals by `abs(z)`.
 #'
 #' When `limit` cuts any Analysis's top hits off, you get a warning of class
@@ -24,7 +26,11 @@
 #' @param observed_only Leave out Imputed Associations.
 #' @param clump Clump the top hits to one per independent signal. Not yet available.
 #' @param ld,r2,kb Clumping settings, used only with `clump = TRUE`.
-#' @param original_units Give `beta` and `se` in the trait's original units. Not yet available.
+#' @param original_units Give `beta` and `se` in the trait's original units: Analyses stored per SD are
+#'   multiplied by their recorded phenotype SD (`original_sd`), and log-odds Analyses are unchanged. It
+#'   refuses, with class `opengwasr_original_units_unavailable` and before any query runs, when an
+#'   Analysis is stored per SD and isn't a continuous trait with an `original_sd`; `ids` and `reason`
+#'   on the error say which and why.
 #' @param releases Store Releases to use, as in [og_analyses()].
 #' @return A data frame with the columns above and [og_provenance()] attached.
 #' @examples
@@ -49,6 +55,7 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
   deadline <- job_now() + src$timeout
   releases <- resolve_releases(src, releases)
   info <- analyses_lookup(src, analyses, releases)
+  if (original_units) check_original_units(info)  # refuse before the Job runs, not after
   # Only the Store Releases of the Analyses asked for.
   used <- unique(info$store_id)
   releases <- Filter(function(r) r$store_id %in% used, releases)
@@ -66,8 +73,9 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
   check_tophits_metadata(out$job, nrow(out$rows))
   if (out$job$truncated) warn_truncated(info$id, threshold, limit)
 
-  args <- list(threshold = threshold, limit = limit, observed_only = observed_only, clump = clump)
-  attach_provenance(shape_associations(out$rows, info),
+  args <- list(threshold = threshold, limit = limit, observed_only = observed_only, clump = clump,
+               original_units = original_units)
+  attach_provenance(shape_associations(out$rows, info, original_units),
                     query = provenance_query("og_tophits", args),
                     args = c(list(analyses = analyses), args, list(releases = releases)),
                     jobs = list(out$job))
@@ -112,9 +120,6 @@ check_tophits_arguments <- function(analyses, threshold, limit, observed_only, c
   }
   if (!is.null(ld) || !is.null(r2) || !is.null(kb)) {
     bad("`ld`, `r2` and `kb` only apply with `clump = TRUE`.")
-  }
-  if (original_units) {
-    not_implemented("`original_units = TRUE`", "#8", "Use `original_units = FALSE` for per-SD effects.", call)
   }
 }
 

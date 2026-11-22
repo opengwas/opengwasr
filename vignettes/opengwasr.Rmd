@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), effects and p-values, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), effects and p-values, effect scale and original units, sample size, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
@@ -359,51 +359,37 @@ Some binary Analyses are stored per SD rather than as log odds. `effect_scale` s
 
 For a continuous trait in its original units, pass `original_units = TRUE`. opengwasr multiplies `beta` and `se` by the Analysis's recorded phenotype SD (`original_sd` in `og_analyses()`), and `effect_scale` becomes `"original"`:
 
-```{r effect-scale-original, eval = FALSE}
-og_associations(src, "rs1421085", "OGS-00011:GCST90624700")[, c("beta", "se", "effect_scale")]
-og_associations(src, "rs1421085", "OGS-00011:GCST90624700",
-                original_units = TRUE)[, c("beta", "se", "effect_scale")]
+```{r effect-scale-original, warning = FALSE}
+per_sd <- og_tophits(src, "OGS-00011:GCST90624700", clump = FALSE, limit = 5)
+original <- og_tophits(src, "OGS-00011:GCST90624700", clump = FALSE, limit = 5,
+                       original_units = TRUE)
+head(per_sd[, c("rsid", "beta", "se", "effect_scale")], 3)
+head(original[, c("rsid", "beta", "se", "effect_scale")], 3)
 ```
 
-```text
-# illustrative
-       beta         se effect_scale
- 0.09583174 0.00312233           sd
+Here `original_sd` is 4.87 kg/m², estimated from the source's own effect sizes and allele frequencies (`original_sd_method == "estimated_from_source_maf"`). Log-odds effects are returned unchanged, since log odds are their original units. When an Analysis stored per SD isn't a continuous trait with a recorded phenotype SD, opengwasr refuses rather than guess. That includes the binary Analyses stored per SD (the 1,846 binary `ukb-b-*` traits), which have no phenotype SD to rescale by:
 
-      beta         se effect_scale
- 0.4667140 0.01520618     original
+```{r original-units-refused, error = TRUE}
+og_tophits(src, "OGS-00009:ukb-b-19953", clump = FALSE, original_units = TRUE)
 ```
 
-Here `original_sd` is 4.87 kg/m², estimated from the source's own effect sizes and allele frequencies (`original_sd_method == "estimated_from_source_maf"`). Log-odds effects are returned unchanged, since log odds are their original units. When an Analysis stored per SD has no recorded phenotype SD, opengwasr refuses rather than guess. That includes the binary Analyses stored per SD (such as many `ukb-b-*` traits), which have no phenotype SD to rescale by:
-
-```text
-# illustrative
-Error in `og_associations()`:
-! Can't give OGS-00009:ukb-b-19953 in original units: it has no recorded phenotype SD.
-ℹ Its effects were standardised at source (`original_sd_method` is "declared_standardised").
-ℹ Use `original_units = FALSE` (the default) for per-SD effects.
-```
-
-That error has class `opengwasr_original_units_unavailable`, a kind of `opengwasr_refusal`.
+That error has class `opengwasr_original_units_unavailable`, a kind of `opengwasr_refusal`. Its `ids` field lists the Analyses it refused, and `reason` says why for each: `"binary_per_sd"`, `"no_original_sd"` or `"unknown_trait_type"` (the trait isn't recorded as continuous). It is raised before the query runs. Asking for several Analyses refuses them all if any can't be rescaled.
 
 ### Sample size {#sample-size}
 
-`og_analyses()` returns the API's own metadata names (`sample_size`, `n_cases`, `n_controls`). Associations carry the names MR methods expect: `n`, `ncase` and `ncontrol`. `n` is the per-Association sample size where the GWAS Store holds one, and otherwise the Analysis's `sample_size`. `sample_size_kind` says what kind of count it is, so an effective N is never mistaken for a count of participants:
+`og_analyses()` returns the API's own metadata names (`sample_size`, `n_cases`, `n_controls`). Associations carry the names MR methods expect: `n`, `ncase` and `ncontrol`. `n` is the per-Association sample size where the GWAS Store holds one, and otherwise the Analysis's `sample_size`. Some GWAS Stores, such as the molecular-trait one, send an `n` on each Association; most don't, and then every Association has the Analysis's `sample_size`. `sample_size_kind`, `ncase` and `ncontrol` always describe the Analysis's own count, not where a row's `n` came from. `sample_size_kind` says what kind of count that is, so an effective N is never mistaken for a count of participants:
 
 - `"total"`: participants in the Analysis.
 - `"case_control"`: cases plus controls. `ncase` and `ncontrol` give each.
 - `"variant_level"`: N differs from variant to variant, as in many molecular-trait Analyses.
 
-```{r sample-size, eval = FALSE}
-out <- og_associations(src, "rs6567160", "OGS-00011:GCST003116")
-out[, c("id", "n", "sample_size_kind", "ncase", "ncontrol", "effect_scale")]
+```{r sample-size, warning = FALSE}
+out <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00027:ENSG00000000419"),
+                  clump = FALSE, limit = 5)
+out[c(1, 6:8), c("id", "n", "sample_size_kind", "ncase", "ncontrol", "effect_scale")]
 ```
 
-```text
-# illustrative
-                   id      n sample_size_kind ncase ncontrol effect_scale
- OGS-00011:GCST003116 187599     case_control 61289   126310       log_or
-```
+For the case-control Analysis every row has the Analysis's `n`. For the molecular one, `n` varies from variant to variant, and `sample_size_kind` says `"variant_level"`.
 
 ### Imputed Associations {#imputed-associations}
 

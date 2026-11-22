@@ -56,16 +56,7 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
   releases <- resolve_releases(src, releases)
   info <- analyses_lookup(src, analyses, releases)
   if (original_units) check_original_units(info)  # refuse before the Job runs, not after
-  # Only the Store Releases of the Analyses asked for.
-  used <- unique(info$store_id)
-  releases <- Filter(function(r) r$store_id %in% used, releases)
-  if (length(releases) > max_releases_per_job) {
-    not_implemented(
-      paste0("A query over ", length(releases), " GWAS Stores (a Job takes at most ", max_releases_per_job, ")"),
-      "#9", "Ask for Analyses from at most 10 GWAS Stores at a time; opengwasr will split larger queries later.",
-      rlang::current_env()
-    )
-  }
+  releases <- releases_of_analyses(releases, info)
 
   body <- list(analyses = as.list(info$id), threshold = threshold, limit = as.integer(limit),
                observed_only = observed_only, releases = releases)
@@ -95,16 +86,10 @@ check_tophits_metadata <- function(job, rows, call = rlang::caller_env()) {
   }
 }
 
-# The most Store Releases one Job takes (the API's limit).
-max_releases_per_job <- 10L
-
 check_tophits_arguments <- function(analyses, threshold, limit, observed_only, clump, ld, r2, kb,
                                     original_units, call = rlang::caller_env()) {
+  check_query_arguments(analyses, observed_only, original_units, call)
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
-  flag <- function(x) is.logical(x) && length(x) == 1 && !is.na(x)
-  if (!is.character(analyses) || length(analyses) == 0 || anyNA(analyses) || any(!nzchar(analyses))) {
-    bad("`analyses` must be a character vector of Analysis identifiers, with no missing values.")
-  }
   if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold) || threshold <= 0 || threshold >= 1) {
     bad("`threshold` must be one p-value, above 0 and below 1.")
   }
@@ -112,9 +97,7 @@ check_tophits_arguments <- function(analyses, threshold, limit, observed_only, c
       limit < 1 || limit > 10000) {
     bad("`limit` must be one whole number from 1 to 10,000.")
   }
-  if (!flag(observed_only)) bad("`observed_only` must be `TRUE` or `FALSE`.")
-  if (!flag(clump)) bad("`clump` must be `TRUE` or `FALSE`.")
-  if (!flag(original_units)) bad("`original_units` must be `TRUE` or `FALSE`.")
+  if (!is_flag(clump)) bad("`clump` must be `TRUE` or `FALSE`.")
   if (clump) {
     not_implemented("`clump = TRUE`", "#13", "Pass `clump = FALSE` for every top hit.", call)
   }
@@ -122,6 +105,18 @@ check_tophits_arguments <- function(analyses, threshold, limit, observed_only, c
     bad("`ld`, `r2` and `kb` only apply with `clump = TRUE`.")
   }
 }
+
+# The arguments every Association query shares: `analyses`, `observed_only` and `original_units`.
+check_query_arguments <- function(analyses, observed_only, original_units, call = rlang::caller_env()) {
+  bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
+  if (!is.character(analyses) || length(analyses) == 0 || anyNA(analyses) || any(!nzchar(analyses))) {
+    bad("`analyses` must be a character vector of Analysis identifiers, with no missing values.")
+  }
+  if (!is_flag(observed_only)) bad("`observed_only` must be `TRUE` or `FALSE`.")
+  if (!is_flag(original_units)) bad("`original_units` must be `TRUE` or `FALSE`.")
+}
+
+is_flag <- function(x) is.logical(x) && length(x) == 1 && !is.na(x)
 
 # A feature the vignettes promise and a later ticket builds.
 not_implemented <- function(what, ticket, advice, call) {

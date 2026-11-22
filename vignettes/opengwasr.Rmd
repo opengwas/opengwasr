@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), effects and p-values, effect scale and original units, sample size, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), Associations (including Imputed ones), effects and p-values, effect scale and original units, sample size, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
@@ -218,7 +218,7 @@ That error has class `opengwasr_unsupported_threshold`, a kind of `opengwasr_ref
 
 `og_associations()` returns the Associations for a set of variants in a set of Analyses: for example, the outcome data for your instruments. Variants can be rsIDs or [ALIDs](#alids), mixed.
 
-```{r associations, eval = FALSE}
+```{r associations}
 assoc <- og_associations(
   src,
   variants = c("rs1421085", "16:53767042:C:T", "rs6567160", "rs34159589", "rs999999999"),
@@ -227,23 +227,10 @@ assoc <- og_associations(
 assoc[, c("id", "rsid", "alid", "beta", "se", "pval", "association_status")]
 ```
 
-```text
-# illustrative
-ℹ 1 rsID is in none of these Analyses' GWAS Stores, so it has no Associations: rs999999999.
-
-                     id       rsid               alid         beta          se          pval association_status
-   OGS-00011:GCST003116 rs34159589 5:75701728:A:AAAAT -0.003017932 0.009841919  7.591169e-01            imputed
-   OGS-00011:GCST003116  rs1421085    16:53767042:C:T  0.029665306 0.009628296  2.062688e-03           observed
-   OGS-00011:GCST003116  rs6567160    18:60161902:C:T  0.057734668 0.010559082  4.557239e-08           observed
- OGS-00011:GCST90029007 rs34159589 5:75701728:A:AAAAT -0.025441924 0.002000809  4.830139e-37            imputed
- OGS-00011:GCST90029007  rs1421085    16:53767042:C:T  0.075834384 0.001968384  0.000000e+00           observed
- OGS-00011:GCST90029007  rs6567160    18:60161902:C:T  0.054658253 0.002292633 1.260915e-125           observed
-```
-
 - An rsID can name several ALIDs, and opengwasr asks for every one of them. It never picks one for you. `rs1421085` names `16:53767042:A:G` and `16:53767042:C:T`; these Analyses hold only the second, which you also asked for by its ALID, so it appears once per Analysis. `rs34159589` names `5:75701728:A:AAAAT` and `5:75701728:AAAAT:AAAATAAAT`; again only the first has Associations here.
 - Every match is returned: if an Analysis held Associations for both ALIDs of an rsID, you would get both.
-- Every Association has both `rsid` and `alid`, so you can join either way.
-- An rsID that no GWAS Store holds is reported in a message, never dropped quietly.
+- Every Association has an `alid`, so you can always join by it. It has an `rsid` too, except where a GWAS Store holds the variant with no rsID: `rsid` is then `NA`.
+- An rsID that no GWAS Store holds is reported in a warning (class `opengwasr_unresolved_variants`, with the rsIDs in its `ids` field), never dropped quietly.
 - **Imputed Associations are included** (`association_status == "imputed"`). Pass `observed_only = TRUE` to leave them out. See [Imputed Associations](#imputed-associations).
 
 There is no LD-proxy option. Reference-Completed Store Releases already hold an Imputed Association for most variants a source didn't report.
@@ -328,7 +315,7 @@ Every function that returns Associations (`og_tophits()`, `og_associations()`, `
 |---|---|
 | `id` | The Analysis, as `<store_id>:<analysis_id>` |
 | `store_id`, `analysis_id`, `analysis_label` | Its GWAS Store, its identifier within the GWAS Store, and its trait |
-| `alid`, `rsid`, `chromosome`, `position` | The variant, on GRCh38 (see [ALIDs](#alids)) |
+| `alid`, `rsid`, `chromosome`, `position` | The variant, on GRCh38 (see [ALIDs](#alids)). `rsid` is `NA` for a variant with no rsID |
 | `effect_allele`, `other_allele`, `eaf` | Its alleles (`A1` and `A2` of the ALID), and the effect allele's frequency |
 | `beta`, `se` | The effect of one copy of the effect allele, and its standard error |
 | `z`, `pval` | The z-score and the p-value |
@@ -395,7 +382,7 @@ For the case-control Analysis every row has the Analysis's `n`. For the molecula
 
 A Reference-Completed Store Release holds, beside the Associations its source reported (Observed), an Imputed Association for most variants the source didn't report. opengwasr includes them by default, and labels each Association in `association_status`. Here are BMI's 1,000 strongest top hits looked up in CAD:
 
-```{r imputed-associations, eval = FALSE}
+```{r imputed-associations}
 bmi_top <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE)
 outcome <- og_associations(src, bmi_top$alid, "OGS-00011:GCST003116")
 table(outcome$association_status)
@@ -403,13 +390,6 @@ table(outcome$association_status)
 observed <- og_associations(src, bmi_top$alid, "OGS-00011:GCST003116",
                             observed_only = TRUE)
 nrow(observed)
-```
-
-```text
-# illustrative
- imputed observed
-      61      938
-[1] 938
 ```
 
 Including the Imputed Associations finds 999 of the 1,000 variants in the outcome. With only the Observed ones, 938. Report how many of the Associations you used were Imputed.

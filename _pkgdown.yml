@@ -13,6 +13,9 @@ reference:
   contents:
   - og_tophits
   - og_provenance
+- title: Associations
+  contents:
+  - og_associations
 - title: Your own data
   contents:
   - og_alid

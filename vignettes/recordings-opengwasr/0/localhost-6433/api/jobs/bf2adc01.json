@@ -1,14 +1,14 @@
 {
-    "job_id": "340a71cf",
+    "job_id": "bf2adc01",
     "query_hash": "sha256:4d5e14c613dc992da9b4448ff261477c642a4e0a047a0cb1cf1db4957b0e2cd6",
     "status": "succeeded",
     "endpoint": "/api/tophits",
     "release_id": "OGS-00011/OGS-00011-completed",
-    "created_at": "2026-11-22T18:46:22.456405+00:00",
-    "started_at": "2026-11-22T18:46:22.493233+00:00",
-    "completed_at": "2026-11-22T18:46:33.366668+00:00",
-    "expires_at": "2026-11-22T18:51:38.396793+00:00",
-    "retrieved_at": "2026-11-22T18:46:38.396793+00:00",
+    "created_at": "2026-11-22T19:03:17.071484+00:00",
+    "started_at": "2026-11-22T19:03:17.139378+00:00",
+    "completed_at": "2026-11-22T19:03:20.953813+00:00",
+    "expires_at": "2026-11-22T19:08:22.856285+00:00",
+    "retrieved_at": "2026-11-22T19:03:22.856285+00:00",
     "retry_at": null,
     "attempts": 1,
     "error": null,
@@ -31,9 +31,9 @@
             "page_sha256": [
                 "326246a64e2657ba21280653c4d9c49bc5c5c908e972894c8a04ee072a592f57"
             ],
-            "retention_expires_at": "2026-11-22T18:51:38.396793+00:00",
+            "retention_expires_at": "2026-11-22T19:08:22.856285+00:00",
             "page_encoding": "text",
-            "job_id": "340a71cf",
+            "job_id": "bf2adc01",
             "fingerprint": "sha256:4d5e14c613dc992da9b4448ff261477c642a4e0a047a0cb1cf1db4957b0e2cd6",
             "release_id": "OGS-00011/OGS-00011-completed",
             "releases": [
@@ -44,7 +44,7 @@
             ],
             "first_cursor": null
         },
-        "result_url": "/api/jobs/340a71cf/result",
+        "result_url": "/api/jobs/bf2adc01/result",
         "metadata": {
             "threshold": 5e-08,
             "observed_only": false,
@@ -53,13 +53,13 @@
         }
     },
     "compute": {
-        "cpu_seconds": 10.516458,
-        "run_seconds": 10.856688,
-        "queue_seconds": 0.036828,
+        "cpu_seconds": 3.5085,
+        "run_seconds": 3.8049,
+        "queue_seconds": 0.0679,
         "attempts": 1,
         "rows": 5,
         "bytes": 1888
     },
-    "status_url": "/api/jobs/340a71cf",
-    "poll_after_seconds": 0.0
+    "status_url": "/api/jobs/bf2adc01",
+    "poll_after_seconds": 0
 }

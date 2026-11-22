@@ -1,14 +1,14 @@
 {
-    "job_id": "0a4c85ea",
-    "query_hash": "sha256:5de2a3272155ee652676aa70eb8537b3a18dbbd9740ee0f3cadc843dd9de4b2a",
+    "job_id": "fe34f808",
+    "query_hash": "sha256:f529b92f72bf3d113fe58aedf22e675cdb8232c55217eb1f3df31fb8383fdd4d",
     "status": "succeeded",
     "endpoint": "/api/tophits",
     "release_id": "OGS-00011/OGS-00011-completed",
-    "created_at": "2026-11-22T17:55:19.951578+00:00",
-    "started_at": "2026-11-22T17:55:19.969011+00:00",
-    "completed_at": "2026-11-22T17:55:21.014807+00:00",
-    "expires_at": "2026-11-22T18:55:21.011603+00:00",
-    "retrieved_at": null,
+    "created_at": "2026-11-22T19:01:38.285237+00:00",
+    "started_at": "2026-11-22T19:01:38.302789+00:00",
+    "completed_at": "2026-11-22T19:01:41.559492+00:00",
+    "expires_at": "2026-11-22T19:06:43.598441+00:00",
+    "retrieved_at": "2026-11-22T19:01:43.598441+00:00",
     "retry_at": null,
     "attempts": 1,
     "error": null,
@@ -25,16 +25,16 @@
             "page_row_offsets": [
                 0
             ],
-            "byte_count": 1894,
-            "total_bytes": 1894,
-            "sha256": "b5bcd604969bfe81efabaf7008abc26de6ea9dc014a22b70a749ddb178c4a1fe",
+            "byte_count": 1884,
+            "total_bytes": 1884,
+            "sha256": "40fb27bc8911d9346431e4b64143a537c967ba2b24d082f74bf8caad32316d72",
             "page_sha256": [
-                "b5bcd604969bfe81efabaf7008abc26de6ea9dc014a22b70a749ddb178c4a1fe"
+                "40fb27bc8911d9346431e4b64143a537c967ba2b24d082f74bf8caad32316d72"
             ],
-            "retention_expires_at": "2026-11-22T18:55:21.011603+00:00",
+            "retention_expires_at": "2026-11-22T19:06:43.598441+00:00",
             "page_encoding": "text",
-            "job_id": "0a4c85ea",
-            "fingerprint": "sha256:5de2a3272155ee652676aa70eb8537b3a18dbbd9740ee0f3cadc843dd9de4b2a",
+            "job_id": "fe34f808",
+            "fingerprint": "sha256:f529b92f72bf3d113fe58aedf22e675cdb8232c55217eb1f3df31fb8383fdd4d",
             "release_id": "OGS-00011/OGS-00011-completed",
             "releases": [
                 {
@@ -44,7 +44,7 @@
             ],
             "first_cursor": null
         },
-        "result_url": "/api/jobs/0a4c85ea/result",
+        "result_url": "/api/jobs/fe34f808/result",
         "metadata": {
             "threshold": 5e-08,
             "observed_only": false,
@@ -53,13 +53,13 @@
         }
     },
     "compute": {
-        "cpu_seconds": 1.010905,
-        "run_seconds": 1.032524,
-        "queue_seconds": 0.017433,
+        "cpu_seconds": 3.0963,
+        "run_seconds": 3.2405,
+        "queue_seconds": 0.0176,
         "attempts": 1,
         "rows": 5,
-        "bytes": 1894
+        "bytes": 1884
     },
-    "status_url": "/api/jobs/0a4c85ea",
-    "poll_after_seconds": 0.0
+    "status_url": "/api/jobs/fe34f808",
+    "poll_after_seconds": 0
 }

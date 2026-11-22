@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 5,
+        "total_rows": 5,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 867,
+        "total_bytes": 867,
+        "sha256": "e7140d93c40ec924958838b604d6e07ff30be53ddb9147cb3ed256288251d7ed",
+        "page_sha256": [
+            "e7140d93c40ec924958838b604d6e07ff30be53ddb9147cb3ed256288251d7ed"
+        ],
+        "retention_expires_at": "2026-11-22T23:02:57.207888+00:00",
+        "page_encoding": "text",
+        "job_id": "63a155ac",
+        "fingerprint": "sha256:ea33065c4d38a3b6ad37a860aebe93cad12cfcaf3443361ef7eeec78f6ce5a24",
+        "release_id": "ld:hgdp1kgp-v2-AFR-k10",
+        "releases": [
+            {
+                "store_id": "hgdp1kgp-v2-AFR-k10",
+                "release_id": "hgdp1kgp-v2-AFR-k10"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 5,
+    "byte_count": 867,
+    "sha256": "e7140d93c40ec924958838b604d6e07ff30be53ddb9147cb3ed256288251d7ed",
+    "ndjson": "{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"10:112998590:C:T\",\"chromosome\":\"10\",\"position\":112998590,\"r\":[1.0,-0.8904109589041096,-0.8825831702544031,0.6516634050880626,-0.6457925636007827]}\n{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"10:112995025:C:T\",\"chromosome\":\"10\",\"position\":112995025,\"r\":[-0.8904109589041096,1.0,0.9804305283757339,-0.7514677103718199,0.7416829745596869]}\n{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"10:112994312:C:T\",\"chromosome\":\"10\",\"position\":112994312,\"r\":[-0.8825831702544031,0.9804305283757339,1.0,-0.7377690802348337,0.7573385518590998]}\n{\"a1\":\"A\",\"a2\":\"T\",\"alid\":\"10:112996282:A:T\",\"chromosome\":\"10\",\"position\":112996282,\"r\":[0.6516634050880626,-0.7514677103718199,-0.7377690802348337,1.0,-0.9804305283757339]}\n{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"10:112994329:C:T\",\"chromosome\":\"10\",\"position\":112994329,\"r\":[-0.6457925636007827,0.7416829745596869,0.7573385518590998,-0.9804305283757339,1.0]}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

@@ -1,6 +1,14 @@
 destination: docs/_site
 template:
   bootstrap: 5
+reference:
+- title: Source
+  contents:
+  - og_api
+- title: Access and Analyses
+  contents:
+  - og_status
+  - og_analyses
 articles:
 - title: User journeys
   navbar: Articles

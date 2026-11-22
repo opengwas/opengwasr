@@ -113,16 +113,17 @@ check_tophits_metadata <- function(job, rows, call = rlang::caller_env()) {
   }
 }
 
+# Kept: R argument types and shapes, and `limit`'s range, which the splitter needs to size Jobs.
+# Which thresholds are allowed is the API's to say (`opengwasr_unsupported_threshold`, or
+# `opengwasr_invalid_request` outside 0 to 1).
 check_tophits_arguments <- function(analyses, threshold, limit, observed_only, clump, ld, r2, kb,
                                     original_units, call = rlang::caller_env()) {
   check_query_arguments(analyses, observed_only, original_units, call)
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
-  if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold) || threshold <= 0 || threshold >= 1) {
-    bad("`threshold` must be one p-value, above 0 and below 1.")
-  }
+  if (!is.numeric(threshold) || length(threshold) != 1 || is.na(threshold)) bad("`threshold` must be one number.")
   if (!is.numeric(limit) || length(limit) != 1 || is.na(limit) || limit != round(limit) ||
-      limit < 1 || limit > 10000) {
-    bad("`limit` must be one whole number from 1 to 10,000.")
+      limit < 1 || limit > max_tophits_per_analysis) {
+    bad(paste0("`limit` must be one whole number from 1 to ", format(max_tophits_per_analysis, big.mark = ","), "."))
   }
   if (!is_flag(clump)) bad("`clump` must be `TRUE` or `FALSE`.")
   if (clump) {
@@ -134,6 +135,7 @@ check_tophits_arguments <- function(analyses, threshold, limit, observed_only, c
 }
 
 # The arguments every Association query shares: `analyses`, `observed_only` and `original_units`.
+# Kept: R argument types, which the API can't see (they are never sent as typed).
 check_query_arguments <- function(analyses, observed_only, original_units, call = rlang::caller_env()) {
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
   if (!is.character(analyses) || length(analyses) == 0 || anyNA(analyses) || any(!nzchar(analyses))) {
@@ -157,7 +159,9 @@ warn_truncated <- function(ids, threshold, limit, call = rlang::caller_env()) {
     c(paste0(who, " has more than ", format(limit, big.mark = ","), " top hits at p <= ",
              format(threshold), "; only the strongest ", format(limit, big.mark = ","),
              " were returned."),
-      i = if (limit < 10000) "Raise `limit` (at most 10,000) for more."),
+      i = if (limit < max_tophits_per_analysis) {
+        paste0("Raise `limit` (at most ", format(max_tophits_per_analysis, big.mark = ","), ") for more.")
+      }),
     class = "opengwasr_truncated", n_analyses = length(ids), call = call
   )
 }

@@ -33,10 +33,10 @@ warning of class \code{opengwasr_legacy_successor} carrying \code{requested_id} 
 \item An identifier that could name more than one Analysis raises \code{opengwasr_ambiguous_analysis},
 with the candidates in \code{candidates}.
 \item An identifier that names no Analysis, or one that has been retired, raises
-\code{opengwasr_unknown_analysis} (\code{opengwasr_retired_analysis} too when retired). The condition
-carries opengwasr's sentence for each identifier in \code{reasons}, the API's own reason where it
-gave one in \code{api_reasons} (\code{NA} otherwise), and, for a retired Analysis, every successor the
-API named in \code{superseded_by}.
+\code{opengwasr_analysis_not_found} (\code{opengwasr_analysis_retired} too when retired), the classes of
+the API's own codes. The condition carries the identifiers in \code{ids}, the API's reason for each
+where it gave one in \code{api_reasons} (\code{NA} otherwise), and, for a retired Analysis, every
+successor the API named in \code{superseded_by}.
 }
 }
 \examples{

@@ -27,6 +27,7 @@ classify_variants <- function(variants, arg = "variants", call = rlang::caller_e
     bad(paste0("`", arg, "` must be a character vector of rsIDs and ALIDs, with no missing values."))
   }
   is_rsid <- grepl("^rs[0-9]+$", variants, ignore.case = TRUE)
+  # Kept until opengwas/ogdb-api#183 makes the API refuse non-canonical ALIDs; then it goes.
   is_alid <- !is_rsid & is_canonical_alid(variants)
   if (any(!is_rsid & !is_alid)) {
     wrong <- unique(variants[!is_rsid & !is_alid])

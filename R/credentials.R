@@ -11,6 +11,7 @@
 api_credentials <- function(url = NULL, call = rlang::caller_env()) {
   url <- url %||% Sys.getenv("OPENGWAS_URL")
   key <- Sys.getenv("OPENGWAS_DEV_KEY")
+  # Kept: with no URL or key there is no request to make, so no API answer to pass on.
   if (!nzchar(url)) {
     og_abort(
       c("No OpenGWAS API URL found.",

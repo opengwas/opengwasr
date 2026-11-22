@@ -1,0 +1,325 @@
+{
+  "unauthorized": {
+    "status": 401,
+    "source": "dev Data API",
+    "body": {
+      "error": "unauthorized",
+      "message": "Invalid bearer token",
+      "detail": {
+        "error": "unauthorized",
+        "message": "Invalid bearer token"
+      }
+    }
+  },
+  "invalid_request": {
+    "status": 400,
+    "source": "dev Data API",
+    "body": {
+      "error": "invalid_request",
+      "message": "Malformed request"
+    }
+  },
+  "invalid_query": {
+    "status": 400,
+    "source": "dev Data API",
+    "body": {
+      "error": "invalid_query",
+      "message": "conflicting analyses and ids",
+      "detail": {
+        "error": "invalid_query",
+        "message": "conflicting analyses and ids"
+      }
+    }
+  },
+  "analysis_not_found": {
+    "status": 404,
+    "source": "dev Data API",
+    "body": {
+      "error": "analysis_not_found",
+      "message": "unknown analysis ID: OGS-00011:NOT-AN-ANALYSIS",
+      "detail": {
+        "error": "analysis_not_found",
+        "message": "unknown analysis ID: OGS-00011:NOT-AN-ANALYSIS"
+      }
+    }
+  },
+  "release_not_found": {
+    "status": 404,
+    "source": "dev Data API",
+    "body": {
+      "error": "release_not_found",
+      "message": "unknown release: OGS-00011/nonesuch",
+      "detail": {
+        "error": "release_not_found",
+        "message": "unknown release: OGS-00011/nonesuch"
+      }
+    }
+  },
+  "unsupported_threshold": {
+    "status": 400,
+    "source": "dev Data API",
+    "body": {
+      "error": "unsupported_threshold",
+      "message": "threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds",
+      "indexed_thresholds": [
+        5e-08,
+        5e-06,
+        0.0005
+      ],
+      "detail": {
+        "error": "unsupported_threshold",
+        "message": "threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds",
+        "indexed_thresholds": [
+          5e-08,
+          5e-06,
+          0.0005
+        ]
+      }
+    }
+  },
+  "not_found": {
+    "status": 404,
+    "source": "dev Data API",
+    "body": {
+      "error": "not_found",
+      "message": "Job not found",
+      "detail": {
+        "error": "not_found",
+        "message": "Job not found"
+      }
+    }
+  },
+  "ld_refusal": {
+    "status": 422,
+    "source": "dev Data API",
+    "body": {
+      "error": "ld_refusal",
+      "reason": "threshold_below_t_far",
+      "message": "r2=0.001 is below t_far=0.03186544342507645: beyond 3,000,000 bp the store holds only the Bound r² < t_far for unstored pairs, which does not decide r̂² ≥ r2",
+      "store": "hgdp1kgp-v2-EUR-k10",
+      "ancestry": "EUR",
+      "t_far": 0.0318654434250765,
+      "near_bp": 3000000,
+      "far_bp": 10000000,
+      "detail": {
+        "error": "ld_refusal",
+        "reason": "threshold_below_t_far",
+        "message": "r2=0.001 is below t_far=0.03186544342507645: beyond 3,000,000 bp the store holds only the Bound r² < t_far for unstored pairs, which does not decide r̂² ≥ r2",
+        "store": "hgdp1kgp-v2-EUR-k10",
+        "ancestry": "EUR",
+        "t_far": 0.0318654434250765,
+        "near_bp": 3000000,
+        "far_bp": 10000000
+      }
+    }
+  },
+  "ambiguous_analysis": {
+    "status": 409,
+    "source": "ogdb-api ogdb_api/registry.py, errors.py @ 9d36e76",
+    "body": {
+      "error": "ambiguous_analysis",
+      "message": "analysis ID GCST90000001 is in several Stores; name one of: OGS-00011:GCST90000001, OGS-00012:GCST90000001",
+      "detail": {
+        "error": "ambiguous_analysis",
+        "message": "analysis ID GCST90000001 is in several Stores; name one of: OGS-00011:GCST90000001, OGS-00012:GCST90000001"
+      }
+    }
+  },
+  "analysis_retired": {
+    "status": 410,
+    "source": "ogdb-api ogdb_api/registry.py, errors.py @ 9d36e76",
+    "body": {
+      "error": "analysis_retired",
+      "message": "OGS-00013:OLD1",
+      "superseded_by": [
+        "OGS-00014:NEW1"
+      ],
+      "detail": {
+        "error": "analysis_retired",
+        "message": "OGS-00013:OLD1",
+        "superseded_by": [
+          "OGS-00014:NEW1"
+        ]
+      }
+    }
+  },
+  "user_required": {
+    "status": 400,
+    "source": "ogdb-api ogdb_api/auth.py @ 9d36e76",
+    "body": {
+      "error": "user_required",
+      "message": "Gateway requests to data routes must send X-OGDB-User",
+      "detail": {
+        "error": "user_required",
+        "message": "Gateway requests to data routes must send X-OGDB-User"
+      }
+    }
+  },
+  "release_selection_required": {
+    "status": 409,
+    "source": "ogdb-api ogdb_api/planner.py, errors.py @ 9d36e76",
+    "body": {
+      "error": "release_selection_required",
+      "message": "an explicit release selection or analysis IDs are required",
+      "detail": {
+        "error": "release_selection_required",
+        "message": "an explicit release selection or analysis IDs are required"
+      }
+    }
+  },
+  "result_expired": {
+    "status": 410,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "result_expired",
+      "message": "Job result has expired",
+      "detail": {
+        "error": "result_expired",
+        "message": "Job result has expired"
+      }
+    }
+  },
+  "query_too_broad": {
+    "status": 400,
+    "source": "ogdb-api ogdb_api/main.py, catalog.py @ 9d36e76",
+    "body": {
+      "error": "query_too_broad",
+      "message": "the search needs more than 200,000 steps; narrow it with a longer q or a filter",
+      "detail": {
+        "error": "query_too_broad",
+        "message": "the search needs more than 200,000 steps; narrow it with a longer q or a filter"
+      }
+    }
+  },
+  "request_too_large": {
+    "status": 413,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "request_too_large",
+      "message": "The job is estimated at 3479 CPU-seconds, more than the 300 one job may use; narrow it (fewer analyses, a shorter range) or split it",
+      "cost_estimate": 3479,
+      "max_cost": 300
+    }
+  },
+  "user_queue_full": {
+    "status": 429,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "user_queue_full",
+      "message": "You have 100 queued jobs, the most one user may queue; wait for some to run, or cancel some",
+      "queued": 100,
+      "max_queued": 100
+    }
+  },
+  "queue_wait_too_long": {
+    "status": 429,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "queue_wait_too_long",
+      "message": "The job would wait about 1900 s to start, longer than the queue's maximum age of 1800 s; resubmit later",
+      "jobs_ahead": 40,
+      "expected_wait_seconds": 1900,
+      "max_wait_seconds": 1800,
+      "poll_after_seconds": 100
+    }
+  },
+  "server_busy": {
+    "status": 429,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "server_busy",
+      "message": "Service capacity is temporarily full"
+    }
+  },
+  "results_quota_exceeded": {
+    "status": 429,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "results_quota_exceeded",
+      "message": "Your stored results fill your share of the results cache: read them, or wait for them to expire",
+      "results_bytes": 1073741824,
+      "results": 12,
+      "max_bytes": 1073741824,
+      "poll_after_seconds": 60
+    }
+  },
+  "results_cache_full": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "results_cache_full",
+      "message": "The results cache is full until stored results are retrieved or expire",
+      "poll_after_seconds": 60
+    }
+  },
+  "intake_paused": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "intake_paused",
+      "retry_after_seconds": 30,
+      "mode": "paused",
+      "message": "The Data API is not accepting new jobs"
+    }
+  },
+  "job_store_unavailable": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/errors.py @ 9d36e76",
+    "body": {
+      "error": "job_store_unavailable",
+      "message": "The job store is unavailable; retry later",
+      "retry_after_seconds": 15
+    }
+  },
+  "store_busy": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/errors.py, planner.py @ 9d36e76",
+    "body": {
+      "error": "store_busy",
+      "message": "store backend capacity is full",
+      "retry_after_seconds": 15
+    }
+  },
+  "store_timeout": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/errors.py, planner.py @ 9d36e76",
+    "body": {
+      "error": "store_timeout",
+      "message": "store query timed out: OGS-00011-completed",
+      "retry_after_seconds": 15
+    }
+  },
+  "search_busy": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/main.py, catalog.py @ 9d36e76",
+    "body": {
+      "error": "search_busy",
+      "retry_after_seconds": 2,
+      "message": "the search could not finish in 5 s because the server is busy; retry after Retry-After"
+    }
+  },
+  "release_unavailable": {
+    "status": 503,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "release_unavailable",
+      "message": "release OGS-00011/OGS-00011-completed failed to load",
+      "detail": {
+        "error": "release_unavailable",
+        "message": "release OGS-00011/OGS-00011-completed failed to load"
+      }
+    }
+  },
+  "invalid_cursor": {
+    "status": 400,
+    "source": "ogdb-api ogdb_api/main.py @ 9d36e76",
+    "body": {
+      "error": "invalid_cursor",
+      "message": "Invalid result cursor",
+      "detail": {
+        "error": "invalid_cursor",
+        "message": "Invalid result cursor"
+      }
+    }
+  }
+}

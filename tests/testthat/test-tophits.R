@@ -253,14 +253,6 @@ test_that("an answer the client can't trust raises opengwasr_job_invalid, never 
 
 # --- what the API or the arguments refuse ---------------------------------------------------
 
-test_that("a threshold looser than the GWAS Store indexes is an opengwasr_unsupported_threshold refusal", {
-  src <- fake_source(fake)
-  e <- expect_error(og_tophits(src, cad, threshold = 0.001, clump = FALSE, releases = rel),
-                    class = "opengwasr_unsupported_threshold")
-  expect_s3_class(e, "opengwasr_refusal")
-  expect_s3_class(e, "opengwasr_error")
-})
-
 test_that("clumping and original units say which ticket brings them", {
   src <- fake_source(fake)
   e <- expect_error(og_tophits(src, cad), class = "opengwasr_not_implemented")
@@ -456,7 +448,7 @@ test_that("og_tophits() is a Source generic, and checks its arguments", {
   expect_error(og_tophits(src, cad, clump = FALSE, ld = "EUR"), class = "opengwasr_argument")
   expect_error(og_tophits(src, 1:3, clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, character(), clump = FALSE), class = "opengwasr_argument")
-  expect_error(og_tophits(src, cad, threshold = 2, clump = FALSE), class = "opengwasr_argument")
+  expect_error(og_tophits(src, cad, threshold = "5e-8", clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, threshold = c(1e-8, 1e-6), clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, limit = 0, clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, limit = 10001, clump = FALSE), class = "opengwasr_argument")

@@ -82,7 +82,7 @@ empty_associations <- function() {
 #     trait, whatever `original_sd` says; the dev catalogue's 1,846 are all `ukb-b-*`);
 #   * "no_original_sd": `original_sd` is NA or absent;
 #   * "unknown_trait_type": `outcome_type` is absent, NA or neither "binary" nor "continuous".
-# A missing field refuses; it never rescales by NA.
+# A missing field refuses; it never rescales by NA. Kept: original units are computed client-side.
 check_original_units <- function(analyses, call = rlang::caller_env()) {
   n <- nrow(analyses)
   per_sd <- analyses$stored_effect_scale %in% "sd"

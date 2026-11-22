@@ -52,69 +52,67 @@ association_query <- function(src, path, analyses, observed_only, original_units
                               body = list(), variants = NULL, analyses_per_job = NULL,
                               order = c("position", "api", "jobs"), truncated = NULL, spec = list()) {
   method <- parent.frame()
-  given <- method_arguments(method, sys.function(sys.parent()))
-  deadline <- local_query(src)
+  fn <- sys.function(sys.parent())
   order <- match.arg(order)
-  every <- isTRUE(spec$all_analyses) && is.null(analyses)  # no Analyses named: look in all of them
-  check_query_arguments(analyses, observed_only, original_units, method, optional = every)
-  kinds <- if (!is.null(variants)) classify_variants(variants, call = method)
-  releases <- resolve_releases(src, releases, method)
-  limits <- job_limits()
-  scope <- query_scope(src, if (!every) analyses, releases, analyses_per_job %||% limits$analyses,
-                       original_units, limits, method)
-  releases <- scope$releases
-  info <- scope$info
+  engine_query(src, method, fn, function(deadline) {
+    every <- isTRUE(spec$all_analyses) && is.null(analyses)  # no Analyses named: look in all of them
+    check_query_arguments(analyses, observed_only, original_units, method, optional = every)
+    kinds <- if (!is.null(variants)) classify_variants(variants, call = method)
+    releases <- resolve_releases(src, releases, method)
+    limits <- job_limits()
+    scope <- query_scope(src, if (!every) analyses, releases, analyses_per_job %||% limits$analyses,
+                         original_units, limits, method)
+    releases <- scope$releases
+    info <- scope$info
 
-  # Preparation: rsIDs name ALIDs only in these Store Releases. The lookup's Jobs are in provenance;
-  # their rows are variants, not Associations, so they count none.
-  jobs <- list()
-  if (!is.null(kinds)) {
-    resolved <- resolve_variants(src, kinds, releases, deadline, method)
-    jobs <- lapply(resolved$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
-  }
-  # One Job takes a limited number of Analyses from a limited number of GWAS Stores, and of variants
-  # and positions: a bigger request is split by those and put back together below. Each field of the
-  # request that can be split is one contribution: its split dimension, and what its piece adds to the
-  # Job's body. A new kind of query adds a contribution (and a spec field), never a branch below.
-  contributions <- c(
-    list(scope = scope),
-    if (!is.null(kinds)) list(variants = variants_contribution(resolved, isTRUE(spec$one_variant), limits)),
-    if (!is.null(spec$interval)) list(interval = interval_contribution(spec$interval))
-  )
-  dims <- lapply(contributions, `[[`, "dim")
-  pieces <- if (is.null(kinds) || length(resolved$alids) > 0) split_pieces(dims) else list()
-  requests <- lapply(pieces, function(p) {
-    list(path = path, body = request_body(contributions, p, body, observed_only))
-  })
+    # Preparation: rsIDs name ALIDs only in these Store Releases. The lookup's Jobs are in provenance;
+    # their rows are variants, not Associations, so they count none.
+    jobs <- list()
+    if (!is.null(kinds)) {
+      resolved <- resolve_variants(src, kinds, releases, deadline, method)
+      jobs <- lapply(resolved$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
+    }
+    # One Job takes a limited number of Analyses from a limited number of GWAS Stores, and of variants
+    # and positions: a bigger request is split by those and put back together below. Each field of the
+    # request that can be split is one contribution: its split dimension, and what its piece adds to the
+    # Job's body. A new kind of query adds a contribution (and a spec field), never a branch below.
+    contributions <- c(
+      list(scope = scope),
+      if (!is.null(kinds)) list(variants = variants_contribution(resolved, isTRUE(spec$one_variant), limits)),
+      if (!is.null(spec$interval)) list(interval = interval_contribution(spec$interval))
+    )
+    dims <- lapply(contributions, `[[`, "dim")
+    pieces <- if (is.null(kinds) || length(resolved$alids) > 0) split_pieces(dims) else list()
+    requests <- lapply(pieces, function(p) {
+      list(path = path, body = request_body(contributions, p, body, observed_only))
+    })
 
-  # Everything the answer is shaped from is pinned in this closure now: og_job_result() finishes
-  # the same plan later, however long after, and gets the same answer.
-  record <- query_record(given, releases)
-  plan <- query_plan(requests, finish = function(results) {
-    for (i in seq_along(results)) {
-      n <- nrow(results[[i]]$rows)
-      if (is.null(truncated)) {
-        results[[i]]$job <- utils::modifyList(results[[i]]$job, list(total = n, truncated = FALSE))
-      } else {
-        check_job_metadata(results[[i]]$job, n)
+    # Everything the answer is shaped from is pinned in this closure now: og_job_result() finishes
+    # the same plan later, however long after, and gets the same answer.
+    list(requests = requests, releases = releases, finish = function(results) {
+      for (i in seq_along(results)) {
+        n <- nrow(results[[i]]$rows)
+        if (is.null(truncated)) {
+          results[[i]]$job <- utils::modifyList(results[[i]]$job, list(total = n, truncated = FALSE))
+        } else {
+          check_job_metadata(results[[i]]$job, n)
+        }
       }
-    }
-    all_jobs <- c(jobs, lapply(results, `[[`, "job"))
-    found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
-    rows <- if (length(found) == 0) data.frame() else bind_frames(found)
-    # With no Analyses named, the rows say which there are: one lookup, of those only.
-    if (is.null(info)) info <- result_analyses(src, rows, releases, method)
-    # Warnings name the user's call while it runs (not when og_job_result() collects it later).
-    if (any(vapply(all_jobs, function(j) j$truncated, NA))) {
-      og_warn(truncated(info$id), class = "opengwasr_truncated", n_analyses = nrow(info), call = method)
-    }
-    if (!is.null(kinds) && length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved, method)
-    shaped <- shape_associations(rows, info, original_units, method)
-    shaped <- switch(order, api = order_by_analysis(shaped, info$id), jobs = shaped,
-                     order_associations(shaped, info$id))
-    attach_provenance(shaped, query = record$query, args = record$args, jobs = all_jobs)
+      all_jobs <- c(jobs, lapply(results, `[[`, "job"))
+      rows <- result_rows(results)
+      # With no Analyses named, the rows say which there are: one lookup, of those only.
+      if (is.null(info)) info <- result_analyses(src, rows, releases, method)
+      # Warnings name the user's call while it runs (not when og_job_result() collects it later).
+      if (any(vapply(all_jobs, function(j) j$truncated, NA))) {
+        og_warn(truncated(info$id), class = "opengwasr_truncated", n_analyses = nrow(info), call = method)
+      }
+      if (!is.null(kinds) && length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved, method)
+      shaped <- shape_associations(rows, info, original_units, method)
+      shaped <- switch(order, api = order_by_analysis(shaped, info$id), jobs = shaped,
+                       order_associations(shaped, info$id))
+      list(value = shaped, jobs = all_jobs)
+    })
   })
-  run_query(src, plan, deadline, method)
 }
 
 # What a request is made of, as contributions: each is `list(dim, body)`, `dim` the split dimension
@@ -185,12 +183,15 @@ method_arguments <- function(method, fn) {
 }
 
 # The call as provenance records it: `releases` as resolved, arguments left NULL dropped. The query
-# text leaves out the long ones: `analyses`, `variants`, `releases`, `rsids` and `positions`.
+# text leaves out the long ones: `analyses`, `variants`, `data`, `releases`, `rsids` and `positions`.
 query_record <- function(given, releases) {
   args <- given$args
   args$releases <- releases
+  # A data frame of Associations given as an argument (to an LD query) is recorded as the variants
+  # and Analyses it names, not the whole frame.
+  args <- lapply(args, function(a) if (is.data.frame(a)) list(alids = unique(a$alid), ids = unique(a$id)) else a)
   args <- Filter(Negate(is.null), args)
-  shown <- args[setdiff(names(args), c("analyses", "variants", "releases", "rsids", "positions"))]
+  shown <- args[setdiff(names(args), c("analyses", "variants", "data", "releases", "rsids", "positions"))]
   list(query = provenance_query(given$generic, shown), args = args)
 }
 

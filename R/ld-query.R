@@ -25,32 +25,28 @@
 #' @noRd
 ld_query <- function(src, path, variants, ld, spec) {
   method <- parent.frame()
-  given <- method_arguments(method, sys.function(sys.parent()))
-  deadline <- local_query(src)
-  prep <- ld_prepare(src, variants, ld, deadline, method)
-  alids <- prep$alids
-  requests <- lapply(if (length(alids) > 0) spec$pieces(length(alids)), function(idx) {
-    list(path = path, body = c(list(store = prep$store$ld_store, alids = as.list(alids[idx])), spec$body))
+  fn <- sys.function(sys.parent())
+  engine_query(src, method, fn, function(deadline) {
+    prep <- ld_prepare(src, variants, ld, deadline, method)
+    alids <- prep$alids
+    requests <- lapply(if (length(alids) > 0) spec$pieces(length(alids)), function(idx) {
+      list(path = path, body = c(list(store = prep$store$ld_store, alids = as.list(alids[idx])), spec$body))
+    })
+    # The rsID lookup's Jobs read GWAS Store Releases and count no rows; the LD Store is `ld`, not a Store Release.
+    lookup_jobs <- lapply(prep$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
+    store <- prep$store
+    list(requests = requests, releases = NULL, finish = function(results) {
+      # The LD Store says which of the variants it doesn't hold, in each Job; a variant it doesn't
+      # hold is absent whichever Job asked.
+      absent <- unique(unlist(lapply(results, function(r) r$job$metadata$absent)))
+      left_out <- c(absent, prep$unresolved)
+      if (length(left_out) > 0) warn_ld_absent(left_out, store$ld_store, method)
+      value <- spec$assemble(results, list(alids = alids, absent = absent, store = store))
+      ld_jobs <- lapply(results, function(r) { r$job$releases <- character(); r$job })
+      list(value = value, jobs = c(lookup_jobs, ld_jobs),
+           provenance = list(ld = store$ld_store, ld_choice = prep$choice, absent = left_out))
+    })
   })
-  # Provenance records the Associations a data frame of `variants` names, not the whole frame.
-  if (is.data.frame(variants)) given$args$variants <- list(alids = unique(variants$alid), ids = unique(variants$id))
-  record <- query_record(given, NULL)
-  # The rsID lookup's Jobs read GWAS Store Releases and count no rows; the LD Store is `ld`, not a Store Release.
-  lookup_jobs <- lapply(prep$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
-  store <- prep$store
-  plan <- query_plan(requests, finish = function(results) {
-    # The LD Store says which of the variants it doesn't hold, in each Job; a variant it doesn't
-    # hold is absent whichever Job asked.
-    absent <- unique(unlist(lapply(results, function(r) r$job$metadata$absent)))
-    left_out <- c(absent, prep$unresolved)
-    if (length(left_out) > 0) warn_ld_absent(left_out, store$ld_store, method)
-    value <- spec$assemble(results, list(alids = alids, absent = absent, store = store))
-    ld_jobs <- lapply(results, function(r) { r$job$releases <- character(); r$job })
-    attach_provenance(value, query = record$query, args = record$args,
-                      jobs = c(lookup_jobs, ld_jobs),
-                      ld = store$ld_store, ld_choice = prep$choice, absent = left_out)
-  })
-  run_query(src, plan, deadline, method)
 }
 
 # The ALIDs to ask the LD Store about, and the LD Store: `list(alids, store, choice, unresolved,

@@ -7,16 +7,17 @@
 # the pieces, the Jobs' metadata, shaping, ordering and provenance. See CONTRIBUTING.md, "Adding a
 # query", for a worked example.
 #
-# What a query may vary is deliberately small. When a later query needs more (#11's 10 Mb interval
-# and one-variant PheWAS, #13's per-Analysis clumping), it comes as one spec list argument, not as
-# more named arguments.
+# What a query may vary is deliberately small. What a query needs beyond the named arguments comes as
+# one `spec` list (#11's one-variant PheWAS, every-Analysis search and 10 Mb interval; #13's
+# per-Analysis clumping will be one more field), never as more named arguments.
 
 #' Run a query that returns Associations.
 #'
 #' A query method returns its value, and must call it itself, not through a helper: provenance
 #' records the method's arguments, read from its frame (anything else is refused as an internal
-#' error), so a method never reassigns an argument before the call. Request bodies are `variants` (with `variants`), `analyses`, then `body`'s fields,
-#' then `observed_only` and `releases`; the API's own defaults are never relied on.
+#' error), so a method never reassigns an argument before the call. Request bodies are `variants` (or
+#' `variant`), `analyses`, then `body`'s fields, then any field a spec contributes (`chromosome`,
+#' `start`, `end`), then `observed_only` and `releases`; the API's own defaults are never relied on.
 #'
 #' @param src The Source.
 #' @param path The endpoint, such as `"api/tophits"`.
@@ -28,7 +29,17 @@
 #'   `variants`. An rsID none of them holds gives `opengwasr_unresolved_variants`.
 #' @param analyses_per_job The most Analyses one Job takes, if fewer than the API's limit.
 #' @param order `"position"`: Analyses in the order asked, then chromosome, position, ALID.
-#'   `"api"`: Analyses in the order asked, each in the order the API returned its rows.
+#'   `"api"`: Analyses in the order asked, each in the order the API returned its rows. `"jobs"`: the
+#'   rows as the Jobs returned them, Jobs in request order (for a query with no Analyses asked for).
+#' @param spec A list of the hooks a query may add; every field is optional:
+#'   * `all_analyses = TRUE`: `analyses` may be `NULL`, meaning every Analysis of the Store Releases
+#'     (sent as no `analyses`; Jobs are split by Store Release). The Analyses' metadata is then looked
+#'     up once, after the rows, for the Analyses the rows are in (one lookup in `finish`, however many
+#'     Jobs; never the catalogue). `original_units` can only be refused after the Jobs ran.
+#'   * `one_variant = TRUE`: with `variants`, each Job takes one ALID, sent as `variant` (so an
+#'     rsID naming several ALIDs runs one Job per ALID).
+#'   * `interval = list(chromosome, start, end, limit)`: the Jobs cover consecutive windows of at most
+#'     `limit` positions, sent as `chromosome`, `start` and `end` (integers).
 #' @param truncated `NULL` when the endpoint returns every Association it matches (one over the
 #'   row limit fails instead): a Job's `total` is its rows. Otherwise the endpoint cuts rows off at a
 #'   limit and must say so: every Job's `total` and `truncated` are required and checked against its
@@ -39,17 +50,20 @@
 #' @noRd
 association_query <- function(src, path, analyses, observed_only, original_units, releases,
                               body = list(), variants = NULL, analyses_per_job = NULL,
-                              order = c("position", "api"), truncated = NULL) {
+                              order = c("position", "api", "jobs"), truncated = NULL, spec = list()) {
   method <- parent.frame()
   given <- method_arguments(method, sys.function(sys.parent()))
   deadline <- local_query(src)
   order <- match.arg(order)
-  check_query_arguments(analyses, observed_only, original_units, method)
+  every <- isTRUE(spec$all_analyses) && is.null(analyses)  # no Analyses named: look in all of them
+  check_query_arguments(analyses, observed_only, original_units, method, optional = every)
   kinds <- if (!is.null(variants)) classify_variants(variants, call = method)
   releases <- resolve_releases(src, releases, method)
-  info <- analyses_lookup(src, analyses, releases, method)
-  if (original_units) check_original_units(info, method)  # refuse before a Job runs, not after
-  releases <- releases_of_analyses(releases, info)
+  limits <- job_limits()
+  scope <- query_scope(src, if (!every) analyses, releases, analyses_per_job %||% limits$analyses,
+                       original_units, limits, method)
+  releases <- scope$releases
+  info <- scope$info
 
   # Preparation: rsIDs name ALIDs only in these Store Releases. The lookup's Jobs are in provenance;
   # their rows are variants, not Associations, so they count none.
@@ -58,18 +72,19 @@ association_query <- function(src, path, analyses, observed_only, original_units
     resolved <- resolve_variants(src, kinds, releases, deadline, method)
     jobs <- lapply(resolved$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
   }
-  # One Job takes a limited number of Analyses from a limited number of GWAS Stores, and of variants:
-  # a bigger request is split by those (Analyses grouped by GWAS Store) and put back together below.
-  limits <- job_limits()
-  dims <- list(analyses = split_dim(nrow(info), analyses_per_job %||% limits$analyses,
-                                    group = info$store_id, group_limit = limits$releases))
-  if (!is.null(kinds)) dims$variants <- split_dim(length(resolved$alids), limits$variants)
+  # One Job takes a limited number of Analyses from a limited number of GWAS Stores, and of variants
+  # and positions: a bigger request is split by those and put back together below. Each field of the
+  # request that can be split is one contribution: its split dimension, and what its piece adds to the
+  # Job's body. A new kind of query adds a contribution (and a spec field), never a branch below.
+  contributions <- c(
+    list(scope = scope),
+    if (!is.null(kinds)) list(variants = variants_contribution(resolved, isTRUE(spec$one_variant), limits)),
+    if (!is.null(spec$interval)) list(interval = interval_contribution(spec$interval))
+  )
+  dims <- lapply(contributions, `[[`, "dim")
   pieces <- if (is.null(kinds) || length(resolved$alids) > 0) split_pieces(dims) else list()
   requests <- lapply(pieces, function(p) {
-    list(path = path, body = c(
-      if (!is.null(kinds)) list(variants = as.list(resolved$alids[p$variants])),
-      list(analyses = as.list(info$id[p$analyses])), body,
-      list(observed_only = observed_only, releases = piece_releases(releases, info$store_id, p$analyses))))
+    list(path = path, body = request_body(contributions, p, body, observed_only))
   })
 
   # Everything the answer is shaped from is pinned in this closure now: og_job_result() finishes
@@ -85,18 +100,74 @@ association_query <- function(src, path, analyses, observed_only, original_units
       }
     }
     all_jobs <- c(jobs, lapply(results, `[[`, "job"))
+    found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
+    rows <- if (length(found) == 0) data.frame() else bind_frames(found)
+    # With no Analyses named, the rows say which there are: one lookup, of those only.
+    if (is.null(info)) info <- result_analyses(src, rows, releases, method)
     # Warnings name the user's call while it runs (not when og_job_result() collects it later).
     if (any(vapply(all_jobs, function(j) j$truncated, NA))) {
       og_warn(truncated(info$id), class = "opengwasr_truncated", n_analyses = nrow(info), call = method)
     }
     if (!is.null(kinds) && length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved, method)
-    found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
-    rows <- if (length(found) == 0) data.frame() else bind_frames(found)
-    shaped <- shape_associations(rows, info, original_units)
-    shaped <- if (order == "api") order_by_analysis(shaped, info$id) else order_associations(shaped, info$id)
+    shaped <- shape_associations(rows, info, original_units, method)
+    shaped <- switch(order, api = order_by_analysis(shaped, info$id), jobs = shaped,
+                     order_associations(shaped, info$id))
     attach_provenance(shaped, query = record$query, args = record$args, jobs = all_jobs)
   })
   run_query(src, plan, deadline, method)
+}
+
+# What a request is made of, as contributions: each is `list(dim, body)`, `dim` the split dimension
+# and `body(chunk)` the fields one piece adds to a Job's body. The Analyses are the scope: named ones
+# (grouped by GWAS Store, narrowing the Store Releases) or, with `analyses = NULL`, every Analysis of
+# the Store Releases (split by Store Release; the metadata comes with the result, `info` is NULL).
+query_scope <- function(src, analyses, releases, per_job, original_units, limits, call) {
+  if (is.null(analyses)) {
+    return(list(dim = split_dim(length(releases), limits$releases), info = NULL, releases = releases,
+                body = function(chunk) list(releases = releases[chunk])))
+  }
+  info <- analyses_lookup(src, analyses, releases, call)
+  if (original_units) check_original_units(info, call)  # refuse before a Job runs, not after
+  releases <- releases_of_analyses(releases, info)
+  list(dim = split_dim(nrow(info), per_job, group = info$store_id, group_limit = limits$releases),
+       info = info, releases = releases,
+       body = function(chunk) list(analyses = as.list(info$id[chunk]),
+                                   releases = piece_releases(releases, info$store_id, chunk)))
+}
+
+# The ALIDs to query: `variants` in each Job, or, for a query of one variant, `variant`.
+# One ALID a Job is run in the order the variants were given, which is the order of the rows.
+variants_contribution <- function(resolved, one_variant, limits) {
+  alids <- if (one_variant) resolved$ordered else resolved$alids
+  list(dim = split_dim(length(alids), if (one_variant) 1 else limits$variants),
+       body = function(chunk) if (one_variant) list(variant = alids[[chunk]]) else list(variants = as.list(alids[chunk])))
+}
+
+# A range of one chromosome in windows (`split_interval()`).
+interval_contribution <- function(interval) {
+  list(dim = split_interval(interval$start, interval$end, interval$limit),
+       body = function(chunk) list(chromosome = interval$chromosome, start = as.integer(chunk[[1]]),
+                                   end = as.integer(chunk[[2]])))
+}
+
+# A Job's body: the contributions' fields, in a fixed order (the order is part of the request, and so
+# of what a recording replays): `variants`/`variant`, `analyses`, the endpoint's own `body`, any other
+# contributed field, then `observed_only` and `releases`; the API's defaults are never relied on.
+request_body <- function(contributions, piece, body, observed_only) {
+  fields <- unlist(lapply(names(contributions), function(n) contributions[[n]]$body(piece[[n]])), recursive = FALSE)
+  first <- c("variants", "variant", "analyses")
+  last <- c("observed_only", "releases")
+  c(fields[intersect(first, names(fields))], body,
+    fields[setdiff(names(fields), c(first, last))],
+    list(observed_only = observed_only), fields["releases"])
+}
+
+# The metadata of the Analyses a result's rows are in, in order of first appearance (with every
+# Analysis searched there is no list asked for). Kept: the API's rows carry no sample size or effect
+# scale, so shaping needs the Analyses' own metadata, and only these may be looked up, never the catalogue.
+# `original_units` is refused for them when the rows are shaped (shape_associations()).
+result_analyses <- function(src, rows, releases, call) {
+  analyses_lookup(src, unique(canonical_ids(rows)), releases, call)
 }
 
 # The query method's generic and arguments, in order (so an argument a method gains is recorded
@@ -114,12 +185,12 @@ method_arguments <- function(method, fn) {
 }
 
 # The call as provenance records it: `releases` as resolved, arguments left NULL dropped. The query
-# text leaves out the long ones: `analyses`, `variants` and `releases`.
+# text leaves out the long ones: `analyses`, `variants`, `releases`, `rsids` and `positions`.
 query_record <- function(given, releases) {
   args <- given$args
   args$releases <- releases
   args <- Filter(Negate(is.null), args)
-  shown <- args[setdiff(names(args), c("analyses", "variants", "releases"))]
+  shown <- args[setdiff(names(args), c("analyses", "variants", "releases", "rsids", "positions"))]
   list(query = provenance_query(given$generic, shown), args = args)
 }
 
@@ -139,9 +210,12 @@ check_job_metadata <- function(job, rows, call = rlang::caller_env()) {
 
 # The arguments every Association query shares: `analyses`, `observed_only` and `original_units`.
 # Kept: R argument types, which the API can't see (they are never sent as typed).
-check_query_arguments <- function(analyses, observed_only, original_units, call = rlang::caller_env()) {
+check_query_arguments <- function(analyses, observed_only, original_units, call = rlang::caller_env(),
+                                  optional = FALSE) {
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
-  if (!is.character(analyses) || length(analyses) == 0 || anyNA(analyses) || any(!nzchar(analyses))) {
+  every <- optional && is.null(analyses)  # `analyses = NULL` was allowed by the query: every Analysis
+  if (!every && (!is.character(analyses) || length(analyses) == 0 || anyNA(analyses) ||
+                 any(!nzchar(analyses)))) {
     bad("`analyses` must be a character vector of Analysis identifiers, with no missing values.")
   }
   if (!is_flag(observed_only)) bad("`observed_only` must be `TRUE` or `FALSE`.")

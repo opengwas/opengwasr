@@ -14,8 +14,10 @@
 #        requests  a list of list(path, body): every Job the answer needs (several when split).
 #        finish    function(results): `results` is one list(rows, job) per request, in order (as
 #                  collect_job() returns them); returns the query's value. It must use only what its
-#                  closure pinned at plan time, never look anything up, so collecting later gives the
-#                  very same answer as the synchronous call.
+#                  closure pinned at plan time, so collecting later gives the very same answer as the
+#                  synchronous call. The one exception: a query over every Analysis (`analyses =
+#                  NULL`, og_phewas()) looks up the metadata of the result's Analyses, against the
+#                  Store Releases the plan pinned. An error there is the API's.
 #   4. Return run_query(src, plan, deadline).
 #
 # run_query() submits every request, then either waits for all of them and calls finish() (a

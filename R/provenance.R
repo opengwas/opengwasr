@@ -23,7 +23,7 @@
 #'   * `store_releases`: the Store Releases that answered, as `<store_id>/<release_id>`.
 #'   * `job_ids`: the API's Job ids; `existing`: whether the API reattached you to a Job it already had.
 #'   * `cost_estimate`: the API's cost estimate for the Jobs, summed.
-#'   * `total`, `truncated`: how many Associations the API returned, and whether `limit` cut any off.
+#'   * `total`, `truncated`: how many Associations matched (what the API counted), and whether `limit` cut any off; `returned`: the rows of `x`.
 #'   * `retrieved`: when the answer was read, as a `POSIXct`.
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class
@@ -76,6 +76,7 @@ attach_provenance <- function(x, query, args, jobs, ...) {
       existing = any(vapply(jobs, function(j) isTRUE(j$existing), NA)),
       total = if (anyNA(total)) NA_real_ else sum(total),
       truncated = if (anyNA(truncated)) NA else any(truncated),
+      returned = NROW(x),
       retrieved = Sys.time(),
       ...
     ),
@@ -100,8 +101,10 @@ provenance_query <- function(name, args) {
 #' @export
 format.og_provenance <- function(x, ...) {
   retrieved <- format(x$retrieved, "%Y-%m-%d %H:%M:%S UTC", tz = "UTC")
+  # `total`: what matched; `returned`: the rows you got (fewer when `limit` cut the answer off).
   counts <- if (is.na(x$total)) NULL else paste0(
-    "\u2022 Top hits: ", format(x$total, big.mark = ","), " returned",
+    "\u2022 Rows: ", format(x$returned %||% x$total, big.mark = ","), " returned",
+    if (!identical(x$returned %||% x$total, x$total)) paste0(" of ", format(x$total, big.mark = ","), " matching"),
     if (isTRUE(x$truncated)) " (truncated)"
   )
   c(

@@ -9,9 +9,14 @@ vignette: >
 
 The OpenGWAS API answers every data query as a **Job**: it queues the query fairly between users, runs it, and keeps the answer for you to collect in pages. opengwasr's query functions hide this. They submit, wait and collect, and return a data frame. This vignette is for when you want to know what happens underneath, or to take control of it: big queries, many queries at once, long waits, interruptions, and queries too large for the API.
 
-> **Status.** No code in this vignette runs yet. It fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
+> **Status.** Only the setup chunk runs yet: it creates the API Source, and the rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
 
-```{r setup, eval = FALSE}
+```{r credentials, include = FALSE}
+source("recordings.R")
+vignette_credentials()
+```
+
+```{r setup}
 library(opengwasr)
 src <- og_api()
 ```

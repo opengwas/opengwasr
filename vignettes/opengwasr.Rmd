@@ -11,11 +11,16 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** No code in this vignette runs yet. It fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** The sections on credentials, finding Analyses and errors run: their output is real, replayed from responses recorded against the development Data API on 22 November 2026. The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
-```{r library, eval = FALSE}
+```{r recordings, include = FALSE}
+source("recordings.R")
+start_recordings("recordings-opengwasr")
+```
+
+```{r library}
 library(opengwasr)
 ```
 
@@ -47,60 +52,36 @@ When `OPENGWAS_DEV_KEY` is set, `og_api()` sends it to `OPENGWAS_URL`, naming `O
 
 ### Creating the API Source {#og-api}
 
-```{r og-api, eval = FALSE}
+```{r og-api}
 src <- og_api()
 src
 ```
 
-```text
-# illustrative
-<og_api_source>
-• URL: https://api.opengwas.io/ogdb
-• Signed in with: OPENGWAS_JWT
-• Timeout: 3600 s
-• Jobs in flight: at most 4
-```
-
 `og_api()` takes `url`, `timeout` (seconds to wait for any one call before giving up) and `max_in_flight` (how many Jobs one call may run at once). Each defaults to an option (`opengwasr.url`, `opengwasr.timeout`, `opengwasr.max_in_flight`), so you can set it once for a session. A fourth option, `opengwasr.progress`, turns the progress display off when `FALSE`; it is on in interactive sessions by default.
 
-```{r og-api-options, eval = FALSE}
+```{r og-api-options}
 options(opengwasr.timeout = 600)
 src <- og_api()
 ```
 
-Without a token, `og_api()` stops straight away:
+Without a key, `og_api()` stops straight away:
 
 ```text
 # illustrative
 Error in `og_api()`:
-! No OpenGWAS token found.
-ℹ Set `OPENGWAS_JWT` in your .Renviron to the token from <https://api.opengwas.io/profile/>, then restart R.
+! No OpenGWAS key found.
+ℹ Set `OPENGWAS_DEV_KEY` in your .Renviron to your developer key, then restart R.
 ```
 
-A token the API doesn't accept is reported on the first query, with the same advice. Both errors have class `opengwasr_auth`.
+A key the API doesn't accept is reported on the first query that needs one, such as `og_user()`, with the same advice (`og_status()` doesn't, because the API serves it without a key). Both errors have class `opengwasr_auth`. Printing the Source shows the setting that supplied the key, never the key.
 
 ### Checking your access {#checking-access}
 
-`og_status()` reports whether the API is up. `og_user()` reports who you are signed in as, and your allowance.
+`og_status()` reports whether the API is up. The API serves `/api/status` without a key, so `og_status()` works even with a wrong one (building the Source with `og_api()` still needs a key to be set). `og_user()` reports who you are signed in as, and your allowance, and is the call that checks your key.
 
-```{r og-status, eval = FALSE}
+```{r og-status}
 og_status(src)
 og_user(src)
-```
-
-```text
-# illustrative
-── OpenGWAS API ─────────────────────────────
-✔ Ready
-• Most Associations one Job returns: 100,000
-• Unread Job results kept for: 1 h
-
-── Signed in ────────────────────────────────
-• User: opengwasr-dev
-• Tier: gateway
-• Allowance: 1,000
-• Jobs running at once: 10
-• Jobs queued at once: 100
 ```
 
 Both return a list, so scripts can read the fields. You can have up to 10 Jobs running and up to 100 queued at any time; opengwasr keeps within both.
@@ -111,17 +92,10 @@ An **Analysis** is one statistical analysis of one trait. Each lives in a **GWAS
 
 ### By identifier {#analyses-by-id}
 
-```{r analyses-by-id, eval = FALSE}
+```{r analyses-by-id}
 info <- og_analyses(src, c("OGS-00011:GCST90029007", "OGS-00011:GCST003116"))
 info[, c("id", "analysis_label", "assigned_ancestry", "sample_size",
          "outcome_type", "stored_effect_scale")]
-```
-
-```text
-# illustrative
-                     id          analysis_label assigned_ancestry sample_size outcome_type stored_effect_scale
- OGS-00011:GCST90029007         Body mass index               EUR      532396   continuous                  sd
-   OGS-00011:GCST003116 Coronary artery disease               EUR      187599       binary              log_or
 ```
 
 Analyses come back in the order you gave them, one per identifier. The metadata includes the trait (`analysis_label`, `trait_ontology_id`), the Assigned Ancestry, sample sizes (`sample_size`, `sample_size_kind`, `n_cases`, `n_controls`), how effects are scaled (`stored_effect_scale`, `original_sd`, `original_sd_method`), the publication and the licence.
@@ -130,39 +104,20 @@ Analyses come back in the order you gave them, one per identifier. The metadata 
 
 Identifiers from **Legacy OpenGWAS**, the OpenGWAS service ieugwasr calls, are accepted where they name exactly one Analysis. The `requested_id` column shows what you asked for:
 
-```{r legacy-ids, eval = FALSE}
+```{r legacy-ids}
 og_analyses(src, c("ukb-b-19953", "ebi-a-GCST003116"))[, c("requested_id", "id", "analysis_label")]
 ```
 
-```text
-# illustrative
-     requested_id                    id          analysis_label
-      ukb-b-19953 OGS-00009:ukb-b-19953   Body mass index (BMI)
- ebi-a-GCST003116  OGS-00011:GCST003116 Coronary artery disease
-```
+An identifier that names no Analysis is an error. For most identifiers the API says only that it found nothing, so the sentence after the identifier is opengwasr's; where the API gives a reason, as it does for a Legacy OpenGWAS family it doesn't hold, the message quotes it and `e$api_reasons` keeps it. Some Legacy OpenGWAS identifier families aren't held by any GWAS Store:
 
-An identifier that names no Analysis is an error, with the API's reason. Some Legacy OpenGWAS identifier families aren't held by any GWAS Store:
-
-```text
-# illustrative
-Error in `og_analyses()`:
-! 1 identifier names no Analysis:
-✖ ieu-a-2: OpenGWAS batch ieu-a is not held by any Store.
+```{r legacy-unknown, error = TRUE}
+og_analyses(src, "ieu-a-2")
 ```
 
 Some legacy identifiers now point to a later release of the same analysis. For example, `finn-b-I9_CHD` points to FinnGen release 13, `OGS-00017:finngen-r13-I9_CHD`. opengwasr answers with the successor, and warns you, because its numbers differ from the ones Legacy OpenGWAS served:
 
-```{r legacy-successor, eval = FALSE}
+```{r legacy-successor}
 og_analyses(src, "finn-b-I9_CHD")[, c("requested_id", "id", "analysis_label")]
-```
-
-```text
-# illustrative
-  requested_id                           id                     analysis_label
- finn-b-I9_CHD OGS-00017:finngen-r13-I9_CHD Major coronary heart disease event
-Warning message:
-`finn-b-I9_CHD` now points to a later release of that analysis, "OGS-00017:finngen-r13-I9_CHD", whose numbers differ from the ones Legacy OpenGWAS served.
-ℹ Ask for "OGS-00017:finngen-r13-I9_CHD" by name to silence this warning.
 ```
 
 The warning has class `opengwasr_legacy_successor`, and carries the identifier you gave in `w$requested_id` and the successor in `w$id`. Catch it with `tryCatch()` to stop instead, or muffle it with `withCallingHandlers()`. Every query function that takes Analyses does the same.
@@ -178,40 +133,25 @@ Error in `og_analyses()`:
 
 ### Pinning a Store Release {#pinning-releases}
 
-Each GWAS Store is published as a series of immutable **Store Releases**. Queries use each GWAS Store's latest Store Release unless you pin one with `releases`, which every query function accepts. Give a GWAS Store id, such as `"OGS-00011"`, for its latest Store Release, or `"<store_id>/<release_id>"` for a particular one:
+Each GWAS Store is published as a series of immutable **Store Releases**. Without `releases`, opengwasr uses the one Store Release the API serves for each GWAS Store, and sends that choice to the API rather than leaving it to the API's default of every configured Store Release. You can pin Store Releases with `releases`, which every query function accepts. Give a GWAS Store id, such as `"OGS-00011"`, to use the one Store Release it serves (if any GWAS Store ever serves several, the API doesn't say which is latest, so opengwasr stops with `opengwasr_release_selection_required` and lists them, whether you named that GWAS Store or left `releases` out), or `"<store_id>/<release_id>"` to pin a particular one:
 
-```{r pinning-releases, eval = FALSE}
+```{r pinning-releases}
 og_analyses(src, "OGS-00011:GCST90029007",
             releases = "OGS-00011/OGS-00011-completed")[, c("id", "release_id")]
-```
-
-```text
-# illustrative
-                     id          release_id
- OGS-00011:GCST90029007 OGS-00011-completed
 ```
 
 To reproduce an analysis later, record the `store_id` and `release_id` columns that come back with every Association (see [Provenance](#provenance)).
 
 ### Browsing the catalogue {#browsing-the-catalogue}
 
-Without identifiers, `og_analyses()` reads the whole catalogue, page by page, with a progress bar:
+Without identifiers, `og_analyses()` reads the whole catalogue, page by page, with a progress bar. The whole catalogue is tens of thousands of Analyses, so this example reads one GWAS Store, the UK Biobank analyses of `OGS-00009`, by pinning it with `releases`. Leave `releases` out for everything:
 
-```{r browsing-the-catalogue, eval = FALSE}
-catalogue <- og_analyses(src)
+```{r browsing-the-catalogue}
+catalogue <- og_analyses(src, releases = "OGS-00009")
 nrow(catalogue)
 bmi <- subset(catalogue, grepl("body mass index", analysis_label, ignore.case = TRUE) &
                 assigned_ancestry %in% "EUR" & outcome_type == "continuous")
 head(bmi[, c("id", "analysis_label", "sample_size")], 3)
-```
-
-```text
-# illustrative
-[1] 38152
-                     id  analysis_label sample_size
- OGS-00011:GCST90025994 Body mass index      457756
- OGS-00011:GCST90029007 Body mass index      532396
- OGS-00011:GCST90302889 Body mass index      365498
 ```
 
 ## Variants are named by ALID {#alids}
@@ -565,16 +505,19 @@ opengwasr never quietly returns a different answer from the one you asked for. A
 
 | Class | When |
 |---|---|
-| `opengwasr_auth` | No token, or the API didn't accept it |
+| `opengwasr_auth` | No key (or token), or the API didn't accept it |
 | `opengwasr_unknown_analysis` | An identifier names no Analysis, or one that has been retired |
 | `opengwasr_ambiguous_analysis` | An identifier names more than one Analysis |
 | `opengwasr_refusal` | An option can't be honoured exactly. Its subclasses include `opengwasr_unsupported_threshold`, `opengwasr_original_units_unavailable`, `opengwasr_ld_refusal`, `opengwasr_ld_unmatched` and `opengwasr_too_large` |
 | `opengwasr_timeout`, `opengwasr_job_failed`, `opengwasr_result_expired` | A Job didn't finish in time, failed, or its result had expired ([Large queries and Jobs](large-queries-and-jobs.html)) |
 | `opengwasr_busy` | The API stayed busy, or your allowance stayed used up, until the call's timeout |
+| `opengwasr_unknown_release`, `opengwasr_release_selection_required` | A Store Release you pinned in `releases` isn't served, or the API needs you to choose one |
+| `opengwasr_unreachable`, `opengwasr_api_error` | The API couldn't be reached, or it refused a request in a way none of the classes above names (its code is in `e$api_error`) |
+| `opengwasr_argument` | An argument is the wrong kind, such as `ids` that aren't character |
 
 All of them also have class `opengwasr_error`. Catch one by its class:
 
-```{r errors, eval = FALSE}
+```{r errors}
 info <- tryCatch(
   og_analyses(src, c("ukb-b-19953", "ieu-a-2")),
   opengwasr_unknown_analysis = function(e) {
@@ -584,11 +527,10 @@ info <- tryCatch(
 )
 ```
 
-```text
-# illustrative
-Skipping: ieu-a-2
-```
-
-Each condition carries the details as fields, such as `e$ids` here, or the API's own error code and message as `e$api_error` and `e$api_message`.
+Each condition carries the details as fields, such as `e$ids` here, with opengwasr's sentence for each in `e$reasons` and the API's own reason, where it gave one, in `e$api_reasons` (a retired Analysis's successor is in `e$superseded_by`). A condition raised from an API error response also carries the API's own error code and message as `e$api_error` and `e$api_message`, and the HTTP status as `e$status`.
 
 One warning is classed too: `opengwasr_legacy_successor`, when a legacy identifier is answered by a later release of its analysis (see [Legacy OpenGWAS identifiers](#legacy-ids)). It is a warning rather than an error because opengwasr does answer, and says which Analysis answered. It doesn't have class `opengwasr_error`.
+
+```{r end-recordings, include = FALSE}
+end_recordings()
+```

@@ -11,9 +11,14 @@ Linkage disequilibrium (LD) is how strongly two variants are inherited together,
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** No code in this vignette runs yet. It fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 and 22 November 2026, shaped the way opengwasr will return them. The PLINK Reference examples are illustrative too, but the API isn't involved in them.
+> **Status.** Only the setup chunk runs yet: it creates the API Source, and the rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 and 22 November 2026, shaped the way opengwasr will return them. The PLINK Reference examples are illustrative too, but the API isn't involved in them.
 
-```{r setup, eval = FALSE}
+```{r credentials, include = FALSE}
+source("recordings.R")
+vignette_credentials()
+```
+
+```{r setup}
 library(opengwasr)
 src <- og_api()
 ```

@@ -1,0 +1,258 @@
+{
+    "status": "ok",
+    "ready": true,
+    "execution": {
+        "schema_version": "ogdb-execution-v1",
+        "source_revision": "sha256:29ee30fbbd71aab682968ebea1968430bd534d9103113ae58a80ad32b34dcfde",
+        "backend_revision": "42850d8b49ba0ad2626f1598ccf7956375c704ec",
+        "image_digest": "sha256:d20dddee948b06fb2f62e2d1cb7c6b1ed1f30b511bc2b9c1f575eb8357fc93b3",
+        "operations": {
+            "/api/associations": {
+                "queued": true,
+                "observed_only_modes": [
+                    false,
+                    true
+                ],
+                "all_analyses": false
+            },
+            "/api/associations/analysis": {
+                "queued": true,
+                "observed_only_modes": [
+                    false,
+                    true
+                ],
+                "all_analyses": false
+            },
+            "/api/associations/range": {
+                "queued": true,
+                "observed_only_modes": [
+                    false,
+                    true
+                ],
+                "all_analyses": true
+            },
+            "/api/variants/rsid": {
+                "queued": true,
+                "observed_only_modes": [
+
+                ],
+                "all_analyses": false
+            },
+            "/api/variants/chrpos": {
+                "queued": true,
+                "observed_only_modes": [
+
+                ],
+                "all_analyses": false
+            },
+            "/api/phewas": {
+                "queued": true,
+                "observed_only_modes": [
+                    false,
+                    true
+                ],
+                "all_analyses": false
+            },
+            "/api/tophits": {
+                "queued": true,
+                "observed_only_modes": [
+                    false,
+                    true
+                ],
+                "all_analyses": false
+            }
+        },
+        "result_contract": "ogdb-result-v1",
+        "all_results_manifest": true,
+        "limits": {
+            "result_rows": 100000,
+            "result_bytes": 50000000,
+            "page_rows": 1000,
+            "page_bytes": 1048576,
+            "retention_seconds": 86400,
+            "result_grace_seconds": 300,
+            "result_cache_bytes": 1073741824,
+            "result_cache_principal_bytes": 268435456,
+            "result_unread_seconds": 3600,
+            "failed_job_seconds": 300,
+            "store_timeout_seconds": 30.0,
+            "backend_max_running": 180,
+            "job_workers": 40,
+            "job_workers_max": 224,
+            "job_processes": true,
+            "queue_max_age_seconds": 3600,
+            "admission": {
+                "global_capacity": 100,
+                "principal_capacity": 10,
+                "max_request_cost": 300,
+                "queue_capacity": 1000,
+                "principal_queue_capacity": 100
+            },
+            "backend_max_per_release": null,
+            "backend_release_limits": {
+
+            },
+            "range_span": 10000000,
+            "lookup_variants": 1000,
+            "lookup_analyses": 100,
+            "analysis_analyses": 10,
+            "range_analyses": 10
+        }
+    },
+    "registry_error": null,
+    "release_ids": [
+        "OGS-00006-completed",
+        "OGS-00009-completed",
+        "OGS-00011-completed",
+        "OGS-00012-completed",
+        "OGS-00013-completed",
+        "OGS-00014-completed",
+        "OGS-00015-completed",
+        "OGS-00016",
+        "OGS-00017-completed",
+        "OGS-00024",
+        "OGS-00025",
+        "OGS-00026",
+        "OGS-00027"
+    ],
+    "catalog": {
+        "version": "2b9d06d6f8b200d2",
+        "built_at": "2026-11-18T03:40:28.718201+00:00",
+        "reload": {
+            "requested": {
+                "version": "2b9d06d6f8b200d2",
+                "requested_at": "2026-11-18T14:56:05.306458+00:00"
+            },
+            "serving": {
+                "2b9d06d6f8b200d2": 65
+            },
+            "errors": [
+
+            ]
+        }
+    },
+    "ld_stores": [
+        {
+            "ancestry": "EUR",
+            "store": "hgdp1kgp-v2-EUR-k10",
+            "ready": true
+        },
+        {
+            "ancestry": "AFR",
+            "store": "hgdp1kgp-v2-AFR-k10",
+            "ready": true
+        },
+        {
+            "ancestry": "EAS",
+            "store": "hgdp1kgp-v2-EAS-k10",
+            "ready": true
+        },
+        {
+            "ancestry": "SAS",
+            "store": "hgdp1kgp-v2-SAS-k10",
+            "ready": true
+        },
+        {
+            "ancestry": "AMR",
+            "store": "hgdp1kgp-v2-AMR-k10",
+            "ready": true
+        }
+    ],
+    "capacity": {
+        "state": "available",
+        "global_capacity": 100,
+        "principal_capacity": 10,
+        "queue_capacity": 1000,
+        "principal_queue_capacity": 100,
+        "shared": true,
+        "global_used": 0,
+        "queued": 0
+    },
+    "dependencies": {
+        "redis": "configured"
+    },
+    "results_cache": {
+        "state": "available",
+        "bytes": 531968177,
+        "results": 122,
+        "max_bytes": 4294967296,
+        "max_age_seconds": 86400,
+        "grace_seconds": 300,
+        "principal_max_bytes": 1073741824,
+        "unread_max_age_seconds": 3600
+    },
+    "queue_control": {
+        "mode": "open",
+        "since": null,
+        "reason": null
+    },
+    "job_workers": {
+        "target": 60,
+        "configured": 40,
+        "maximum": 224,
+        "source": "operator",
+        "processes": true,
+        "running": 60,
+        "retiring": 0,
+        "restarts": 1
+    },
+    "runtime_limits": {
+        "capacity": {
+            "target": 100,
+            "configured": 100,
+            "minimum": 10,
+            "maximum": 400,
+            "source": "setting"
+        },
+        "user_capacity": {
+            "target": 10,
+            "configured": 10,
+            "minimum": 1,
+            "maximum": 100,
+            "source": "setting"
+        },
+        "queue": {
+            "target": 1000,
+            "configured": 1000,
+            "minimum": 100,
+            "maximum": 10000,
+            "source": "setting"
+        },
+        "user_queue": {
+            "target": 100,
+            "configured": 100,
+            "minimum": 1,
+            "maximum": 1000,
+            "source": "setting"
+        },
+        "results_cache_bytes": {
+            "target": 4294967296,
+            "configured": 1073741824,
+            "minimum": 50000000,
+            "maximum": 4294967296,
+            "source": "operator"
+        }
+    },
+    "ld_workers": {
+        "target": 60,
+        "configured": 10,
+        "maximum": 100,
+        "source": "operator",
+        "queued": 0,
+        "processes": true,
+        "running": 60,
+        "retiring": 0,
+        "restarts": 0
+    },
+    "jobs_running": 0,
+    "store_queries": {
+        "running": 0,
+        "stalled": 0,
+        "processes": 60
+    },
+    "threads": {
+        "threads": 188,
+        "busy": 0,
+        "queued": 0
+    }
+}

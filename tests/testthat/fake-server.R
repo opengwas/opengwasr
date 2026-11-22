@@ -41,6 +41,12 @@ schema_problems <- function(value, schema, root, path = "$") {
   if (is.numeric(value) && !is.null(schema$maximum) && value > schema$maximum) {
     problems <- c(problems, paste0(path, ": above ", schema$maximum))
   }
+  if (is.numeric(value) && !is.null(schema$exclusiveMinimum) && value <= schema$exclusiveMinimum) {
+    problems <- c(problems, paste0(path, ": not above ", schema$exclusiveMinimum))
+  }
+  if (is.numeric(value) && !is.null(schema$exclusiveMaximum) && value >= schema$exclusiveMaximum) {
+    problems <- c(problems, paste0(path, ": not below ", schema$exclusiveMaximum))
+  }
   if (is.character(value) && !is.null(schema$maxLength) && nchar(value) > schema$maxLength) {
     problems <- c(problems, paste0(path, ": longer than ", schema$maxLength))
   }
@@ -286,10 +292,15 @@ fake_api <- function(world = fake_world()) {
   app$use(webfakes::mw_json(simplifyVector = FALSE))
   app$locals$world <- world
   app$locals$openapi <- read_fixture("openapi.json")
+  app$locals$errors <- read_fixture("errors.json")
 
-  fail <- function(res, status, code, message, ...) {
-    res$set_status(status)$send_json(c(list(error = code, message = message), list(...)),
-                                     auto_unbox = TRUE, null = "null")
+  # Every error is the API's real body for `code` (fixtures/errors.json), sent verbatim. `edit` alters
+  # it only for a scenario that plays a careless server (one that echoes the key).
+  fail <- function(req, res, code, edit = identity, problems = NULL) {
+    error <- req$app$locals$errors[[code]]
+    # What the fake found wrong, for whoever debugs a test; never in the body.
+    if (length(problems) > 0) res$set_header("X-Fake-Problems", paste(problems, collapse = "; "))
+    res$set_status(error$status)$send_json(edit(error$body), auto_unbox = TRUE, null = "null", digits = NA)
   }
   authorised <- function(req, res) {
     token <- sub("^Bearer ", "", req$get_header("Authorization") %||% "")
@@ -298,26 +309,18 @@ fake_api <- function(world = fake_world()) {
       res$set_status(401)$set_type("text/plain")$send("Unauthorized")
       return(FALSE)
     }
-    if (!nzchar(token)) {
-      fail(res, 401, "unauthorized", "Bearer token required")
-      return(FALSE)
-    }
     if (!identical(token, req$app$locals$world$key)) {
-      if (isTRUE(mode$leak)) {
-        # The token as a JSON member name, and in the message.
-        do.call(fail, c(list(res, 401, "unauthorized", paste("Invalid bearer token", token)),
-                        stats::setNames(list("x"), token)))
-        return(FALSE)
-      }
-      # Echoes the token, as a careless server might: the client must not keep it.
-      fail(res, 401, "unauthorized", paste("Invalid bearer token", token))
+      # `leak`: a careless server echoes the token in the message and as a member name.
+      echo <- function(body) c(utils::modifyList(body, list(message = paste(body$message, token))),
+                               stats::setNames(list("x"), token))
+      fail(req, res, "unauthorized", if (isTRUE(mode$leak)) echo else identity)
       return(FALSE)
     }
     TRUE
   }
   needs_user <- function(req, res) {
     if (is.null(req$get_header("X-OGDB-User"))) {
-      fail(res, 400, "user_required", "Gateway key on a data route without X-OGDB-User")
+      fail(req, res, "user_required")
       return(FALSE)
     }
     TRUE
@@ -352,6 +355,10 @@ fake_api <- function(world = fake_world()) {
     }
     request_body_problems(body, path, "post", openapi)
   }
+  # What was submitted to a Job endpoint, for tests of the request itself (GET /_fake/bodies).
+  received <- function(req, endpoint, body) {
+    assign(paste0("b", length(ls(req$app$locals$bodies))), list(endpoint = endpoint, body = body), envir = req$app$locals$bodies)
+  }
   log_event <- function(req, what, id) {
     log <- req$app$locals$events$log
     req$app$locals$events$log[[length(log) + 1]] <- list(event = what, job_id = id)
@@ -361,9 +368,8 @@ fake_api <- function(world = fake_world()) {
     if (!identical(mode$busy_route, route)) return(FALSE)
     if (identical(mode$busy, "none") || as.integer(mode$busy_times) <= 0L) return(FALSE)
     req$app$locals$world$mode$busy_times <- as.integer(mode$busy_times) - 1L
-    status <- if (mode$busy %in% c("results_cache_full", "intake_paused", "job_store_unavailable")) 503L else 429L
     res$set_header("Retry-After", as.character(mode$busy_after))
-    fail(res, status, mode$busy, "The API is busy")
+    fail(req, res, mode$busy)
     TRUE
   }
   job_status_body <- function(job, mode) {
@@ -404,8 +410,6 @@ fake_api <- function(world = fake_world()) {
     key <- paste(endpoint, world$mode$job, world$mode$page_rows, as.character(jsonlite::toJSON(body, auto_unbox = TRUE)))
     # Long bodies (1,000 variants) can't be variable names: hash them.
     key <- paste0("k", rlang::hash(key))
-    # What was submitted, for tests of the request itself (GET /_fake/bodies).
-    assign(paste0("b", length(ls(req$app$locals$bodies))), list(endpoint = endpoint, body = body), envir = req$app$locals$bodies)
     existing <- exists(key, envir = req$app$locals$job_keys, inherits = FALSE)
     if (existing) {
       job <- get(get(key, envir = req$app$locals$job_keys), envir = req$app$locals$jobs)
@@ -438,13 +442,11 @@ fake_api <- function(world = fake_world()) {
     if (busy_refusal(req, res, "submit")) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
+    received(req, "/api/tophits", body)
     problems <- body_problems(req, body, "/api/tophits")
-    if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     threshold <- body$threshold %||% 5e-8
-    if (threshold > 5e-4) {
-      return(fail(res, 400, "unsupported_threshold",
-                  "threshold must be at most 0.0005, the loosest p-value the Top-Hit Index holds"))
-    }
+    if (threshold > 5e-4) return(fail(req, res, "unsupported_threshold"))
     limit <- body$limit %||% 1000L
     ids <- unlist(body$analyses)
     rows <- list()
@@ -466,8 +468,9 @@ fake_api <- function(world = fake_world()) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
+    received(req, "/api/associations", body)
     problems <- body_problems(req, body, "/api/associations")
-    if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     # The real API also expands rsIDs. The fake does not, so a client that skips resolving them gets
     # no rows (and the tests that look at the submitted body see ALIDs only).
     alids <- unlist(body$variants)
@@ -486,8 +489,9 @@ fake_api <- function(world = fake_world()) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
     body <- req$json %||% list()
+    received(req, "/api/variants/rsid", body)
     problems <- body_problems(req, body, "/api/variants/rsid")
-    if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
+    if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     rows <- Filter(function(v) v$rsid %in% unlist(body$rsids) &&
                      paste0(v$store_id, "/", v$release_id) %in% wanted, world$variants)
@@ -496,8 +500,10 @@ fake_api <- function(world = fake_world()) {
   app$get("/api/jobs/:id", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     if (busy_refusal(req, res, "status")) return()
+    # A look at Job `refuse-<code>` is answered with that error code's real body.
+    if (startsWith(req$params$id, "refuse-")) return(fail(req, res, sub("^refuse-", "", req$params$id)))
     env <- req$app$locals$jobs
-    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
+    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(req, res, "not_found"))
     arrived <- as.numeric(Sys.time())
     job <- get(req$params$id, envir = env)
     job$polls <- job$polls + 1L
@@ -513,7 +519,7 @@ fake_api <- function(world = fake_world()) {
   app$delete("/api/jobs/:id", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     env <- req$app$locals$jobs
-    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
+    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(req, res, "not_found"))
     job <- get(req$params$id, envir = env)
     # A finished Job is returned unchanged: one asked about at least once has finished (`normal`).
     if (identical(job$scenario, "normal") && job$polls > 0L) {
@@ -528,11 +534,11 @@ fake_api <- function(world = fake_world()) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     if (busy_refusal(req, res, "result")) return()
     env <- req$app$locals$jobs
-    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(res, 404, "job_not_found", "No such job"))
+    if (!exists(req$params$id, envir = env, inherits = FALSE)) return(fail(req, res, "not_found"))
     job <- get(req$params$id, envir = env)
     delay <- as.numeric(req$app$locals$world$mode$delay_ms) / 1000
     if (delay > 0) Sys.sleep(delay)
-    if (identical(job$scenario, "result_gone")) return(fail(res, 410, "result_expired", "The result has expired"))
+    if (identical(job$scenario, "result_gone")) return(fail(req, res, "result_expired"))
     page <- as.integer(sub("^page:", "", req$query$cursor %||% "page:0"))
     first <- page * job$page_rows
     rows <- job$rows[seq_along(job$rows) > first & seq_along(job$rows) <= first + job$page_rows]
@@ -583,7 +589,7 @@ fake_api <- function(world = fake_world()) {
     body <- req$json %||% list()
     if (identical(toupper(req$method), "POST")) {
       problems <- request_body_problems(body, "/api/gwasinfo", "post", req$app$locals$openapi)
-      if (length(problems) > 0) return(fail(res, 400, "invalid_request", "Malformed request"))
+      if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     }
     if (isTRUE(world$mode$malformed)) return(res$set_type("application/json")$send("{not json"))
     if (isTRUE(world$mode$no_analyses)) return(res$set_type("application/json")$send("{}"))
@@ -599,7 +605,7 @@ fake_api <- function(world = fake_world()) {
       served <- vapply(served_releases(world), function(r) paste0(r$store_id, "/", r$release_id), "")
       unknown <- setdiff(wanted, served)
       if (length(unknown) > 0) {
-        return(fail(res, 404, "release_not_found", paste("unknown release:", unknown[[1]])))
+        return(fail(req, res, "release_not_found"))
       }
       analyses <- Filter(function(a) paste0(a$store_id, "/", a$release_id) %in% wanted, analyses)
     }
@@ -607,7 +613,7 @@ fake_api <- function(world = fake_world()) {
                         collapse = ",")
 
     if (!is.null(ids)) {
-      if (length(ids) > 1000) return(fail(res, 400, "invalid_request", "Malformed request"))
+      if (length(ids) > 1000) return(fail(req, res, "invalid_request"))
       return(res$send_json(fake_lookup(world, analyses, unique(ids), release_id),
                            auto_unbox = TRUE, null = "null"))
     }

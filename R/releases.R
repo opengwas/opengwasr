@@ -13,6 +13,7 @@
 #' @noRd
 resolve_releases <- function(src, releases, call = rlang::caller_env()) {
   if (is.null(releases)) return(default_releases(src, call))
+  # Kept: an R argument's type.
   if (!is.character(releases) || length(releases) == 0 || anyNA(releases) || any(!nzchar(releases))) {
     og_abort(
       c("`releases` must be a character vector of GWAS Store ids or `<store_id>/<release_id>`.",
@@ -30,20 +31,21 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
     }
     if (is.null(served)) served <<- api_perform(src, "api/batches", call = call)$batches
     match <- Filter(function(b) identical(b$store_id, item), served)
+    # Kept: the API takes only `<store_id>/<release_id>`, so a bare GWAS Store id is resolved here,
+    # from the API's list of what it serves (class of the API's code for an unknown release).
     if (length(match) == 0) {
-      og_abort(
-        c(paste0("The API serves no Store Release of `", item, "`."),
-          i = "Check the GWAS Store id, such as \"OGS-00011\"."),
-        class = "opengwasr_unknown_release", store_id = item, call = call
-      )
+      og_abort(paste0("The API serves no Store Release of `", item, "`."),
+               class = "opengwasr_release_not_found", api_error = "release_not_found", store_id = item,
+               call = call)
     }
+    # Kept: Store Release ambiguity when no release is pinned; the API has no recency field.
     if (length(match) > 1) {
       candidates <- vapply(match, function(b) paste0(b$store_id, "/", b$release_id), "")
       og_abort(
         c(paste0("`", item, "` has more than one Store Release, and the API doesn't say which is latest."),
           i = paste0("Pin one: ", paste0("\"", candidates, "\"", collapse = ", "), ".")),
-        class = "opengwasr_release_selection_required", store_id = item, releases = candidates,
-        call = call
+        class = "opengwasr_release_selection_required", api_error = "release_selection_required",
+        store_id = item, releases = candidates, call = call
       )
     }
     list(store_id = item, release_id = match[[1]]$release_id)
@@ -51,7 +53,8 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
   out
 }
 
-# The sole served Store Release of every GWAS Store; refuses if any serves several.
+# The sole served Store Release of every GWAS Store; refuses if any serves several. Kept client-side:
+# the API's own default with `releases` omitted is every configured Store Release, not a choice.
 default_releases <- function(src, call) {
   served <- api_perform(src, "api/batches", call = call)$batches
   store_ids <- vapply(served, function(b) b$store_id, "")
@@ -64,7 +67,8 @@ default_releases <- function(src, call) {
                paste0("`", many, "`", collapse = ", "), " serve",
                if (length(many) == 1) "s" else "", " several, and the API doesn't say which is latest."),
         i = paste0("Pin them in `releases`: ", paste0("\"", candidates, "\"", collapse = ", "), ".")),
-      class = "opengwasr_release_selection_required", store_id = many, releases = candidates, call = call
+      class = "opengwasr_release_selection_required", api_error = "release_selection_required",
+      store_id = many, releases = candidates, call = call
     )
   }
   lapply(served, function(b) list(store_id = b$store_id, release_id = b$release_id))

@@ -84,7 +84,7 @@ Error in `og_tophits()`:
 ℹ Cancel it with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`; `e$jobs` is the handle `og_job_result()` collects.
 ```
 
-The error has class `opengwasr_timeout`, and carries the Job ids in `e$job_ids`. A Job that runs and fails stops with class `opengwasr_job_failed`, carrying the API's reason. Its `e$retryable` says whether running it again might help.
+The error has class `opengwasr_timeout`, and carries the Job ids in `e$job_ids`. A Job that runs and fails stops with class `opengwasr_job_failed`, with the API's reason as its message. Its `e$retryable` says whether running it again might help.
 
 ## When the API is busy {#busy}
 
@@ -97,7 +97,7 @@ When the API's queue is full, or you have used up your allowance for now, it tel
 ! The API is busy (user_queue_full): retrying in 30 s.
 ```
 
-If the timeout runs out first, the error has class `opengwasr_busy`, and carries the API's reason in `e$api_error` and its wait in `e$retry_after`.
+If the timeout runs out first, the error has the API's message, and class `opengwasr_busy` as well as the class of the API's code (such as `opengwasr_user_queue_full`). It carries the API's code in `e$api_error` and its wait in `e$retry_after`.
 
 ## Running many Jobs yourself {#job-functions}
 
@@ -161,11 +161,10 @@ The API keeps a finished Job's result for an hour if nobody reads it, and for fi
 ```text
 # illustrative
 Error in `og_job_result()`:
-! Job a1513652-85ff-4eac-b4d7-b043b03aaf0a's result is no longer available: it was already collected, or it expired.
-ℹ Run the query again; the API will run it afresh.
+! Job result has expired
 ```
 
-The error has class `opengwasr_result_expired`. (An Analysis that has been retired is a different error, `opengwasr_retired_analysis`.)
+The message is the API's. The error has class `opengwasr_result_expired`, with the Job in `e$job_id`: run the query again, and the API runs it afresh. (An Analysis that has been retired is a different error, `opengwasr_analysis_retired`.)
 
 ## Standard variant subsets, such as HapMap3 {#variant-subsets}
 
@@ -203,10 +202,10 @@ region <- tryCatch(
 ```text
 # illustrative
 Error in `og_range()`:
-! Estimated cost 3,479 CPU-seconds exceeds the 300 one Job may use; download the GWAS Store's Store Release and query it locally.
+! The job is estimated at 3479 CPU-seconds, more than the 300 one job may use; narrow it (fewer analyses, a shorter range) or split it
 ```
 
-The message is the API's own (illustrative: the wording is the API's to set). The error has class `opengwasr_request_too_large`, a kind of `opengwasr_refusal`, and carries the API's `e$cost_estimate` and `e$max_cost`.
+The message is the API's own, as it words it today (the API will recommend downloading the Store Release instead). The error has class `opengwasr_request_too_large`, a kind of `opengwasr_refusal`, and carries the API's `e$cost_estimate` and `e$max_cost`.
 
 ```{r end-recordings, include = FALSE}
 end_recordings()

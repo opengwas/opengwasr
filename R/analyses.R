@@ -2,7 +2,7 @@
 #
 # An Analysis is named `<store_id>:<analysis_id>` (its canonical id), or by a bare analysis id, or by
 # a legacy OpenGWAS id. `resolve_analysis_ids()` turns what the user typed into canonical ids, with
-# the successor warning and the ambiguous, unknown and retired errors. Later tickets that take
+# the successor warning and the ambiguous, not-found and retired errors. Later tickets that take
 # Analyses resolve them through `og_analyses()`, never on their own.
 
 #' Find Analyses
@@ -18,10 +18,10 @@
 #' * An identifier that could name more than one Analysis raises `opengwasr_ambiguous_analysis`,
 #'   with the candidates in `candidates`.
 #' * An identifier that names no Analysis, or one that has been retired, raises
-#'   `opengwasr_unknown_analysis` (`opengwasr_retired_analysis` too when retired). The condition
-#'   carries opengwasr's sentence for each identifier in `reasons`, the API's own reason where it
-#'   gave one in `api_reasons` (`NA` otherwise), and, for a retired Analysis, every successor the
-#'   API named in `superseded_by`.
+#'   `opengwasr_analysis_not_found` (`opengwasr_analysis_retired` too when retired), the classes of
+#'   the API's own codes. The condition carries the identifiers in `ids`, the API's reason for each
+#'   where it gave one in `api_reasons` (`NA` otherwise), and, for a retired Analysis, every
+#'   successor the API named in `superseded_by`.
 #'
 #' @param src A Source, from [og_api()].
 #' @param ids Analysis identifiers, or `NULL` for the whole catalogue.
@@ -42,12 +42,13 @@ og_analyses <- function(src, ids = NULL, releases = NULL) UseMethod("og_analyses
 
 #' @export
 og_analyses.og_api_source <- function(src, ids = NULL, releases = NULL) {
-  releases <- resolve_releases(src, releases)
-  if (is.null(ids)) return(analyses_catalogue(src, releases))
-  if (!is.character(ids) || anyNA(ids) || any(!nzchar(ids))) {
+  # Kept: an R argument's type, checked before any request.
+  if (!is.null(ids) && (!is.character(ids) || anyNA(ids) || any(!nzchar(ids)))) {
     og_abort("`ids` must be a character vector of Analysis identifiers, with no missing values.",
              class = "opengwasr_argument")
   }
+  releases <- resolve_releases(src, releases)
+  if (is.null(ids)) return(analyses_catalogue(src, releases))
   analyses_lookup(src, ids, releases)
 }
 
@@ -79,7 +80,11 @@ analyses_lookup <- function(src, ids, releases, call = rlang::caller_env()) {
 
 # Turn one lookup response into rows for `ids`, in order, plus what went wrong. `resp` is the parsed
 # body of POST /api/gwasinfo: `analyses` (one row per Analysis however many ids name it), `opengwas`
-# (how each legacy id resolved), `retired` and `not_found`.
+# (how each legacy id resolved, or the API's reason it didn't), `retired` and `not_found`.
+#
+# Kept client-side: the lookup answers 200 and lists these ids rather than refusing them, and a query
+# sent with explicit `releases` (as opengwasr always sends) neither refuses an id held by two of them
+# (it would read both) nor says an Analysis is retired (ogdb-api `validate_analysis_membership()`).
 resolve_analysis_ids <- function(src, ids, resp) {
   analyses <- analyses_frame(resp$analyses)
   canonical <- canonical_ids(analyses)
@@ -89,7 +94,6 @@ resolve_analysis_ids <- function(src, ids, resp) {
 
   index <- rep(NA_integer_, length(ids))
   unknown <- character()
-  reasons <- character()
   api_reasons <- character()
   superseded_by <- list()
   ambiguous <- list()
@@ -101,11 +105,8 @@ resolve_analysis_ids <- function(src, ids, resp) {
     if (length(hit_retired) > 0) {
       # `superseded_by` may be one id or several; keep every one.
       successor <- as.character(unlist(field(retired, "superseded_by")[[hit_retired[[1]]]]))
-      successor <- api_redact(src, successor[!is.na(successor)])
       unknown <- c(unknown, id)
-      reasons[[id]] <- paste0("It belongs to a retired GWAS Store", if (length(successor) == 0)
-        " and has no successor." else paste0("; use ", paste0("\"", successor, "\"", collapse = " or "), " instead."))
-      superseded_by[[id]] <- if (length(successor) == 0) NA_character_ else successor
+      superseded_by[[id]] <- api_redact(src, if (length(successor) == 0) NA_character_ else successor)
       next
     }
     candidates <- if (length(hit_legacy) > 0) {
@@ -119,9 +120,7 @@ resolve_analysis_ids <- function(src, ids, resp) {
     if (length(candidates) == 0) {
       unknown <- c(unknown, id)
       reason <- api_redact(src, field(legacy, "reason")[hit_legacy])
-      api_reasons[[id]] <- if (length(reason) == 1 && !is.na(reason)) reason else NA_character_
-      reasons[[id]] <- if (length(reason) == 1 && !is.na(reason)) paste0(reason, ".")
-        else "No Analysis with this identifier is held by the GWAS Stores selected."
+      api_reasons[[id]] <- if (length(reason) == 1) reason else NA_character_
     } else if (length(candidates) > 1) {
       ambiguous[[id]] <- candidates
     } else {
@@ -132,38 +131,36 @@ resolve_analysis_ids <- function(src, ids, resp) {
     }
   }
   rows <- if (anyNA(index)) analyses_frame(NULL) else finish_analyses(analyses[index, , drop = FALSE], ids)
-  list(rows = rows, unknown = unknown, reasons = reasons, api_reasons = api_reasons, superseded_by = superseded_by,
+  list(rows = rows, unknown = unknown, api_reasons = api_reasons, superseded_by = superseded_by,
        ambiguous = ambiguous, successors = successors)
 }
 
+# The classes, and `api_error`, are the API's codes for the same answers (`ambiguous_analysis`,
+# `analysis_not_found`, `analysis_retired`), so a handler reads them the same way whichever path
+# raised them. The message is opengwasr's; the API's own reason, where it gave one, is quoted.
 raise_analysis_problems <- function(resolved, call) {
   ambiguous <- do.call(c, lapply(resolved, `[[`, "ambiguous"))
   if (length(ambiguous) > 0) {
     ids <- names(ambiguous)
-    og_abort(
-      c(paste0(length(ids), if (length(ids) == 1) " identifier names" else " identifiers name",
-               " more than one Analysis."),
-        stats::setNames(
-          vapply(ids, function(id) paste0("`", id, "`: use one of ",
-                                          paste0("\"", ambiguous[[id]], "\"", collapse = ", "), "."), ""),
-          rep("x", length(ids)))),
-      class = "opengwasr_ambiguous_analysis", ids = ids, candidates = ambiguous, call = call
-    )
+    og_abort(c("Identifiers that name more than one Analysis:",
+               stats::setNames(paste0(ids, ": ", vapply(ambiguous, paste, "", collapse = ", ")), rep("x", length(ids)))),
+             class = "opengwasr_ambiguous_analysis", api_error = "ambiguous_analysis", ids = ids,
+             candidates = ambiguous, call = call)
   }
   unknown <- unlist(lapply(resolved, `[[`, "unknown"))
   if (length(unknown) > 0) {
-    reasons <- unlist(lapply(resolved, `[[`, "reasons"))
     superseded_by <- do.call(c, lapply(resolved, `[[`, "superseded_by"))
-    api_reasons <- unlist(lapply(resolved, `[[`, "api_reasons"))
-    api_reasons <- c(api_reasons, stats::setNames(rep(NA_character_, sum(!unknown %in% names(api_reasons))),
-                                                  setdiff(unknown, names(api_reasons))))
-    og_abort(
-      c(paste0(length(unknown), if (length(unknown) == 1) " identifier names" else " identifiers name",
-               " no Analysis:"),
-        stats::setNames(paste0(unknown, ": ", reasons[unknown]), rep("x", length(unknown)))),
-      class = c(if (length(superseded_by) > 0) "opengwasr_retired_analysis", "opengwasr_unknown_analysis"),
-      ids = unknown, reasons = reasons[unknown], api_reasons = api_reasons[unknown], superseded_by = superseded_by, call = call
-    )
+    api_reasons <- unlist(lapply(resolved, `[[`, "api_reasons"))[unknown]
+    names(api_reasons) <- unknown
+    said <- ifelse(unknown %in% names(superseded_by),
+                   paste0("retired, superseded by ", vapply(unknown, function(id) paste(superseded_by[[id]] %||% NA, collapse = ", "), "")),
+                   api_reasons)
+    retired <- length(superseded_by) > 0
+    og_abort(c("Identifiers that name no Analysis:",
+               stats::setNames(ifelse(is.na(said), unknown, paste0(unknown, ": ", said)), rep("x", length(unknown)))),
+             class = c(if (retired) "opengwasr_analysis_retired", "opengwasr_analysis_not_found"),
+             api_error = if (retired) "analysis_retired" else "analysis_not_found",
+             ids = unknown, api_reasons = api_reasons, superseded_by = superseded_by, call = call)
   }
 }
 

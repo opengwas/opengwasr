@@ -90,20 +90,19 @@ test_api("naming the GWAS Store resolves an ambiguous id", {
   expect_equal(info$id, "OGS-00012:GCST90000001")
 }, live = FALSE)
 
-test_api("an unknown id raises opengwasr_unknown_analysis carrying the server's reason", {
-  err <- expect_error(og_analyses(src, c(cad, "ieu-a-2", "nope")), class = "opengwasr_unknown_analysis")
+test_api("an unknown id raises opengwasr_analysis_not_found carrying the server's reason", {
+  err <- expect_error(og_analyses(src, c(cad, "ieu-a-2", "nope")), class = "opengwasr_analysis_not_found")
   expect_s3_class(err, "opengwasr_error")
   expect_equal(err$ids, c("ieu-a-2", "nope"))
-  # The server's own words are kept apart from opengwasr's: `api_reasons` is NA where the API gave none.
+  # The API's reason where it gave one, NA where it didn't.
   expect_equal(err$api_reasons[["ieu-a-2"]], "OpenGWAS batch ieu-a is not held by any Store")
   expect_true(is.na(err$api_reasons[["nope"]]))
-  expect_named(err$reasons, c("ieu-a-2", "nope"))
 })
 
 test_api("a retired Analysis raises a classed error naming its successor", {
   err <- expect_error(og_analyses(src, c("OGS-00013:OLD1", "OGS-00013:GONE")),
-                      class = "opengwasr_retired_analysis")
-  expect_s3_class(err, "opengwasr_unknown_analysis")
+                      class = "opengwasr_analysis_retired")
+  expect_s3_class(err, "opengwasr_analysis_not_found")
   expect_s3_class(err, "opengwasr_error")
   expect_equal(err$ids, c("OGS-00013:OLD1", "OGS-00013:GONE"))
   expect_equal(err$superseded_by[["OGS-00013:OLD1"]], "OGS-00014:NEW1")
@@ -143,7 +142,7 @@ test_api("several Releases can be pinned at once", {
 
 test_api("a pinned Release leaves out Analyses of other Stores, as unknown", {
   err <- expect_error(og_analyses(src, c(cad, "OGS-00009:ukb-b-19953"), releases = "OGS-00011"),
-                      class = "opengwasr_unknown_analysis")
+                      class = "opengwasr_analysis_not_found")
   expect_equal(err$ids, "OGS-00009:ukb-b-19953")
 })
 
@@ -152,9 +151,9 @@ test_api("pinning a Release resolves an id that is ambiguous without it", {
   expect_equal(info$id, "OGS-00012:GCST90000001")
 }, live = FALSE)
 
-test_api("a Release the API doesn't serve raises opengwasr_unknown_release", {
-  expect_error(og_analyses(src, cad, releases = "OGS-00011/nonesuch"), class = "opengwasr_unknown_release")
-  expect_error(og_analyses(src, cad, releases = "OGS-99999"), class = "opengwasr_unknown_release")
+test_api("a Release the API doesn't serve raises opengwasr_release_not_found", {
+  expect_error(og_analyses(src, cad, releases = "OGS-00011/nonesuch"), class = "opengwasr_release_not_found")
+  expect_error(og_analyses(src, cad, releases = "OGS-99999"), class = "opengwasr_release_not_found")
 })
 
 test_that("a malformed `releases` is refused before any request", {
@@ -192,7 +191,7 @@ test_api("a GWAS Store with several Store Releases can't be used unpinned, and i
   expect_equal(err$store_id, "OGS-00099")
   expect_setequal(err$releases, c("OGS-00099/OGS-00099-a", "OGS-00099/OGS-00099-b"))
   # Pinning one is honoured (the fake holds no Analyses there, so the id is unknown, not an error of selection).
-  expect_error(og_analyses(src, cad, releases = "OGS-00099/OGS-00099-a"), class = "opengwasr_unknown_analysis")
+  expect_error(og_analyses(src, cad, releases = "OGS-00099/OGS-00099-a"), class = "opengwasr_analysis_not_found")
 }, live = FALSE)
 
 test_api("a catalogue page with `total` but no cursor is followed by offset", {
@@ -220,7 +219,7 @@ test_api("omitting `releases` doesn't mean every Store Release: a GWAS Store wit
 }, live = FALSE)
 
 test_api("a retired Analysis names every successor the API gives, not the first", {
-  err <- expect_error(og_analyses(src, "OGS-00013:SPLIT"), class = "opengwasr_retired_analysis")
+  err <- expect_error(og_analyses(src, "OGS-00013:SPLIT"), class = "opengwasr_analysis_retired")
   expect_equal(err$superseded_by[["OGS-00013:SPLIT"]], c("OGS-00014:A", "OGS-00014:B"))
 }, live = FALSE)
 

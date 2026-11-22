@@ -27,17 +27,18 @@ job_states_done <- c("succeeded", "failed", "cancelled", "expired")
 job_now <- function() proc.time()[["elapsed"]]
 job_sleep <- function(seconds) Sys.sleep(seconds)
 
-# What one Job takes (the API's limits). Every function that submits a Job checks its request
-# against these; the splitter that lifts them is #9, which needs them all in one place.
+# What one Job takes (the API's limits). Kept client-side because the splitter (R/split.R) needs
+# them to cut a request into Jobs before sending any; the API's own refusals are never re-checked.
 max_releases_per_job <- 10L    # GWAS Stores (Store Releases) in `releases`
 max_variants_per_job <- 1000L  # variants in POST /api/associations
 max_analyses_per_job <- 100L   # Analyses in POST /api/associations
 max_rsids_per_job <- 1000L     # rsIDs in POST /api/variants/rsid
 max_rows_per_job <- 100000L    # rows one Job's result may hold (errors guide: `request` failure beyond)
+max_tophits_per_analysis <- 10000L  # `limit` in POST /api/tophits
 max_queued_jobs_per_user <- 100L  # Jobs one user may have queued (429 user_queue_full)
 
 # An answer the client can't trust: an unknown status, a result with no rows, pages that don't add up.
-# Never papered over with a partial result.
+# Never papered over with a partial result. Kept: a Job-protocol invariant the API can't report.
 job_invalid <- function(what, job_id = NULL, call = rlang::caller_env()) {
   og_abort(c("The OpenGWAS API's answer about a Job can't be trusted.", x = what,
              i = "This is a bug in opengwasr, or the API has changed. Please report it."),
@@ -69,9 +70,9 @@ job_call <- function(src, deadline, job_id, state, call, ...) {
   remaining <- job_remaining(src, deadline, job_id, state, call)
   resp <- tryCatch(
     api_response(src, ..., call = call, timeout = max(remaining, 0.001), deadline = deadline),
-    # A result that was collected or expired is named by Job, not just by the API's words.
+    # The API's 410 doesn't name the Job; the condition carries its id.
     opengwasr_result_expired = function(e) {
-      if (!is.null(job_id)) job_expired(job_id, e, call)
+      e$job_id <- job_id
       rlang::cnd_signal(e)
     },
     opengwasr_unreachable = function(e) {
@@ -104,6 +105,7 @@ job_submit <- function(src, path, body, deadline = job_now() + src$timeout, call
   }
   job_state(job, call)
   ignored <- api_redact(src, as.character(unlist(job$ignored_fields)))
+  # Kept: the API accepts the query and only lists what it ignored, so opengwasr must refuse it.
   if (length(ignored) > 0) {
     og_abort(
       c("The API ignored part of the query, so it would not have answered the question asked.",
@@ -179,6 +181,7 @@ job_wait <- function(src, job, deadline = job_now() + src$timeout, unit = "rows"
   status
 }
 
+# Kept: the call's deadline is opengwasr's own, so its message is too.
 job_timed_out <- function(src, job_id, state, call) {
   og_abort(
     c(paste0("Gave up waiting after ", format(src$timeout), " s.",
@@ -206,16 +209,6 @@ job_interrupted <- function(job_ids, jobs = NULL, call) {
            class = "opengwasr_interrupted", job_ids = job_ids, jobs = jobs, call = call)
 }
 
-# The 410 `result_expired` of a Job we know the id of.
-job_expired <- function(job_id, e, call) {
-  og_abort(c(paste0("Job ", job_id, "'s result is no longer available: it was already collected, or it expired."),
-             i = "Run the query again; the API will run it afresh.",
-             x = paste0("API: ", e$api_message)),
-           class = c("opengwasr_result_expired", "opengwasr_error"), job_id = job_id,
-           status = e$status, api_error = e$api_error, api_message = e$api_message, api_body = e$api_body,
-           call = call)
-}
-
 # A Job that ended without a result: failed (with the server's reason, scrubbed of the key),
 # cancelled, or expired (the worker running it stopped responding on every attempt).
 job_ended <- function(src, status, call) {
@@ -223,13 +216,9 @@ job_ended <- function(src, status, call) {
   if (identical(status$status, "failed")) {
     kind <- api_redact(src, as.character(status$error_kind %||% NA_character_))
     message <- api_redact(src, as.character(status$error %||% "no reason given"))
-    og_abort(
-      c(paste0("Job ", id, " failed."), x = paste0("API: ", message),
-        i = if (identical(kind, "temporary")) "The API calls this failure temporary: running the call again may help."
-            else "The API calls this failure permanent: the query itself can't succeed."),
-      class = "opengwasr_job_failed", job_id = id, error_kind = kind, api_message = message,
-      retryable = identical(kind, "temporary"), call = call
-    )
+    # The API's reason is the message; `error_kind` says whether running it again may help.
+    og_abort(message, class = "opengwasr_job_failed", job_id = id, error_kind = kind, api_message = message,
+             retryable = identical(kind, "temporary"), call = call)
   }
   if (identical(status$status, "cancelled")) {
     og_abort(c(paste0("Job ", id, " was cancelled."), i = "Run the call again to run the query afresh."),

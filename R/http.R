@@ -51,7 +51,7 @@ api_response <- function(src, path, query = NULL, body = NULL, call = rlang::cal
     wait <- busy_wait(resp)
     if (is.na(wait)) break
     # The wait must fit in the call's time, or the call is over now rather than after it.
-    if (job_now() + wait >= deadline) api_abort(src, resp, call, retry_after = wait, out_of_time = TRUE)
+    if (job_now() + wait >= deadline) api_abort(src, resp, call, retry_after = wait)
     if (progress_enabled()) {
       cli::cli_alert_warning("The API is busy ({busy_code(src, resp)}): retrying in {format(wait)} s.")
     }
@@ -101,71 +101,66 @@ api_parse <- function(resp, simplify = FALSE, call = rlang::caller_env()) {
   )
 }
 
-# The API's error catalogue (docs/guide/errors.qmd) as classes. A code not listed here becomes
-# `opengwasr_api_error`. #6 added the unsupported-threshold (400) and result-expired (410) rows;
-# #10 added the busy (429, 503) rows; #9 adds the too-large (413) and LD refusal (422) rows.
-api_error_classes <- list(
-  unauthorized = "opengwasr_auth",
-  analysis_not_found = "opengwasr_unknown_analysis",
-  analysis_retired = c("opengwasr_retired_analysis", "opengwasr_unknown_analysis"),
-  ambiguous_analysis = "opengwasr_ambiguous_analysis",
-  release_not_found = "opengwasr_unknown_release",
-  release_selection_required = "opengwasr_release_selection_required",
-  unsupported_threshold = c("opengwasr_unsupported_threshold", "opengwasr_refusal"),
-  result_expired = "opengwasr_result_expired",
-  request_too_large = c("opengwasr_request_too_large", "opengwasr_refusal"),
-  user_queue_full = "opengwasr_busy", queue_wait_too_long = "opengwasr_busy",
-  results_quota_exceeded = "opengwasr_busy", server_busy = "opengwasr_busy",
-  results_cache_full = "opengwasr_busy", intake_paused = "opengwasr_busy",
-  job_store_unavailable = "opengwasr_busy"
+# Every API error becomes a condition whose message is the API's own (key redacted) and whose class
+# is the API's code: `opengwasr_<code>`, for every well-formed code, listed here or not. This table
+# adds the parents (ADR 0002's note of 22 Nov 2026), from the API's error catalogue (ogdb-api
+# docs/guide/errors.qmd): `opengwasr_refusal` (the API understood the request and won't answer it
+# exactly as asked) and `opengwasr_busy` (wait and try again). `og_abort()` adds `opengwasr_error`.
+# Two rules sit beside the table: a 401 is `unauthorized` whatever its body (a proxy may answer in
+# plain text), and a 429 or 503 whose code isn't listed is busy too. An answer with no code, or
+# a body that isn't an error body, is `opengwasr_api_error`.
+api_error_parents <- list(
+  # A retired Analysis is also one that names no Analysis now, so one handler can catch both.
+  analysis_retired = "opengwasr_analysis_not_found",
+  unsupported_threshold = "opengwasr_refusal",
+  query_too_broad = "opengwasr_refusal",
+  request_too_large = "opengwasr_refusal",
+  ld_refusal = "opengwasr_refusal",
+  user_queue_full = "opengwasr_busy",
+  queue_wait_too_long = "opengwasr_busy",
+  results_quota_exceeded = "opengwasr_busy",
+  server_busy = "opengwasr_busy",
+  results_cache_full = "opengwasr_busy",
+  intake_paused = "opengwasr_busy",
+  job_store_unavailable = "opengwasr_busy",
+  store_busy = "opengwasr_busy",
+  store_timeout = "opengwasr_busy",
+  search_busy = "opengwasr_busy"
 )
 
-# Raise the classed condition for an error response. Every condition carries `status`,
-# `api_error` (the API's code), `api_message` and `api_body`, so callers can read the server's
-# reason, with this Source's key scrubbed out of them.
-api_abort <- function(src, resp, call = rlang::caller_env(), retry_after = NULL, out_of_time = FALSE) {
+# The classes of an error answer with `code` (or `NA`) and HTTP `status`.
+api_error_class <- function(code, status) {
+  busy <- if (status %in% c(429L, 503L)) "opengwasr_busy"
+  if (is.na(code) || !grepl("^[a-z][a-z0-9_]*$", code)) return(c("opengwasr_api_error", busy))
+  unique(c(paste0("opengwasr_", code), api_error_parents[[code]] %||% busy))
+}
+
+# Body members that are the condition's own (or `og_abort()`'s and `rlang::abort()`'s arguments),
+# never copied from the API's body.
+api_reserved_fields <- c("error", "message", "detail", "status", "api_error", "api_message", "api_body",
+                         "call", "class", "parent", "trace", "footer", "body", "use_cli_format", "refusal",
+                         ".internal", ".file", ".frame", ".trace_bottom", ".subclass")
+
+# Raise the condition for an error response: the API's message, a class from its code, and the
+# fields `status`, `api_error` (the code), `api_message`, `api_body` and every other member of the
+# body (`superseded_by`, `indexed_thresholds`, `cost_estimate`, ...), all with the key scrubbed out.
+api_abort <- function(src, resp, call = rlang::caller_env(), retry_after = NULL) {
   force(call)
   status <- httr2::resp_status(resp)
   body <- tryCatch(httr2::resp_body_json(resp), error = function(e) NULL)
   if (!is.list(body)) body <- list(message = trimws(httr2::resp_body_string(resp)))
   body <- api_redact(src, body)
-  code <- body$error %||% NA_character_
-  api_message <- body$message %||% httr2::resp_status_desc(resp)
-  class <- api_error_classes[[code]] %||% "opengwasr_api_error"
-  # A 401 is an auth failure whatever the body (a proxy may answer in plain text).
-  if (status == 401) class <- "opengwasr_auth"
-  # A 429 or 503 the API didn't name (or the Gateway's own allowance) is still "busy".
-  if (status %in% c(429L, 503L) && class[[1]] == "opengwasr_api_error") class <- "opengwasr_busy"
-
-  message <- switch(class[[1]],
-    opengwasr_auth = c("The OpenGWAS API didn't accept your key.", i = auth_advice(),
-                       x = paste0("API: ", api_message)),
-    opengwasr_ambiguous_analysis = c("An identifier names more than one Analysis.",
-                                     x = paste0("API: ", api_message)),
-    opengwasr_unsupported_threshold = c(paste0("The API refused `threshold`: ", api_message, "."),
-                                        i = "Each GWAS Store indexes 5e-08, 5e-06 and 5e-04."),
-    opengwasr_busy = c(paste0("The API is busy (", if (is.na(code)) status else code, ")",
-                              if (isTRUE(out_of_time)) paste0(" and asks for ", format(retry_after), " s, which is more than is left of this call's time")
-                              else if (is.null(retry_after)) " and didn't say when to try again" else "", "."),
-                       i = if (isTRUE(out_of_time)) "Try again later, or raise `og_api(timeout = )` so the call can wait longer."
-                           else "Try again in a little while.",
-                       x = paste0("API: ", api_message)),
-    # The API words its own refusal (it says where to download the Store Release): never ours.
-    opengwasr_request_too_large = api_message,
-    opengwasr_result_expired = c("The Job's result is no longer available: it was already collected, or it expired.",
-                                 i = "Run the query again; the API will run it afresh.",
-                                 x = paste0("API: ", api_message)),
-    c(paste0("The OpenGWAS API refused the request (", status, ")."), x = paste0("API: ", api_message))
-  )
-  fields <- list(status = status, api_error = code, api_message = api_message, api_body = body)
-  if (identical(code, "ambiguous_analysis")) fields$candidates <- analysis_candidates(api_message)
-  if (identical(class[[1]], "opengwasr_request_too_large")) {
-    fields$cost_estimate <- suppressWarnings(as.numeric(body$cost_estimate %||% NA))
-    fields$max_cost <- suppressWarnings(as.numeric(body$max_cost %||% NA))
-  }
-  if (identical(code, "analysis_retired")) fields$superseded_by <- body$superseded_by
-  if (identical(class[[1]], "opengwasr_busy")) fields$retry_after <- retry_after %||% busy_wait(resp)
-  if (identical(class[[1]], "opengwasr_auth")) fields$setting <- auth_setting()
+  code <- if (is.character(body$error) && length(body$error) == 1) body$error else NA_character_
+  # A 401 is the API's `unauthorized` whatever the body (a proxy may answer in plain text).
+  if (status == 401) code <- "unauthorized"
+  message <- if (is.character(body$message) && length(body$message) == 1 && nzchar(body$message)) body$message
+             else httr2::resp_status_desc(resp) %||% paste("HTTP", status)
+  class <- api_error_class(code, status)
+  fields <- body[setdiff(names(body), api_reserved_fields)]
+  fields <- fields[nzchar(names(fields))]
+  fields <- c(fields, list(status = status, api_error = code, api_message = message, api_body = body))
+  # The API names the candidates only in its message.
+  if (identical(code, "ambiguous_analysis")) fields$candidates <- analysis_candidates(message)
+  if ("opengwasr_busy" %in% class) fields$retry_after <- retry_after %||% busy_wait(resp)
   rlang::exec(og_abort, message, class = class, !!!fields, call = call)
 }
-

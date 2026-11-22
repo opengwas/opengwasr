@@ -124,10 +124,12 @@ mock_source <- function(...) {
   withr::with_envvar(c(OPENGWAS_URL = "http://mock.test", OPENGWAS_DEV_KEY = "mock-key", OPENGWAS_DEV_USER = NA),
                      og_api(...))
 }
-refusal_413 <- function(...) {
-  httr2::response_json(413, body = list(error = "request_too_large", message = "Too costly: download the Store",
-                                        cost_estimate = 3479, max_cost = 300))
+# The API's real answers (fixtures/errors.json).
+api_error <- function(code) {
+  error <- read_fixture("errors.json")[[code]]
+  httr2::response_json(error$status, body = error$body)
 }
+refusal_413 <- function(...) api_error("request_too_large")
 four <- lapply(1:4, function(i) list(path = "api/associations", body = list(i = i)))
 window <- function(src, deadline = job_now() + 60) run_window(src, four, deadline, "rows")
 withr::local_options(opengwasr.poll_cap = 0.02, opengwasr.progress = FALSE)
@@ -137,7 +139,7 @@ test_that("a 413 is classed from the API's error code, with the API's message an
   e <- expect_error(window(mock_source()), class = "opengwasr_request_too_large")
   expect_s3_class(e, "opengwasr_refusal")
   expect_equal(e$status, 413L)
-  expect_equal(e$api_message, "Too costly: download the Store")
+  expect_equal(e$api_message, read_fixture("errors.json")$request_too_large$body$message)
   expect_equal(conditionMessage(e)[[1]], e$api_message)   # the API's words, not ours
   expect_equal(c(e$cost_estimate, e$max_cost), c(3479, 300))
   expect_length(e$cancelled, 0)
@@ -158,10 +160,8 @@ test_that("a 413 part-way through a window is not retried or split, and cancels 
 })
 
 test_that("any other error part-way through a window carries every Job submitted", {
-  mock_jobs(on_submit = function(n) if (n == 3) {
-    httr2::response_json(400, body = list(error = "invalid_request", message = "bad"))
-  })
-  e <- expect_error(window(mock_source(max_in_flight = 2)), class = "opengwasr_api_error")
+  mock_jobs(on_submit = function(n) if (n == 3) api_error("invalid_request"))
+  e <- expect_error(window(mock_source(max_in_flight = 2)), class = "opengwasr_invalid_request")
   expect_equal(e$job_ids, c("job-1", "job-2"))
   expect_equal(e$jobs$job_ids, c("job-1", "job-2"))
   expect_true(e$jobs$partial)
@@ -193,8 +193,8 @@ test_that("og_submit() of a plan: a 413 cancels the pieces already submitted; an
   expect_equal(state$deleted, c("job-1", "job-2"))
   expect_equal(state$submits, 3L)
 
-  mock_jobs(on_submit = function(n) if (n == 3) httr2::response_json(400, body = list(error = "invalid_request", message = "bad")))
-  e <- expect_error(og_submit(mock_source(), query), class = "opengwasr_api_error")
+  mock_jobs(on_submit = function(n) if (n == 3) api_error("invalid_request"))
+  e <- expect_error(og_submit(mock_source(), query), class = "opengwasr_invalid_request")
   expect_equal(e$job_ids, c("job-1", "job-2"))
   expect_true(e$jobs$partial)
 })

@@ -80,8 +80,8 @@ run_query <- function(src, plan, deadline = call_deadline() %||% (job_now() + sr
   if (!submit_only) {
     return(plan$finish(run_window(src, plan$requests, deadline, plan$unit, call, plan)))
   }
-  # og_submit(): every piece is submitted at once, so they must fit the per-user queue. Refuse
-  # before submitting anything, rather than leave half a query queued.
+  # og_submit(): every piece is submitted at once, so they must fit the per-user queue. Kept: a split
+  # limit; refused before submitting anything, rather than leave half a query queued.
   n <- length(plan$requests)
   if (n > max_queued_jobs_per_user) {
     og_abort(c(paste0("This query splits into ", n, " Jobs, more than the ", max_queued_jobs_per_user,

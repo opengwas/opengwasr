@@ -236,8 +236,10 @@ mock_clock <- function(env = parent.frame()) {
   )
   clock
 }
-busy <- function(status, code, after = NULL) {
-  httr2::response_json(status, body = list(error = code, message = "busy"),
+# The API's real busy answer for `code` (fixtures/errors.json); `body` replaces it for a careless server.
+busy <- function(code, after = NULL, body = read_fixture("errors.json")[[code]]$body, status = 429) {
+  status <- read_fixture("errors.json")[[code]]$status %||% status
+  httr2::response_json(status, body = body,
                        headers = if (!is.null(after)) list("Retry-After" = as.character(after)) else list())
 }
 ok <- function() httr2::response_json(200, body = list(ok = TRUE))
@@ -246,7 +248,7 @@ test_that("429 and 503 are retried after Retry-After on any route: submit, statu
   src <- fake_source(fake, timeout = 100)
   for (path in c("api/tophits", "api/jobs/abc", "api/jobs/abc/result")) {
     clock <- mock_clock()
-    httr2::local_mocked_responses(list(busy(429, "user_queue_full", 7), busy(503, "intake_paused", 5), ok()))
+    httr2::local_mocked_responses(list(busy("user_queue_full", 7), busy("intake_paused", 5), ok()))
     expect_true(api_response(src, path) |> httr2::resp_body_json() |> _$ok)
     expect_equal(clock$waits, c(7, 5), info = path)
   }
@@ -256,7 +258,7 @@ test_that("a Retry-After below a second waits a second; the code is redacted fro
   withr::local_options(opengwasr.progress = TRUE)
   src <- fake_source(fake, timeout = 100)
   clock <- mock_clock()
-  httr2::local_mocked_responses(list(busy(429, fake_key, 0), ok()))   # the API echoes the key as its code
+  httr2::local_mocked_responses(list(busy(fake_key, 0, body = list(error = fake_key, message = "busy")), ok()))   # the API echoes the key as its code
   msgs <- testthat::capture_messages(api_response(src, "api/jobs/abc"))
   expect_equal(clock$waits, 1)
   expect_true(any(grepl("busy", msgs)))
@@ -266,16 +268,16 @@ test_that("a Retry-After below a second waits a second; the code is redacted fro
 test_that("a wait that would pass the deadline, or no Retry-After, is opengwasr_busy at once", {
   src <- fake_source(fake, timeout = 40)
   clock <- mock_clock()
-  httr2::local_mocked_responses(list(busy(429, "server_busy", 30), busy(429, "server_busy", 30), ok()))
+  httr2::local_mocked_responses(list(busy("server_busy", 30), busy("server_busy", 30), ok()))
   e <- expect_error(api_response(src, "api/jobs/abc"), class = "opengwasr_busy")
   expect_equal(c(e$api_error, e$retry_after), c("server_busy", "30"))
   expect_equal(clock$waits, 30)   # one wait fits in 40 s; a second would not
 
   clock <- mock_clock()
-  httr2::local_mocked_responses(list(busy(503, "job_store_unavailable"), ok()))
+  httr2::local_mocked_responses(list(busy("job_store_unavailable"), ok()))
   e <- expect_error(api_response(src, "api/jobs/abc"), class = "opengwasr_busy")
   expect_length(clock$waits, 0)
-  httr2::local_mocked_responses(list(busy(429, fake_key, 500)))
+  httr2::local_mocked_responses(list(busy(fake_key, 500, body = list(error = fake_key, message = "busy"))))
   e <- expect_error(api_response(src, "api/jobs/abc"), class = "opengwasr_busy")
   expect_false(grepl(fake_key, paste(conditionMessage(e), e$api_error), fixed = TRUE))
 })
@@ -306,13 +308,13 @@ test_that("each request's transport timeout is what is left of the call, with or
   expect_null(seen)
 })
 
-test_that("410 result_expired says it was collected or expired; analysis_retired stays distinct", {
+test_that("410 result_expired names its Job; analysis_retired stays distinct", {
   fake_set(fake, "job", "result_gone", "normal")
   src <- fake_source(fake)
   jobs <- og_submit(src, og_tophits, cad, clump = FALSE, limit = 16, releases = rel)
   e <- expect_error(og_job_result(src, jobs), class = "opengwasr_result_expired")
-  expect_match(conditionMessage(e), "collected", fixed = TRUE)
-  expect_match(conditionMessage(e), jobs$job_ids, fixed = TRUE)
-  expect_false(inherits(e, "opengwasr_retired_analysis"))
-  expect_error(og_analyses(fake_source(fake), "OGS-00013:GONE"), class = "opengwasr_retired_analysis")
+  expect_equal(e$job_id, jobs$job_ids)
+  expect_equal(conditionMessage(e), read_fixture("errors.json")$result_expired$body$message)
+  expect_false(inherits(e, "opengwasr_analysis_retired"))
+  expect_error(og_analyses(fake_source(fake), "OGS-00013:GONE"), class = "opengwasr_analysis_retired")
 })

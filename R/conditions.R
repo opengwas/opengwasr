@@ -1,7 +1,8 @@
 # Classed conditions: the one place that decides what class a condition has.
 #
 # Every error has class `opengwasr_error`; a refusal (an option that can't be honoured exactly)
-# also has `opengwasr_refusal`. Tests and callers match on class, never on message text.
+# also has `opengwasr_refusal`. Tests and callers match on class, never on message text. An API
+# error's class and message come from the API (`api_abort()` in R/http.R; ADR 0002).
 
 #' Raise an opengwasr error
 #'

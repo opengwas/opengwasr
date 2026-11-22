@@ -41,6 +41,12 @@ redact_response <- function(response) {
     body$analyses <- lapply(body$analyses, function(a) a[intersect(names(a), catalogue_columns)])
     response$body <- charToRaw(as.character(jsonlite::toJSON(body, auto_unbox = TRUE, null = "null")))
   }
+  if (is.list(body) && all(c("job_id", "poll_after_seconds") %in% names(body))) {
+    # The interval the API asked for when it was recorded (seconds, under load) is not part of the
+    # answer, and replay would really wait it out: the vignettes build in seconds, not minutes.
+    body$poll_after_seconds <- 0
+    response$body <- charToRaw(as.character(jsonlite::toJSON(body, auto_unbox = TRUE, null = "null")))
+  }
   if (is.list(body) && "batches" %in% names(body)) {
     # The per-Analysis validation warnings are most of /api/batches, and nothing here reads them.
     body$batches <- lapply(body$batches, function(b) b[setdiff(names(b), c("validation_warnings", "smoke_request"))])

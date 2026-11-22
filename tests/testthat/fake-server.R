@@ -145,6 +145,8 @@ fake_world <- function(n_synthetic = 1001) {
   })
   world$many_releases <- lapply(world$many_analyses, function(a) list(store_id = a$store_id, release_id = a$release_id))
   world$tophits <- fake_tophits()
+  world$variants <- fake_variants()
+  world$associations <- fake_associations()
   world$mode <- list(paging = "cursor", malformed = FALSE, two_releases = FALSE, leak = FALSE,
                      plain401 = FALSE, no_analyses = FALSE, many_stores = FALSE, job = "normal",
                      page_rows = 1000L, poll_after_ms = 10, delay_ms = 0)
@@ -187,6 +189,61 @@ fake_tophits <- function() {
     "OGS-00011:GCST90029007" = list(
       bmi("16:53767042:A:C", "rs1558902", -40, 0.001, -350),
       bmi("16:53800000:A:G", "rs9939609", 6, 0.25, -8)
+    )
+  )
+}
+
+# The variant table of GWAS Store OGS-00011: one row per ALID an rsID names, as the dev Data API
+# answers `POST /api/variants/rsid`. rs34159589 and rs1421085 are multiallelic: each names two ALIDs.
+fake_variants <- function() {
+  variant <- function(alid, rsid) {
+    parts <- strsplit(alid, ":", fixed = TRUE)[[1]]
+    list(alid = alid, chromosome = parts[[1]], effect_allele = parts[[3]], other_allele = parts[[4]],
+         position = as.integer(parts[[2]]), release_id = "OGS-00011-completed", rsid = rsid,
+         store_id = "OGS-00011")
+  }
+  list(variant("5:75701728:A:AAAAT", "rs34159589"), variant("5:75701728:AAAAT:AAAATAAAT", "rs34159589"),
+       variant("16:53767042:A:G", "rs1421085"), variant("16:53767042:C:T", "rs1421085"),
+       variant("18:60161902:C:T", "rs6567160"))
+}
+
+# 1 to 22, then X, Y and MT, as the API orders genome positions.
+fake_chromosome_rank <- function(chromosome) {
+  rank <- suppressWarnings(as.numeric(chromosome))
+  if (is.na(rank)) rank <- c(X = 23, Y = 24, MT = 25)[[chromosome]]
+  rank
+}
+
+# Associations of the variants above, per Analysis, as the API's result rows. The numbers are
+# literal (the first of each Analysis as the dev Data API gave them), so tests state expectations by
+# hand: beta = z * se, pval = 10^log10_p. As in the vignette, no Analysis holds the second
+# 5:75701728 ALID, and only the BMI one holds 16:53767042:A:G (the dev Data API's holds neither).
+fake_associations <- function() {
+  row <- function(analysis, label, alid, rsid, eaf, z, se, log10_p, status) {
+    parts <- strsplit(alid, ":", fixed = TRUE)[[1]]
+    list(alid = alid, analysis_id = analysis, analysis_label = label, association_status = status,
+         chromosome = parts[[1]], eaf = eaf, effect_allele = parts[[3]], log10_p = log10_p,
+         other_allele = parts[[4]], position = as.integer(parts[[2]]), release_id = "OGS-00011-completed",
+         rsid = rsid, se = se, store_id = "OGS-00011", z = z)
+  }
+  cad <- function(...) row("GCST003116", "Coronary artery disease", ...)
+  bmi <- function(...) row("GCST90029007", "Body mass index", ...)
+  list(
+    "OGS-00011:GCST003116" = list(
+      cad("5:75701728:A:AAAAT", "rs34159589", 0.369216, -0.3066406, 0.009841919, -0.1196913, "imputed"),
+      cad("16:53767042:C:T", "rs1421085", 0.3791291, 3.0810547, 0.009628296, -2.6855665, "observed"),
+      cad("18:60161902:C:T", "rs6567160", 0.25, 5.5, 0.01, -7.5, "observed"),
+      # The variants of `fake_tophits()`'s BMI hits, for the vignette's BMI-to-CAD workflow.
+      cad("16:53767042:A:C", "rs1558902", 0.4, 2, 0.01, -1.4, "imputed"),
+      cad("16:53800000:A:G", "rs9939609", 0.3, 4, 0.01, -4.2, "observed")
+    ),
+    "OGS-00011:GCST90029007" = list(
+      bmi("5:75701728:A:AAAAT", "rs34159589", 0.37, -12, 0.002, -33, "imputed"),
+      bmi("16:53767042:C:T", "rs1421085", 0.38, 38, 0.002, -300, "observed"),
+      bmi("18:60161902:C:T", "rs6567160", 0.25, 24, 0.002, -125, "observed"),
+      # Not in the dev Data API: the one Analysis that holds both ALIDs of a multiallelic rsID.
+      # The API sends rsid "." where a variant has no rsID.
+      bmi("16:53767042:A:G", ".", 0.62, -38, 0.002, -300, "observed")
     )
   )
 }
@@ -251,6 +308,7 @@ fake_api <- function(world = fake_world()) {
   # with `existing: true`, as the API deduplicates.
   app$locals$jobs <- new.env()
   app$locals$job_keys <- new.env()
+  app$locals$bodies <- new.env()
   job_status_body <- function(job, mode) {
     n <- job$polls
     scenario <- job$scenario
@@ -258,7 +316,7 @@ fake_api <- function(world = fake_world()) {
     status <- if (waiting && n <= 2) "queued" else if (waiting && n == 3) "running" else switch(scenario,
       never = "running", failed_request = , failed_temporary = , failed_leak = "failed",
       cancelled = "cancelled", expired = "expired", bad_status = paste("weird", job$token), "succeeded")
-    body <- list(job_id = job$id, status = status, endpoint = "/api/tophits",
+    body <- list(job_id = job$id, status = status, endpoint = job$endpoint,
                  release_id = job$release_id, attempts = 1L,
                  queue_position = if (status == "queued") 4L - n else NULL,
                  poll_after_seconds = if (status %in% c("queued", "running")) job$poll_after else 0)
@@ -280,6 +338,42 @@ fake_api <- function(world = fake_world()) {
       if (identical(scenario, "total_too_small")) body$result$metadata$total <- 1L
     }
     list(status = status, body = body)
+  }
+  # Create (or find, for a resubmission) the Job for `rows` and answer 202.
+  submit_job <- function(req, res, endpoint, body, rows, metadata) {
+    world <- req$app$locals$world
+    releases <- lapply(body$releases, function(r) list(store_id = r$store_id, release_id = r$release_id))
+    token <- sub("^Bearer ", "", req$get_header("Authorization") %||% "")
+    key <- paste(endpoint, world$mode$job, world$mode$page_rows, as.character(jsonlite::toJSON(body, auto_unbox = TRUE)))
+    # Long bodies (1,000 variants) can't be variable names: hash them.
+    key <- paste0("k", rlang::hash(key))
+    # What was submitted, for tests of the request itself (GET /_fake/bodies).
+    assign(paste0("b", length(ls(req$app$locals$bodies))), list(endpoint = endpoint, body = body), envir = req$app$locals$bodies)
+    existing <- exists(key, envir = req$app$locals$job_keys, inherits = FALSE)
+    if (existing) {
+      job <- get(get(key, envir = req$app$locals$job_keys), envir = req$app$locals$jobs)
+    } else {
+      id <- paste(sample(c(0:9, letters[1:6]), 32, TRUE), collapse = "")
+      id <- paste(substring(id, c(1, 9, 13, 17, 21), c(8, 12, 16, 20, 32)), collapse = "-")
+      job <- list(id = id, polls = 0L, scenario = world$mode$job, rows = rows, releases = releases,
+                  release_id = paste(vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), ""),
+                                     collapse = ","),
+                  page_rows = as.integer(world$mode$page_rows),
+                  poll_after = as.numeric(world$mode$poll_after_ms) / 1000, token = token,
+                  metadata = metadata, endpoint = endpoint,
+                  served = character(), times = numeric())
+      assign(id, job, envir = req$app$locals$jobs)
+      assign(key, id, envir = req$app$locals$job_keys)
+    }
+    ignored <- if (identical(job$scenario, "ignored")) list("observed_onyl", token) else list()
+    res$set_status(202)$set_header("Retry-After", "1")$set_header("Location", paste0("/api/jobs/", job$id))
+    res$set_header("X-OGDB-Cost-Estimate", "1")
+    res$send_json(list(job_id = job$id, status_url = paste0("/api/jobs/", job$id),
+                       status = if (existing) job_status_body(job)$status else "queued",
+                       query_hash = "sha256:fake", request_fingerprint = "sha256:fake", existing = existing,
+                       queue_position = NULL, poll_after_seconds = job$poll_after,
+                       ignored_fields = ignored),
+                  auto_unbox = TRUE, null = "null")
   }
   app$post("/api/tophits", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
@@ -303,35 +397,42 @@ fake_api <- function(world = fake_world()) {
       if (length(hits) > limit) truncated <- TRUE
       rows <- c(rows, utils::head(hits, limit))
     }
-    releases <- lapply(body$releases, function(r) list(store_id = r$store_id, release_id = r$release_id))
-    token <- sub("^Bearer ", "", req$get_header("Authorization") %||% "")
-    key <- paste(world$mode$job, world$mode$page_rows, as.character(jsonlite::toJSON(body, auto_unbox = TRUE)))
-    existing <- exists(key, envir = req$app$locals$job_keys, inherits = FALSE)
-    if (existing) {
-      job <- get(get(key, envir = req$app$locals$job_keys), envir = req$app$locals$jobs)
-    } else {
-      id <- paste(sample(c(0:9, letters[1:6]), 32, TRUE), collapse = "")
-      id <- paste(substring(id, c(1, 9, 13, 17, 21), c(8, 12, 16, 20, 32)), collapse = "-")
-      job <- list(id = id, polls = 0L, scenario = world$mode$job, rows = rows, releases = releases,
-                  release_id = paste(vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), ""),
-                                     collapse = ","),
-                  page_rows = as.integer(world$mode$page_rows),
-                  poll_after = as.numeric(world$mode$poll_after_ms) / 1000, token = token,
-                  metadata = list(threshold = threshold, observed_only = isTRUE(body$observed_only),
-                                  total = length(rows), truncated = truncated),
-                  served = character(), times = numeric())
-      assign(id, job, envir = req$app$locals$jobs)
-      assign(key, id, envir = req$app$locals$job_keys)
+    submit_job(req, res, "/api/tophits", body, rows,
+               list(threshold = threshold, observed_only = isTRUE(body$observed_only),
+                    total = length(rows), truncated = truncated))
+  })
+  # Variants in Analyses. `variants` are rsIDs or ALIDs, as the API takes them; an rsID stands for
+  # every ALID it names. Rows come in the order of the Analyses asked for, then genome position .
+  app$post("/api/associations", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    world <- req$app$locals$world
+    body <- req$json %||% list()
+    problems <- request_body_problems(body, "/api/associations", "post", req$app$locals$openapi)
+    if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
+    # The real API also expands rsIDs. The fake does not, so a client that skips resolving them gets
+    # no rows (and the tests that look at the submitted body see ALIDs only).
+    alids <- unlist(body$variants)
+    rows <- list()
+    for (id in unlist(body$analyses %||% body$ids)) {
+      hits <- Filter(function(h) h$alid %in% alids, world$associations[[id]] %||% list())
+      # The API's own default is to leave Imputed Associations out.
+      hits <- Filter(function(h) h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE), hits)
+      rows <- c(rows, hits[order(vapply(hits, function(h) fake_chromosome_rank(h$chromosome) * 1e9 + h$position, 0))])
     }
-    ignored <- if (identical(job$scenario, "ignored")) list("observed_onyl", token) else list()
-    res$set_status(202)$set_header("Retry-After", "1")$set_header("Location", paste0("/api/jobs/", job$id))
-    res$set_header("X-OGDB-Cost-Estimate", "1")
-    res$send_json(list(job_id = job$id, status_url = paste0("/api/jobs/", job$id),
-                       status = if (existing) job_status_body(job)$status else "queued",
-                       query_hash = "sha256:fake", request_fingerprint = "sha256:fake", existing = existing,
-                       queue_position = NULL, poll_after_seconds = job$poll_after,
-                       ignored_fields = ignored),
-                  auto_unbox = TRUE, null = "null")
+    submit_job(req, res, "/api/associations", body, rows, NULL)
+  })
+  # rsIDs to the variants they name, in each Store Release asked for; one row per ALID, so a
+  # multiallelic rsID gives several. An rsID no variant table holds gives no row.
+  app$post("/api/variants/rsid", function(req, res) {
+    if (!authorised(req, res) || !needs_user(req, res)) return()
+    world <- req$app$locals$world
+    body <- req$json %||% list()
+    problems <- request_body_problems(body, "/api/variants/rsid", "post", req$app$locals$openapi)
+    if (length(problems) > 0) return(fail(res, 400, "invalid_request", paste(problems, collapse = "; ")))
+    wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
+    rows <- Filter(function(v) v$rsid %in% unlist(body$rsids) &&
+                     paste0(v$store_id, "/", v$release_id) %in% wanted, world$variants)
+    submit_job(req, res, "/api/variants/rsid", body, rows, NULL)
   })
   app$get("/api/jobs/:id", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
@@ -368,6 +469,13 @@ fake_api <- function(world = fake_world()) {
     res$send_json(out, auto_unbox = TRUE, null = "null")
   })
   # When the fake answered each Job's status requests (seconds), for tests of the waiting.
+  # The bodies submitted to Job endpoints, oldest first.
+  app$get("/_fake/bodies", function(req, res) {
+    env <- req$app$locals$bodies
+    keys <- ls(env)
+    keys <- keys[order(as.integer(sub("^b", "", keys)))]
+    res$send_json(lapply(keys, function(k) get(k, envir = env)), auto_unbox = TRUE, null = "null")
+  })
   app$get("/_fake/jobs", function(req, res) {
     env <- req$app$locals$jobs
     times <- lapply(stats::setNames(nm = ls(env)), function(id) as.list(get(id, envir = env)$times))

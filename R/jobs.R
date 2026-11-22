@@ -26,6 +26,13 @@ job_states_done <- c("succeeded", "failed", "cancelled", "expired")
 job_now <- function() proc.time()[["elapsed"]]
 job_sleep <- function(seconds) Sys.sleep(seconds)
 
+# What one Job takes (the API's limits). Every function that submits a Job checks its request
+# against these; the splitter that lifts them is #9, which needs them all in one place.
+max_releases_per_job <- 10L    # GWAS Stores (Store Releases) in `releases`
+max_variants_per_job <- 1000L  # variants in POST /api/associations
+max_analyses_per_job <- 100L   # Analyses in POST /api/associations
+max_rsids_per_job <- 1000L     # rsIDs in POST /api/variants/rsid
+
 # An answer the client can't trust: an unknown status, a result with no rows, pages that don't add up.
 # Never papered over with a partial result.
 job_invalid <- function(what, job_id = NULL, call = rlang::caller_env()) {

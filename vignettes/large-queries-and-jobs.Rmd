@@ -9,7 +9,7 @@ vignette: >
 
 The OpenGWAS API answers every data query as a **Job**: it queues the query fairly between users, runs it, and keeps the answer for you to collect in pages. opengwasr's query functions hide this. They submit, wait and collect, and return a data frame. This vignette is for when you want to know what happens underneath, or to take control of it: big queries, many queries at once, long waits, interruptions, and queries too large for the API.
 
-> **Status.** The setup chunk and the waiting chunk run, from responses recorded against the development Data API on 22 November 2026. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
+> **Status.** The chunks that run, from responses recorded against the development Data API on 22 November 2026, are the setup, waiting, Job-function, reattaching and cancelling chunks. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
 
 ```{r recordings, include = FALSE}
 source("recordings.R")
@@ -68,7 +68,7 @@ While a Job is queued or running, opengwasr shows where it is:
 
 opengwasr asks how the Job is doing only as often as the API suggests, and less often when the API is busy, so waiting never adds to the load. The progress display appears in interactive sessions; set `options(opengwasr.progress = FALSE)` to hide it.
 
-Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by the option `opengwasr.timeout`). Giving up doesn't cancel anything: the Job keeps running, and running the same call again reattaches you to it.
+Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by the option `opengwasr.timeout`). Giving up doesn't cancel anything: the Job keeps running. Run the same call again to reattach to it, collect it with `og_job_result(src, e$jobs)` (the error carries the `og_jobs` object), or cancel it with `og_job_cancel()` (see [Running many Jobs yourself](#job-functions)).
 
 ```{r waiting}
 src_quick <- og_api(timeout = 60)
@@ -80,90 +80,80 @@ top <- og_tophits(src_quick, "OGS-00011:GCST90029007", clump = FALSE, limit = 5)
 Error in `og_tophits()`:
 ! Gave up waiting after 60 s. Job a1513652-85ff-4eac-b4d7-b043b03aaf0a is still queued.
 ℹ Run the same call again: the API recognises the query and reattaches you to this Job.
+ℹ Cancel it with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`; `e$jobs` is the handle `og_job_result()` collects.
 ```
 
 The error has class `opengwasr_timeout`, and carries the Job ids in `e$job_ids`. A Job that runs and fails stops with class `opengwasr_job_failed`, carrying the API's reason. Its `e$retryable` says whether running it again might help.
 
 ## When the API is busy {#busy}
 
-When the API's queue is full, or you have used up your allowance for now, it tells opengwasr how long to wait. opengwasr waits that long and tries again, until the call's timeout:
+> Illustrative: the development Data API can't be made busy on demand, so this section is text, not a recording. opengwasr's tests run it against a fake.
+
+When the API's queue is full, or you have used up your allowance for now, it tells opengwasr how long to wait. opengwasr waits that long (at least a second) and tries again, until the call's timeout:
 
 ```text
 # illustrative
 ! The API is busy (user_queue_full): retrying in 30 s.
 ```
 
-If the timeout runs out first, the error has class `opengwasr_busy`.
+If the timeout runs out first, the error has class `opengwasr_busy`, and carries the API's reason in `e$api_error` and its wait in `e$retry_after`.
 
 ## Running many Jobs yourself {#job-functions}
 
-To run many queries at once and collect them yourself, submit them without waiting. `og_submit()` takes a query function and its arguments, and returns as soon as the Jobs are queued:
+To run many queries at once and collect them yourself, submit them without waiting. `og_submit()` takes a query function and its arguments, and returns as soon as the API has accepted its Jobs:
 
-```{r job-functions-submit, eval = FALSE}
-jobs <- lapply(bmi_ids, function(id) og_submit(src, og_tophits, id, clump = FALSE))
+```{r job-functions-submit}
+ids <- c("OGS-00011:GCST90029007", "OGS-00011:GCST003116")
+jobs <- lapply(ids, function(id) og_submit(src, og_tophits, id, clump = FALSE))
 jobs[[2]]
 ```
 
-```text
-# illustrative
-<og_jobs> 1 Job for og_tophits("OGS-00011:GCST90029007", clump = FALSE)
-                                job_id status
-  a1513652-85ff-4eac-b4d7-b043b03aaf0a queued
-```
+`og_job_status()` checks on them without waiting, and `og_job_result()` waits for them and returns the same data frame, with the same provenance, the query function would have returned (these Analyses have more top hits than the default `limit`, so each call would also warn, as `og_tophits()` does; the warnings are hidden here):
 
-`og_job_status()` checks on them without waiting, and `og_job_result()` waits for them and returns the same data frame the query function would have:
-
-```{r job-functions-collect, eval = FALSE}
+```{r job-functions-collect, warning = FALSE}
 og_job_status(src, jobs[[2]])
 tophits <- lapply(jobs, function(job) og_job_result(src, job))
+vapply(tophits, nrow, 1L)
 ```
 
-```text
-# illustrative
-                                job_id status queue_position
-  a1513652-85ff-4eac-b4d7-b043b03aaf0a running             NA
-```
+Any query function works the same way. It does its checks and lookups of Analyses when you submit, and what the answer is shaped from is fixed then, so collecting later gives the same answer. A query bigger than one Job gives one `og_jobs` object holding all its Jobs, and they are collected together.
 
-`og_job_status()`, `og_job_result()` and `og_job_cancel()` take the Source first, then the Jobs `og_submit()` returned, or a Job id as text. A query bigger than one Job gives several Jobs, and they are handled together.
+`og_job_status()` and `og_job_cancel()` take the Source first, then the `og_jobs` object or Job ids as text. `og_job_result()` needs the `og_jobs` object, because a Job id alone doesn't say how its rows are to be shaped: it refuses, and tells you to rerun the same call, which reattaches. `og_job_result(src, id, raw = TRUE)` returns the API's rows exactly as they are.
 
 ## Interrupting and reattaching {#interrupting}
 
-Pressing Esc or Ctrl-C while opengwasr waits doesn't cancel the Job. It stops waiting, and tells you how to pick the Job up:
+Pressing Esc or Ctrl-C while opengwasr waits doesn't cancel the Job. It stops waiting, with an error of class `opengwasr_interrupted` that carries the Job ids (`e$job_ids`) and the `og_jobs` object (`e$jobs`) to collect them with. The interrupt itself can't be shown here:
 
 ```text
 # illustrative
-! Interrupted. Job a1513652-85ff-4eac-b4d7-b043b03aaf0a is still running.
-ℹ Collect it with `og_job_result(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`, or run the same call again.
-ℹ Cancel it with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`.
+! Interrupted. Job a1513652-85ff-4eac-b4d7-b043b03aaf0a is still running (or queued).
+ℹ Collect with `og_job_result(src, e$jobs)` in this session, or run the same call again: it reattaches.
+ℹ Cancel with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`.
 ```
 
-Running the same call again is always safe. The API recognises an identical query and reattaches you to the Job it already has, so nothing is computed twice:
+Running the same call again is always safe. The API recognises an identical query and reattaches you to the Job it already has, so nothing is computed twice. `og_provenance()` says so, and names the same Job:
 
-```{r interrupting, eval = FALSE}
-top <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE)
-```
-
-```text
-# illustrative
-ℹ Reattached to Job a1513652 (already running).
-✔ Job a1513652 succeeded | 1,000 Associations | 4s
+```{r interrupting, warning = FALSE}
+first <- og_tophits(src, ids[[1]], clump = FALSE, limit = 100)
+again <- og_tophits(src, ids[[1]], clump = FALSE, limit = 100)
+og_provenance(again)$existing
+identical(og_provenance(first)$job_ids, og_provenance(again)$job_ids)
 ```
 
 ## Cancelling {#cancelling}
 
 Cancel Jobs you no longer want, so they stop using your share of the queue:
 
-```{r cancelling, eval = FALSE}
-og_job_cancel(src, jobs[[2]])
-og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")
+```{r cancelling}
+unwanted <- og_submit(src, og_tophits, ids[[1]], clump = FALSE, limit = 7)
+og_job_cancel(src, unwanted)
 ```
 
-```text
-# illustrative
-✔ Cancelled Job a1513652.
-```
+A Job that has already finished is returned as it is, and the message says so.
 
 ## Results expire {#result-expired}
+
+> Illustrative: shown as text, since a result can't be made to expire on demand.
 
 The API keeps a finished Job's result for an hour if nobody reads it, and for five minutes after it has been read in full. opengwasr reads every page in one go, so this only matters when you collect a Job yourself, late:
 
@@ -174,7 +164,7 @@ Error in `og_job_result()`:
 ℹ Run the query again; the API will run it afresh.
 ```
 
-The error has class `opengwasr_result_expired`.
+The error has class `opengwasr_result_expired`. (An Analysis that has been retired is a different error, `opengwasr_retired_analysis`.)
 
 ## Standard variant subsets, such as HapMap3 {#variant-subsets}
 

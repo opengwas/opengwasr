@@ -1,13 +1,13 @@
 {
-    "job_id": "b296d080",
+    "job_id": "d90069df",
     "query_hash": "sha256:5de2a3272155ee652676aa70eb8537b3a18dbbd9740ee0f3cadc843dd9de4b2a",
     "status": "succeeded",
     "endpoint": "/api/tophits",
     "release_id": "OGS-00011/OGS-00011-completed",
-    "created_at": "2026-11-22T19:03:33.484136+00:00",
-    "started_at": "2026-11-22T19:03:33.499696+00:00",
-    "completed_at": "2026-11-22T19:03:34.478679+00:00",
-    "expires_at": "2026-11-22T20:03:34.476153+00:00",
+    "created_at": "2026-11-22T19:14:50.285670+00:00",
+    "started_at": "2026-11-22T19:14:50.291293+00:00",
+    "completed_at": "2026-11-22T19:15:01.103777+00:00",
+    "expires_at": "2026-11-22T20:15:01.101786+00:00",
     "retrieved_at": null,
     "retry_at": null,
     "attempts": 1,
@@ -31,9 +31,9 @@
             "page_sha256": [
                 "b5bcd604969bfe81efabaf7008abc26de6ea9dc014a22b70a749ddb178c4a1fe"
             ],
-            "retention_expires_at": "2026-11-22T20:03:34.476153+00:00",
+            "retention_expires_at": "2026-11-22T20:15:01.101786+00:00",
             "page_encoding": "text",
-            "job_id": "b296d080",
+            "job_id": "d90069df",
             "fingerprint": "sha256:5de2a3272155ee652676aa70eb8537b3a18dbbd9740ee0f3cadc843dd9de4b2a",
             "release_id": "OGS-00011/OGS-00011-completed",
             "releases": [
@@ -44,7 +44,7 @@
             ],
             "first_cursor": null
         },
-        "result_url": "/api/jobs/b296d080/result",
+        "result_url": "/api/jobs/d90069df/result",
         "metadata": {
             "threshold": 5e-08,
             "observed_only": false,
@@ -53,13 +53,13 @@
         }
     },
     "compute": {
-        "cpu_seconds": 0.973,
-        "run_seconds": 0.9701,
-        "queue_seconds": 0.0156,
+        "cpu_seconds": 9.8948,
+        "run_seconds": 10.8036,
+        "queue_seconds": 0.0056,
         "attempts": 1,
         "rows": 5,
         "bytes": 1894
     },
-    "status_url": "/api/jobs/b296d080",
+    "status_url": "/api/jobs/d90069df",
     "poll_after_seconds": 0
 }

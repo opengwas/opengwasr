@@ -40,10 +40,10 @@ og_associations <- function(src, variants, analyses, observed_only = FALSE, orig
 #' @export
 og_associations.og_api_source <- function(src, variants, analyses, observed_only = FALSE,
                                           original_units = FALSE, releases = NULL) {
+  deadline <- local_query(src)
   check_query_arguments(analyses, observed_only, original_units)
   kinds <- classify_variants(variants)
   check_associations_limits(kinds, analyses)
-  deadline <- job_now() + src$timeout
   releases <- resolve_releases(src, releases)
   info <- analyses_lookup(src, analyses, releases)
   if (original_units) check_original_units(info)  # refuse before a Job runs, not after
@@ -61,27 +61,37 @@ og_associations.og_api_source <- function(src, variants, analyses, observed_only
   jobs <- list()
   # The lookup's rows are variants, not Associations: only the Associations Job has a `total`.
   if (!is.null(resolved$job)) jobs <- list(utils::modifyList(resolved$job, list(total = 0, truncated = FALSE)))
-  rows <- NULL
-  if (length(resolved$alids) > 0) {
-    body <- list(variants = as.list(resolved$alids), analyses = as.list(info$id),
-                 observed_only = observed_only, releases = releases)
-    out <- run_job(src, "api/associations", body, unit = "Associations", deadline = deadline)
-    rows <- out$rows
-    # The Job reports no `total` or `truncated`. It returns every Association it matches: a result
-    # over the row limit fails as a `request` error rather than being cut off (ogdb-api guide,
-    # "errors"), so the rows read are the whole answer.
-    jobs <- c(jobs, list(utils::modifyList(out$job, list(total = nrow(rows), truncated = FALSE))))
-  }
-  if (length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved)
-
-  rows <- rows %||% data.frame()
-  # The API sends "." for a variant with no rsID; that is a missing value.
-  if (!is.null(rows$rsid)) rows$rsid[rows$rsid %in% "."] <- NA_character_
   args <- list(observed_only = observed_only, original_units = original_units)
-  attach_provenance(shape_associations(rows, info, original_units),
-                    query = provenance_query("og_associations", args),
-                    args = c(list(variants = variants, analyses = analyses), args, list(releases = releases)),
-                    jobs = jobs)
+  requests <- list()
+  if (length(resolved$alids) > 0) {
+    requests <- list(list(path = "api/associations",
+                          body = list(variants = as.list(resolved$alids), analyses = as.list(info$id),
+                                      observed_only = observed_only, releases = releases)))
+  }
+  # Everything the answer is shaped from (the rsID resolution, the Analyses) is pinned in this
+  # closure at plan time.
+  plan <- query_plan(requests, unit = "Associations", finish = function(results) {
+    all_jobs <- jobs
+    rows <- NULL
+    if (length(results) > 0) {
+      out <- results[[1]]
+      rows <- out$rows
+      # The Job reports no `total` or `truncated`. It returns every Association it matches: a result
+      # over the row limit fails as a `request` error rather than being cut off (ogdb-api guide,
+      # "errors"), so the rows read are the whole answer.
+      all_jobs <- c(all_jobs, list(utils::modifyList(out$job, list(total = nrow(rows), truncated = FALSE))))
+    }
+    if (length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved)
+
+    rows <- rows %||% data.frame()
+    # The API sends "." for a variant with no rsID; that is a missing value.
+    if (!is.null(rows$rsid)) rows$rsid[rows$rsid %in% "."] <- NA_character_
+    attach_provenance(shape_associations(rows, info, original_units),
+                      query = provenance_query("og_associations", args),
+                      args = c(list(variants = variants, analyses = analyses), args, list(releases = releases)),
+                      jobs = all_jobs)
+  })
+  run_query(src, plan, deadline)
 }
 
 # What can be refused before any request: more distinct ALIDs, rsIDs or Analyses than one Job takes.

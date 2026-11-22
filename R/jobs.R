@@ -15,8 +15,9 @@
 # timeout is what is left of it. Anything the API sends that can't be trusted (an unknown status, a
 # page without rows, rows that don't add up) is `opengwasr_job_invalid`.
 #
-# #9 (the splitter) calls run_job() once per piece. #10 (exported Job functions, Ctrl-C, 429/503
-# retry) builds on job_submit(), job_wait() and job_rows() without editing their callers.
+# #9 (the splitter) builds a plan of many requests (R/query-plan.R). #10 added the Job functions
+# (R/job-functions.R, which drive plans, so no query function knows about them), Ctrl-C handling,
+# and the 429/503 retry (in api_response(), so every request gets it).
 
 job_states_active <- c("queued", "running")
 job_states_done <- c("succeeded", "failed", "cancelled", "expired")
@@ -65,7 +66,12 @@ job_remaining <- function(src, deadline, job_id, state, call) {
 job_call <- function(src, deadline, job_id, state, call, ...) {
   remaining <- job_remaining(src, deadline, job_id, state, call)
   resp <- tryCatch(
-    api_response(src, ..., call = call, timeout = max(remaining, 0.001)),
+    api_response(src, ..., call = call, timeout = max(remaining, 0.001), deadline = deadline),
+    # A result that was collected or expired is named by Job, not just by the API's words.
+    opengwasr_result_expired = function(e) {
+      if (!is.null(job_id)) job_expired(job_id, e, call)
+      rlang::cnd_signal(e)
+    },
     opengwasr_unreachable = function(e) {
       if (job_now() >= deadline - 0.001) job_timed_out(src, job_id, state, call)
       rlang::cnd_signal(e)
@@ -175,9 +181,37 @@ job_timed_out <- function(src, job_id, state, call) {
   og_abort(
     c(paste0("Gave up waiting after ", format(src$timeout), " s.",
              if (!is.null(job_id)) paste0(" Job ", job_id, " is still ", state, ".")),
-      i = "Run the same call again: the API recognises the query and reattaches you to this Job."),
+      i = "Run the same call again: the API recognises the query and reattaches you to this Job.",
+      i = if (!is.null(job_id)) job_advice(job_id)),
     class = "opengwasr_timeout", job_ids = job_id, timeout = src$timeout, status = state, call = call
   )
+}
+
+# How to let a Job go.
+job_advice <- function(job_id) {
+  paste0("Cancel it with `og_job_cancel(src, \"", job_id, "\")`.")
+}
+
+# What a user pressing Esc or Ctrl-C while the client waits gets: the Jobs are left as they are, and
+# the error carries the `og_jobs` handle (when the query has one) to collect them with.
+job_interrupted <- function(job_ids, jobs = NULL, call) {
+  n <- length(job_ids)
+  og_abort(c(paste0("Interrupted. ", if (n == 1) paste0("Job ", job_ids) else paste(n, "Jobs"),
+                    if (n == 1) " is" else " are", " still running (or queued)."),
+             i = if (!is.null(jobs)) "Collect with `og_job_result(src, e$jobs)` in this session, or run the same call again: it reattaches."
+                 else "Run the same call again: it reattaches to the Job.",
+             i = paste0("Cancel with `og_job_cancel(src, ", if (n == 1) paste0("\"", job_ids, "\"") else "e$job_ids", ")`.")),
+           class = "opengwasr_interrupted", job_ids = job_ids, jobs = jobs, call = call)
+}
+
+# The 410 `result_expired` of a Job we know the id of.
+job_expired <- function(job_id, e, call) {
+  og_abort(c(paste0("Job ", job_id, "'s result is no longer available: it was already collected, or it expired."),
+             i = "Run the query again; the API will run it afresh.",
+             x = paste0("API: ", e$api_message)),
+           class = c("opengwasr_result_expired", "opengwasr_error"), job_id = job_id,
+           status = e$status, api_error = e$api_error, api_message = e$api_message, api_body = e$api_body,
+           call = call)
 }
 
 # A Job that ended without a result: failed (with the server's reason, scrubbed of the key),
@@ -256,9 +290,10 @@ ndjson_rows <- function(ndjson, job_id, call) {
   rows
 }
 
-#' Run a query as a Job: submit it, wait for it, read its rows, all inside one deadline. A caller
-#' that did other work first (looking up Analyses) passes the deadline it started at the beginning
-#' of the user's call.
+#' Run one request as a Job and collect it: submit, wait, read the rows, all inside one deadline.
+#' For a query function's own preparation (looking up Analyses, resolving rsIDs); the answer itself
+#' goes through a plan and `run_query()` (R/query-plan.R). A caller that did other work first passes
+#' the deadline it started at the beginning of the user's call.
 #'
 #' @return `list(rows, job)`. `job` holds `job_id`, `total` and `truncated` (what the API says of
 #'   the result's size, `NULL` if it says nothing: the caller decides whether that is acceptable),
@@ -269,9 +304,21 @@ run_job <- function(src, path, body, unit = "rows", deadline = job_now() + src$t
                     call = rlang::caller_env()) {
   force(call)
   job <- job_submit(src, path, body, deadline, call)
+  job_reattached(job)
+  # From here the Job exists, so an interrupt leaves a known state: it keeps running on the API.
+  tryCatch(collect_job(src, job, deadline, unit, call),
+           interrupt = function(e) job_interrupted(job$job_id, call = call))
+}
+
+job_reattached <- function(job) {
   if (isTRUE(job$existing) && progress_enabled()) {
     cli::cli_alert_info("Reattached to Job {job_short(job$job_id)} (already {job$status}).")
   }
+}
+
+# Wait for a submitted Job and read its rows. `job` is the submit answer, or that merged with a
+# later status. Does not catch interrupts: its callers know what to tell the user.
+collect_job <- function(src, job, deadline, unit, call) {
   status <- job_wait(src, job, deadline, unit = unit, call = call)
   rows <- job_rows(src, job$job_id, status$result$manifest$row_count, deadline, call)
   metadata <- status$result$metadata

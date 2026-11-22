@@ -16,6 +16,10 @@ reference:
 - title: Associations
   contents:
   - og_associations
+- title: Jobs
+  contents:
+  - og_submit
+  - og_job_status
 - title: Your own data
   contents:
   - og_alid

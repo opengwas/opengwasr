@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), Associations (including Imputed ones), effects and p-values, effect scale and original units, sample size, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), Associations (including Imputed ones), PheWAS, ranges and variant lookups, effects and p-values, effect scale and original units, sample size, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
@@ -234,54 +234,29 @@ There is no LD-proxy option. Reference-Completed Store Releases already hold an 
 
 ## PheWAS, regions and variant lookups {#phewas-regions-variants}
 
-`og_phewas()` returns one variant's Associations across Analyses, at p ≤ `threshold` (default `1e-8`). By default it searches every GWAS Store; `releases` narrows the search.
+`og_phewas()` returns the Associations of one or more variants (rsIDs and ALIDs) across Analyses, at p ≤ `threshold` (default `1e-8`). By default it searches every Analysis of every GWAS Store; `releases` narrows the search, and `analyses` names the Analyses to look in. An rsID is resolved to every ALID it names, and opengwasr runs one PheWAS per ALID and combines them in the order you gave the variants. Here, the Associations of `rs1421085` at p ≤ 1e-50 in one GWAS Store:
 
-```{r phewas, eval = FALSE}
-ph <- og_phewas(src, "rs1421085", releases = c("OGS-00009", "OGS-00011"))
+```{r phewas}
+ph <- og_phewas(src, "rs1421085", threshold = 1e-50, releases = "OGS-00011")
 nrow(ph)
 head(ph[, c("id", "analysis_label", "beta", "pval")], 4)
 ```
 
-```text
-# illustrative
-[1] 90
-                      id        analysis_label       beta           pval
-   OGS-00009:ukb-b-19953 Body mass index (BMI) 0.07355628 4.336199e-291
-    OGS-00009:ukb-b-2303 Body mass index (BMI) 0.07343301 7.372227e-286
-   OGS-00009:ukb-b-11842                Weight 0.06059626 7.674857e-257
-   OGS-00009:ukb-b-12039                Weight 0.06055586 7.026346e-253
-```
+`pval` is 0 where it underflows; `z` stays exact. `limit` (default 1,000, at most 10,000) applies to each ALID, not to all the variants together. When it cuts a PheWAS off you get a warning, as for top hits.
 
-`og_range()` returns every Association in a stretch of one chromosome. Positions are on GRCh38, one-based and inclusive:
+`og_range()` returns every Association in a stretch of one chromosome. Positions are on GRCh38, one-based and inclusive. A range over 10 Mb, or over more than 10 Analyses, is split into several Jobs for you:
 
-```{r range, eval = FALSE}
+```{r range}
 locus <- og_range(src, "OGS-00011:GCST003116", chromosome = "9",
                   start = 22090000, end = 22130000)
 table(locus$association_status)
 ```
 
-```text
-# illustrative
- imputed observed
-      19       85
-```
-
 `og_variants_rsid()` and `og_variants_chrpos()` translate rsIDs and GRCh38 positions into ALIDs, using the GWAS Stores' own variant tables. You get each ALID once for every GWAS Store that holds it:
 
-```{r variants, eval = FALSE}
+```{r variants}
 og_variants_rsid(src, "rs34159589", releases = "OGS-00011")
 og_variants_chrpos(src, "16:53767042", releases = "OGS-00011")
-```
-
-```text
-# illustrative
-                       alid chromosome position effect_allele other_allele       rsid  store_id          release_id
-         5:75701728:A:AAAAT          5 75701728             A        AAAAT rs34159589 OGS-00011 OGS-00011-completed
- 5:75701728:AAAAT:AAAATAAAT          5 75701728         AAAAT    AAAATAAAT rs34159589 OGS-00011 OGS-00011-completed
-
-            alid chromosome position effect_allele other_allele      rsid  store_id          release_id
- 16:53767042:A:G         16 53767042             A            G rs1421085 OGS-00011 OGS-00011-completed
- 16:53767042:C:T         16 53767042             C            T rs1421085 OGS-00011 OGS-00011-completed
 ```
 
 Every match is returned: one position can hold several ALIDs, and one rsID can name several.

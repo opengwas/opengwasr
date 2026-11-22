@@ -1,0 +1,315 @@
+---
+title: "Instruments and clumping"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Instruments and clumping}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+Instruments for Mendelian randomization are top hits that are independent of each other: one variant per signal. opengwasr gets them by **clumping** the top hits against linkage-disequilibrium (LD) data. This vignette covers how clumping chooses its LD data and its thresholds, what happens when it can't do what you ask, and how to use LD matrices and your own PLINK Reference.
+
+> **Status.** No code in this vignette runs yet. It fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The PLINK Reference examples are illustrative too, but the API isn't involved in them.
+
+```{r setup, eval = FALSE}
+library(opengwasr)
+src <- og_api()
+```
+
+## Clumping is on by default {#default-clumping}
+
+`og_tophits()` clumps unless you pass `clump = FALSE`:
+
+```{r default-clumping, eval = FALSE}
+cad <- og_tophits(src, "OGS-00011:GCST003116")
+nrow(cad)
+head(cad[, c("rsid", "alid", "beta", "pval", "clump_size")], 5)
+```
+
+```text
+# illustrative
+ℹ Clumping OGS-00011:GCST003116 in LD Store hgdp1kgp-v2-EUR-k10, matched to its Assigned Ancestry (EUR): r² 0.0319 within 10,000 kb.
+Warning message:
+234 of the 2,194 top hits of OGS-00011:GCST003116 aren't in LD Store hgdp1kgp-v2-EUR-k10, so they can't be clumped and were left out.
+
+[1] 49
+        rsid            alid        beta         pval clump_size
+   rs2891168  9:22098620:A:G -0.19335911 2.296241e-98        193
+  rs55730499 6:160584578:C:T -0.31671619 5.392728e-39         94
+   rs7528419 1:109274570:A:G  0.11453085 1.968746e-23          9
+   rs4711863  6:12915185:C:G -0.09856474 1.613590e-21         96
+ rs115654617 2:203029276:A:C  0.13790739 3.119371e-18        316
+```
+
+The 2,194 top hits at p ≤ 5e-8 reduce to 49 index variants. `clump_size` counts the top hits each index variant stands for, itself included.
+
+How it works:
+
+- Variants are ranked by |z|. Starting from the strongest, each index variant absorbs every weaker top hit within `kb` kilobases whose r² with it is above `r2` (the rule `plink --clump` uses).
+- Clumping considers **every** top hit at the threshold, not only the strongest `limit`. `limit` (default 1,000) then caps the index variants returned. BMI (`OGS-00011:GCST90029007`) has 82,973 top hits and 1,105 index variants, so it warns that only the strongest 1,000 index variants were returned.
+- Top hits the LD Store doesn't hold can't be clumped. They are left out, with a warning giving how many, because it can be a large share: 10,375 of BMI's 82,973 top hits, for example.
+
+### Default thresholds come from the LD Store {#default-thresholds}
+
+You don't need to choose `r2` and `kb`. By default, opengwasr clumps within the LD Store's widest window (10,000 kb), at the lowest r² the LD Store records for that distance (its `t_far`, about 0.03). That is always a question the LD Store can answer exactly.
+
+ieugwasr's default, r² 0.001 within 10,000 kb, is not. Beyond 3,000 kb an LD Store keeps only pairs with r² ≥ `t_far`, so it can't tell an r² of 0.001 from one of 0.02 there. If you ask for it, opengwasr refuses (see [Your own r² and window](#refusals)).
+
+## Which LD Store: matching by Assigned Ancestry {#ld-store-matching}
+
+An **LD Store** holds LD for one ancestry. opengwasr clumps each Analysis in the LD Store that matches its **Assigned Ancestry**, the ancestry opengwasdb inferred from the Analysis's allele frequencies. Analyses of different ancestries in one call are each clumped in their own LD Store:
+
+```{r ld-store-matching, eval = FALSE}
+both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"))
+unique(both[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
+```
+
+```text
+# illustrative
+                     id            clump_ld clump_ld_choice   clump_r2 clump_kb
+   OGS-00011:GCST003116 hgdp1kgp-v2-EUR-k10         matched 0.03186544    10000
+ OGS-00013:GCST90475090 hgdp1kgp-v2-AFR-k10         matched 0.03490787    10000
+```
+
+`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is clumped against African LD, at that LD Store's own `t_far`. A non-European Analysis is never clumped against European LD unless you ask for it.
+
+If several LD Stores serve one ancestry, opengwasr uses the one the LD Store list declares as that ancestry's default, and `clump_ld_choice` says `"ancestry_default"`. Today each ancestry has one LD Store.
+
+## Listing LD Stores {#listing-ld-stores}
+
+```{r listing-ld-stores, eval = FALSE}
+og_ld_stores(src)
+```
+
+```text
+# illustrative
+            ld_store ancestry   n      t_far near_bp   far_bp n_variants default
+ hgdp1kgp-v2-EUR-k10      EUR 665 0.03186544 3000000 10000000    8586889      NA
+ hgdp1kgp-v2-AFR-k10      AFR 608 0.03490787 3000000 10000000   14374341      NA
+ hgdp1kgp-v2-EAS-k10      EAS 724 0.02922861 3000000 10000000    7837854      NA
+ hgdp1kgp-v2-SAS-k10      SAS 672 0.03152799 3000000 10000000    8879035      NA
+ hgdp1kgp-v2-AMR-k10      AMR 341 0.06315152 3000000 10000000    7561067      NA
+```
+
+- `n` is the number of people whose genotypes the LD Store was built from (HGDP + 1000 Genomes).
+- Within `near_bp` of a variant, the LD Store holds every r. From `near_bp` to `far_bp`, it holds only pairs with r² ≥ `t_far`. Beyond `far_bp`, and across chromosomes, it holds nothing.
+- `default` will mark each ancestry's default LD Store once the API declares one. Until then it is `NA`.
+
+## Choosing the LD yourself {#choosing-ld}
+
+The `ld` argument chooses the LD. `og_tophits()`, `og_clump()` and `og_ld_matrix()` all take it, and it means the same in each:
+
+| `ld` | LD used |
+|---|---|
+| `NULL` (default) | The LD Store matching each Analysis's Assigned Ancestry |
+| An LD Store's name, such as `"hgdp1kgp-v2-EUR-k10"` | That LD Store |
+| An ancestry, such as `"EUR"` | That ancestry's LD Store (its declared default, if it has several) |
+| `og_plink_reference(path)` | Your own PLINK Reference, on your machine ([below](#plink-reference)) |
+
+An exact LD Store name wins; otherwise `ld` is read as an ancestry code and resolved to that ancestry's LD Store. LD Store names (`hgdp1kgp-v2-EUR-k10`) and ancestry codes (`EUR`, `AFR`, `EAS`, `SAS`, `AMR`) can't be confused today, and the provenance columns always record which LD Store was used. A name gives `clump_ld_choice = "user"`; an ancestry code gives `"ancestry_default"`.
+
+`ld` is separate from the Source the Associations come from, so the same LD choice keeps working whichever Source you use.
+
+```{r choosing-ld, eval = FALSE}
+cad_eur <- og_tophits(src, "OGS-00011:GCST003116", ld = "hgdp1kgp-v2-EUR-k10")
+unique(cad_eur$clump_ld_choice)
+```
+
+```text
+# illustrative
+[1] "user"
+```
+
+## Your own r² and window, and reading a refusal {#refusals}
+
+Pass `r2` and `kb` to clump with your own thresholds. If the LD Store can answer them exactly, it does. If not, opengwasr refuses and explains why. It never clumps at something close to what you asked.
+
+```{r refusals, eval = FALSE}
+og_tophits(src, "OGS-00011:GCST003116", r2 = 0.001, kb = 10000)
+```
+
+```text
+# illustrative
+Error in `og_tophits()`:
+! LD Store hgdp1kgp-v2-EUR-k10 can't clump at r² 0.001 within 10,000 kb exactly.
+✖ Beyond 3,000 kb it holds only pairs with r² of at least its t_far, 0.0319, so it can't tell whether a more distant pair is above r² 0.001.
+ℹ It answers any `r2` within 3,000 kb, or `r2` of at least 0.0319 within 10,000 kb. For example:
+  og_tophits(..., r2 = 0.001, kb = 3000)
+  og_tophits(..., r2 = 0.04, kb = 10000)
+```
+
+The error has class `opengwasr_ld_refusal`, a kind of `opengwasr_refusal`. It carries the API's reason and the LD Store's limits as fields, so a script can decide what to do. Catch `opengwasr_ld_refusal` itself to read those fields; the parent class `opengwasr_refusal` also covers refusals that don't have them:
+
+```{r refusals-catch, eval = FALSE}
+cad_strict <- tryCatch(
+  og_tophits(src, "OGS-00011:GCST003116", r2 = 0.001, kb = 10000),
+  opengwasr_ld_refusal = function(e) {
+    message("Refused (", e$reason, "); clumping within ", e$near_bp / 1000, " kb instead.")
+    og_tophits(src, "OGS-00011:GCST003116", r2 = 0.001, kb = e$near_bp / 1000)
+  }
+)
+```
+
+```text
+# illustrative
+Refused (threshold_below_t_far); clumping within 3000 kb instead.
+```
+
+Fields: `e$reason` (here `"threshold_below_t_far"`), `e$ld_store`, `e$ancestry`, `e$t_far`, `e$near_bp`, `e$far_bp`, and the `e$r2` and `e$kb` you asked for.
+
+## Unassigned and mixed ancestry {#unassigned-and-mixed-ancestry}
+
+An Analysis whose allele frequencies match no single ancestry confidently is **Unassigned** (`assigned_ancestry` is `NA` in `og_analyses()`). opengwasr won't guess an LD Store for it, and never falls back to European LD:
+
+```{r unassigned, eval = FALSE}
+og_tophits(src, "OGS-00014:GCST90475125")
+```
+
+```text
+# illustrative
+Error in `og_tophits()`:
+! Can't choose an LD Store for OGS-00014:GCST90475125: its ancestry is Unassigned.
+ℹ Its source describes it as "AMR", but its allele frequencies match no single ancestry confidently.
+ℹ Choose the LD with `ld`, from: "EUR", "AFR", "EAS", "SAS", "AMR" (see `og_ld_stores()`).
+ℹ Or pass `clump = FALSE` for unclumped top hits.
+```
+
+The error has class `opengwasr_ld_unmatched`, a kind of `opengwasr_refusal`, with the LD Stores in `e$ld_stores`. If you decide AMR LD is right for it, say so:
+
+```{r unassigned-ld, eval = FALSE}
+basophils <- og_tophits(src, "OGS-00014:GCST90475125", ld = "AMR")
+```
+
+The same refusal applies when variants from several Analyses are clumped together and their ancestries differ, or one of them is Unassigned (see the next section). One LD Store is never applied to a different ancestry without your say-so.
+
+## Clumping data you already have {#og-clump}
+
+`og_clump()` clumps any data frame of Associations as one set. It needs `alid` (or `rsid`) and `z`, and an `id` column if the LD Store is to be matched by ancestry. A variant listed several times is ranked by its largest |z|, and every Association of a kept variant is returned.
+
+This is what multivariable MR needs: instruments for several exposures, clumped together.
+
+```{r og-clump, eval = FALSE}
+bmi <- og_tophits(src, "OGS-00011:GCST90029007")
+ldl <- og_tophits(src, "OGS-00011:GCST90002412")
+joint <- og_clump(src, rbind(bmi, ldl))
+table(joint$id)
+```
+
+```text
+# illustrative
+ℹ Clumping 1,993 variants from 2 Analyses in LD Store hgdp1kgp-v2-EUR-k10, matched to their Assigned Ancestry (EUR): r² 0.0319 within 10,000 kb.
+
+OGS-00011:GCST90002412 OGS-00011:GCST90029007
+                   962                    932
+```
+
+`og_clump()` takes `ld`, `r2` and `kb` exactly as `og_tophits()` does. With the default `ld = NULL`, every Analysis in `data` must share one Assigned Ancestry:
+
+```{r og-clump-mixed, eval = FALSE}
+hba1c_afr <- og_tophits(src, "OGS-00013:GCST90475090")
+og_clump(src, rbind(bmi, hba1c_afr))
+```
+
+```text
+# illustrative
+Error in `og_clump()`:
+! Can't choose one LD Store for these Analyses: their Assigned Ancestries differ.
+• EUR: OGS-00011:GCST90029007
+• AFR: OGS-00013:GCST90475090
+ℹ Choose the LD with `ld`, from: "EUR", "AFR", "EAS", "SAS", "AMR" (see `og_ld_stores()`).
+```
+
+A data frame with no `id` column has no Assigned Ancestry to match, so `ld` must be given.
+
+## Clumping provenance {#clumping-provenance}
+
+Every clumped data frame records how it was clumped, in columns that survive subsetting, merging and binding:
+
+| Column | Meaning |
+|---|---|
+| `clump_ld` | The LD Store's name, or the PLINK Reference's path |
+| `clump_ld_choice` | How it was chosen: `"matched"` (the one LD Store for the Analysis's Assigned Ancestry), `"ancestry_default"` (an ancestry's default LD Store: you passed an ancestry code in `ld`, or the Assigned Ancestry has several LD Stores) or `"user"` (you named an LD Store or a PLINK Reference in `ld`) |
+| `clump_r2`, `clump_kb` | The r² and window applied, whether defaults or yours |
+| `clump_size` | How many top hits the index variant stands for |
+
+`og_provenance()` (defined in [Getting started](opengwasr.html#provenance)) adds the counts behind them. Unlike the columns, it doesn't survive `rbind()`:
+
+```{r clumping-provenance, eval = FALSE}
+og_provenance(cad)
+```
+
+```text
+# illustrative
+── opengwasr provenance ─────────────────────
+• Query: og_tophits(threshold = 5e-08, limit = 1000, observed_only = FALSE, clump = TRUE)
+• Store Releases: OGS-00011/OGS-00011-completed
+• Clumped: OGS-00011:GCST003116 in hgdp1kgp-v2-EUR-k10 (matched), r² 0.0319 within 10,000 kb
+• Top hits: 2,194 at p <= 5e-08; 234 not in the LD Store; 49 index variants
+• Retrieved: 2026-11-21 23:25:02 UTC
+```
+
+Two runs with different instruments can be explained from these alone.
+
+## LD matrices {#ld-matrices}
+
+`og_ld_matrix()` returns the signed LD correlation r between every pair of variants, from an LD Store:
+
+```{r ld-matrices, eval = FALSE}
+m <- og_ld_matrix(
+  src,
+  c("16:53772541:A:G", "16:53767042:C:T", "18:60161902:C:T", "2:628504:A:G", "5:75701728:A:AAAAT"),
+  ld = "EUR"
+)
+round(m, 3)
+```
+
+```text
+# illustrative
+                   16:53772541:A:G 16:53767042:C:T 18:60161902:C:T 2:628504:A:G 5:75701728:A:AAAAT
+16:53772541:A:G              1.000          -0.998              NA           NA                 NA
+16:53767042:C:T             -0.998           1.000              NA           NA                 NA
+18:60161902:C:T                 NA              NA               1           NA                 NA
+2:628504:A:G                    NA              NA              NA            1                 NA
+5:75701728:A:AAAAT              NA              NA              NA           NA                  1
+```
+
+- Pairs the LD Store doesn't hold are `NA`, never 0. Here they are on different chromosomes. Two variants more than 3,000 kb apart are `NA` too, unless their r² is at least `t_far`.
+- The dimension names are ALIDs, which carry the alleles. The sign of r refers to the first allele in each name. Square it for r².
+- Variants can be rsIDs or ALIDs. rsIDs are translated to ALIDs first, and every ALID of an rsID is included.
+- Variants the LD Store doesn't hold are left out of the matrix, with a warning giving how many; `og_provenance(m)$absent` lists them.
+- More than 500 variants are split into several Jobs, and the pieces are put back together so that every pair is included.
+
+`ld` works as it does for clumping. Given a data frame of Associations, such as your instruments, `og_ld_matrix()` matches the LD Store by the Analyses' Assigned Ancestry:
+
+```{r ld-matrices-matched, eval = FALSE}
+m <- og_ld_matrix(src, cad)
+og_provenance(m)$ld
+```
+
+```text
+# illustrative
+[1] "hgdp1kgp-v2-EUR-k10"
+```
+
+A plain vector of variants has no ancestry to match, so `ld` is required. Without it, you get the `opengwasr_ld_unmatched` error, listing the LD Stores.
+
+## Using a PLINK Reference {#plink-reference}
+
+A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`) on your own machine, such as the 1000 Genomes files ieugwasr users already have. Pass it as `ld` to clump or build LD matrices locally with PLINK, as ieugwasr's local functions did. The Associations can still come from any Source.
+
+```{r plink-reference, eval = FALSE}
+ref <- og_plink_reference("~/ld/1kg/EUR")
+cad_local <- og_tophits(src, "OGS-00011:GCST003116", ld = ref, r2 = 0.001, kb = 10000)
+m_local <- og_ld_matrix(src, cad_local, ld = ref)
+```
+
+```text
+# illustrative
+ℹ Using PLINK at /usr/local/bin/plink.
+ℹ 2,131 of 2,194 top hits matched the PLINK Reference by rsID; 63 not in it were left out.
+```
+
+- **Variants are matched by rsID,** because PLINK References are usually on GRCh37 while ALIDs are on GRCh38. Variants without an rsID match are left out, and the message says how many. An LD matrix from a PLINK Reference is named `<rsid>_<allele>_<allele>` with the PLINK Reference's alleles, as ieugwasr named it, and the sign of r again refers to the first allele in each name.
+- **`r2` and `kb` are required.** A PLINK Reference has no recorded defaults, so opengwasr won't choose for you. Without them, `og_tophits()` and `og_clump()` stop and ask for both.
+- **PLINK itself** is found from `og_plink_reference(path, plink_bin = )`, then the genetics.binaRies package if it is installed, then your `PATH`. If none has it, the error says how to install it.
+- Provenance works as before: `clump_ld` is the PLINK Reference's path, and `clump_ld_choice` is `"user"`.

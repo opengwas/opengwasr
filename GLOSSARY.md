@@ -1,6 +1,6 @@
 # opengwasr
 
-The R interface to OpenGWAS data: it queries Stores and LD Stores either through the OpenGWAS API or from local copies, and hands the results to analytical tools such as TwoSampleMR. Data terms are taken unchanged from opengwasdb and ogld; this glossary defines them only as far as opengwasr users meet them.
+The R interface to OpenGWAS data: it queries GWAS Stores and LD Stores either through the OpenGWAS API or from local copies, and hands the results to analytical tools such as TwoSampleMR. Data terms are taken unchanged from opengwasdb and ogld, and terms that cross repositories from og-dev-hub's `CONTEXT.md`; this glossary defines them only as far as opengwasr users meet them.
 
 ## Data (from opengwasdb and ogld)
 
@@ -12,17 +12,29 @@ _Avoid_: GWAS, study, dataset, GWAS id
 The statistics linking one Variant to one Analysis.
 _Avoid_: hit, result, row
 
-**Store**:
-A self-contained distribution unit holding one or more Analyses.
-_Avoid_: batch, database, dataset
+**GWAS Store**:
+Short for OpenGWAS GWAS Store: a published, versioned collection of harmonised GWAS summary statistics holding one or more Analyses, with an `OGS-*` id (opengwasdb's "Store").
+_Avoid_: bare "Store", batch, database, dataset
 
 **Store Release**:
-An immutable, published version of a Store; every Association a user receives comes from exactly one.
+An immutable, published version of a GWAS Store; every Association a user receives comes from exactly one.
 _Avoid_: version, snapshot
 
 **Stored Effect Scale**:
 The scale an Analysis's effects are expressed on: SD units for continuous traits, log odds for binary ones.
 _Avoid_: units, original scale
+
+**ALID**:
+A variant's identity, `chromosome:position:A1:A2` on GRCh38: alleles of one length in alphabetical order, an indel's reference allele first. `A1` is the effect allele.
+_Avoid_: SNP id, variant id, chrpos
+
+**Rho Matrix**:
+The null correlation (sample overlap times phenotypic correlation) between every pair of Analyses in a GWAS Store with a Dense Layout.
+_Avoid_: genetic correlation, overlap matrix
+
+**Indexed Variant Subset**:
+A named, standard set of variants, such as HapMap3, at which a GWAS Store holds every Analysis's Associations for fast extraction.
+_Avoid_: SNP list, projection
 
 **Reference-Completed**:
 Describes a Store Release that, beyond the Associations its sources reported, holds Imputed Associations for the variants they did not report.
@@ -33,8 +45,16 @@ Whether an Association is Observed (reported by the source), Imputed (added by R
 _Avoid_: proxy, source flag
 
 **LD Store**:
-A distribution unit of linkage-disequilibrium reference data for one ancestry, used for clumping, proxies and LD matrices.
-_Avoid_: LD panel, LD reference, bfile
+Short for OpenGWAS LD Store: the published LD of one reference panel of one ancestry on one Reference Assembly, used for clumping, LD Proxies and LD matrices. Not a kind of GWAS Store.
+_Avoid_: bare "Store", LD panel, LD reference, bfile
+
+**Far Threshold** (`t_far`):
+The r² an LD Store's pairs 3 to 10 Mb apart must reach for it to hold their r; below it, it knows only that r² is below `t_far`.
+_Avoid_: r² threshold, clumping threshold (both name a request's `r2`)
+
+**LD Proxy**:
+A variant in LD with a given variant, found by looking it up in an LD Store. opengwasr never substitutes one's Association for a missing Association.
+_Avoid_: proxy Association
 
 **Assigned Ancestry**:
 The single super-population label of an Analysis, inferred from its allele frequencies; an Analysis that matches no single ancestry confidently is Unassigned.
@@ -45,7 +65,7 @@ A user-supplied PLINK binary genotype fileset used for LD operations on the user
 _Avoid_: bfile, LD Store, LD panel
 
 **LD Reference Panel**:
-opengwasdb's internal LD data used to complete Stores at build time; never queried by opengwasr users.
+opengwasdb's internal LD data used to complete GWAS Stores at build time; never queried by opengwasr users.
 _Avoid_: LD Store
 
 ## Access
@@ -56,6 +76,10 @@ _Avoid_: backend, connection, server
 
 **API Source**:
 The OpenGWAS API, reached over the network, suited to small queries.
+
+**Legacy OpenGWAS**:
+The OpenGWAS service in production today, which ieugwasr calls, until OpenGWAS replaces it.
+_Avoid_: the old API, bare "OpenGWAS" for that service
 
 **Local Source**:
 Store Releases and LD Stores downloaded to the user's own machine, suited to large queries.

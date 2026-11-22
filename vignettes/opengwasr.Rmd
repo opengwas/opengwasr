@@ -107,7 +107,7 @@ Both return a list, so scripts can read the fields. You can have up to 10 Jobs r
 
 ## Finding Analyses {#finding-analyses}
 
-An **Analysis** is one statistical analysis of one trait. Each lives in a **Store**, and is named `<store_id>:<analysis_id>`, such as `OGS-00011:GCST90029007`.
+An **Analysis** is one statistical analysis of one trait. Each lives in a **GWAS Store**, a published collection of harmonised GWAS summary statistics with an `OGS-*` id, and is named `<store_id>:<analysis_id>`, such as `OGS-00011:GCST90029007`.
 
 ### By identifier {#analyses-by-id}
 
@@ -128,7 +128,7 @@ Analyses come back in the order you gave them, one per identifier. The metadata 
 
 ### Legacy OpenGWAS identifiers {#legacy-ids}
 
-Identifiers from the old OpenGWAS API are accepted where they name exactly one Analysis. The `requested_id` column shows what you asked for:
+Identifiers from **Legacy OpenGWAS**, the OpenGWAS service ieugwasr calls, are accepted where they name exactly one Analysis. The `requested_id` column shows what you asked for:
 
 ```{r legacy-ids, eval = FALSE}
 og_analyses(src, c("ukb-b-19953", "ebi-a-GCST003116"))[, c("requested_id", "id", "analysis_label")]
@@ -141,7 +141,7 @@ og_analyses(src, c("ukb-b-19953", "ebi-a-GCST003116"))[, c("requested_id", "id",
  ebi-a-GCST003116  OGS-00011:GCST003116 Coronary artery disease
 ```
 
-An identifier that names no Analysis is an error, with the API's reason. Some OpenGWAS identifier families aren't held by any Store:
+An identifier that names no Analysis is an error, with the API's reason. Some Legacy OpenGWAS identifier families aren't held by any GWAS Store:
 
 ```text
 # illustrative
@@ -150,7 +150,7 @@ Error in `og_analyses()`:
 ✖ ieu-a-2: OpenGWAS batch ieu-a is not held by any Store.
 ```
 
-Some old identifiers now point to a later release of the same analysis. For example, `finn-b-I9_CHD` points to FinnGen release 13, `OGS-00017:finngen-r13-I9_CHD`. opengwasr answers with the successor, and warns you, because its numbers differ from the ones OpenGWAS served:
+Some legacy identifiers now point to a later release of the same analysis. For example, `finn-b-I9_CHD` points to FinnGen release 13, `OGS-00017:finngen-r13-I9_CHD`. opengwasr answers with the successor, and warns you, because its numbers differ from the ones Legacy OpenGWAS served:
 
 ```{r legacy-successor, eval = FALSE}
 og_analyses(src, "finn-b-I9_CHD")[, c("requested_id", "id", "analysis_label")]
@@ -161,13 +161,13 @@ og_analyses(src, "finn-b-I9_CHD")[, c("requested_id", "id", "analysis_label")]
   requested_id                           id                     analysis_label
  finn-b-I9_CHD OGS-00017:finngen-r13-I9_CHD Major coronary heart disease event
 Warning message:
-`finn-b-I9_CHD` now points to a later release of that analysis, "OGS-00017:finngen-r13-I9_CHD", whose numbers differ from the ones OpenGWAS served.
+`finn-b-I9_CHD` now points to a later release of that analysis, "OGS-00017:finngen-r13-I9_CHD", whose numbers differ from the ones Legacy OpenGWAS served.
 ℹ Ask for "OGS-00017:finngen-r13-I9_CHD" by name to silence this warning.
 ```
 
 The warning has class `opengwasr_legacy_successor`, and carries the identifier you gave in `w$requested_id` and the successor in `w$id`. Catch it with `tryCatch()` to stop instead, or muffle it with `withCallingHandlers()`. Every query function that takes Analyses does the same.
 
-If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two Stores:
+If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two GWAS Stores:
 
 ```text
 # illustrative
@@ -178,7 +178,7 @@ Error in `og_analyses()`:
 
 ### Pinning a Store Release {#pinning-releases}
 
-Each Store is published as a series of immutable **Store Releases**. Queries use each Store's latest Store Release unless you pin one with `releases`, which every query function accepts. Give a Store id for its latest Store Release, or `"<store_id>/<release_id>"` for a particular one:
+Each GWAS Store is published as a series of immutable **Store Releases**. Queries use each GWAS Store's latest Store Release unless you pin one with `releases`, which every query function accepts. Give a GWAS Store id, such as `"OGS-00011"`, for its latest Store Release, or `"<store_id>/<release_id>"` for a particular one:
 
 ```{r pinning-releases, eval = FALSE}
 og_analyses(src, "OGS-00011:GCST90029007",
@@ -214,9 +214,21 @@ head(bmi[, c("id", "analysis_label", "sample_size")], 3)
  OGS-00011:GCST90302889 Body mass index      365498
 ```
 
+## Variants are named by ALID {#alids}
+
+opengwasr names every variant by its **ALID**, as the GWAS Stores and LD Stores do. An ALID is `chromosome:position:A1:A2`, such as `16:53767042:C:T`:
+
+- `chromosome` is `1` to `22`, `X`, `Y` or `MT`, with no `chr` prefix.
+- `position` is on GRCh38, one-based, as in a VCF file. An indel is left-aligned, and its position is that of the first base of its alleles.
+- `A1` and `A2` are the two alleles, upper case. When they are the same length (an SNV, or a substitution of several bases), they are in alphabetical order: `C:T`, never `T:C`. When their lengths differ (an indel), the GRCh38 reference allele comes first: the insertion `5:75701728:A:AAAAT`, the deletion `1:827587:GGGGCC:G`. An insertion and a deletion of the same sequence at one position are therefore two different variants.
+- `A1` is the effect allele. Every Association's `effect_allele` is the `A1` of its `alid`, so `beta`, `z` and `eaf` always refer to `A1`, and the sign of an LD r refers to it too.
+- An ALID names exactly two alleles. A site with more alleles appears as several ALIDs at the same position, one per pair of alleles a GWAS Store holds, and one rsID can name several of them.
+
+ALIDs are the same in every GWAS Store and LD Store on GRCh38, so the same variant joins across Analyses, Store Releases and LD. Use `og_variants_rsid()` and `og_variants_chrpos()` ([below](#phewas-regions-variants)) to find the ALIDs for rsIDs or positions.
+
 ## Top hits {#top-hits}
 
-`og_tophits()` returns each Analysis's Associations at or below a p-value `threshold` (default `5e-8`), strongest first. It **clumps them by default**, keeping one variant per independent signal; the [instruments and clumping](instruments-and-clumping.html) vignette explains how. Here, `clump = FALSE` shows every top hit:
+`og_tophits()` returns each Analysis's Associations at or below a p-value `threshold` (default `5e-8`), strongest first. It **clumps them by default**, keeping one variant per independent signal; the [LD operations](ld.html#clumping) vignette explains how. Here, `clump = FALSE` shows every top hit:
 
 ```{r tophits-unclumped, eval = FALSE}
 top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE)
@@ -237,20 +249,20 @@ OGS-00011:GCST003116 has more than 1,000 top hits at p <= 5e-08; only the strong
 ```
 
 - `limit` (default 1,000) caps the top hits returned per Analysis. When it cuts any off, you get the warning above.
-- `threshold` must be one the Store indexes. Each Store indexes `5e-8`, `5e-6` and `5e-4`, and refuses anything looser:
+- `threshold` must be one the GWAS Store indexes. Each GWAS Store indexes `5e-8`, `5e-6` and `5e-4`, and refuses anything looser:
 
 ```text
 # illustrative
 Error in `og_tophits()`:
 ! The API refused `threshold = 0.001`: threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds.
-ℹ Thresholds this Store indexes: 5e-08, 5e-06 and 5e-04.
+ℹ Thresholds this GWAS Store indexes: 5e-08, 5e-06 and 5e-04.
 ```
 
 That error has class `opengwasr_unsupported_threshold`, a kind of `opengwasr_refusal`.
 
 ## Associations {#associations}
 
-`og_associations()` returns the Associations for a set of variants in a set of Analyses: for example, the outcome data for your instruments. Variants can be rsIDs or ALIDs, mixed. An **ALID** is a variant's position on GRCh38 with its two alleles, `chromosome:position:allele:allele`.
+`og_associations()` returns the Associations for a set of variants in a set of Analyses: for example, the outcome data for your instruments. Variants can be rsIDs or [ALIDs](#alids), mixed.
 
 ```{r associations, eval = FALSE}
 assoc <- og_associations(
@@ -263,7 +275,7 @@ assoc[, c("id", "rsid", "alid", "beta", "se", "pval", "association_status")]
 
 ```text
 # illustrative
-ℹ 1 rsID is in none of these Analyses' Stores, so it has no Associations: rs999999999.
+ℹ 1 rsID is in none of these Analyses' GWAS Stores, so it has no Associations: rs999999999.
 
                      id       rsid               alid         beta          se          pval association_status
    OGS-00011:GCST003116 rs34159589 5:75701728:A:AAAAT -0.003017932 0.009841919  7.591169e-01            imputed
@@ -277,14 +289,14 @@ assoc[, c("id", "rsid", "alid", "beta", "se", "pval", "association_status")]
 - An rsID can name several ALIDs, and opengwasr asks for every one of them. It never picks one for you. `rs1421085` names `16:53767042:A:G` and `16:53767042:C:T`; these Analyses hold only the second, which you also asked for by its ALID, so it appears once per Analysis. `rs34159589` names `5:75701728:A:AAAAT` and `5:75701728:AAAAT:AAAATAAAT`; again only the first has Associations here.
 - Every match is returned: if an Analysis held Associations for both ALIDs of an rsID, you would get both.
 - Every Association has both `rsid` and `alid`, so you can join either way.
-- An rsID that no Store holds is reported in a message, never dropped quietly.
+- An rsID that no GWAS Store holds is reported in a message, never dropped quietly.
 - **Imputed Associations are included** (`association_status == "imputed"`). Pass `observed_only = TRUE` to leave them out. See [Imputed Associations](#imputed-associations).
 
 There is no LD-proxy option. Reference-Completed Store Releases already hold an Imputed Association for most variants a source didn't report.
 
 ## PheWAS, regions and variant lookups {#phewas-regions-variants}
 
-`og_phewas()` returns one variant's Associations across Analyses, at p ≤ `threshold` (default `1e-8`). By default it searches every Store; `releases` narrows the search.
+`og_phewas()` returns one variant's Associations across Analyses, at p ≤ `threshold` (default `1e-8`). By default it searches every GWAS Store; `releases` narrows the search.
 
 ```{r phewas, eval = FALSE}
 ph <- og_phewas(src, "rs1421085", releases = c("OGS-00009", "OGS-00011"))
@@ -316,7 +328,7 @@ table(locus$association_status)
       19       85
 ```
 
-`og_variants_rsid()` and `og_variants_chrpos()` translate rsIDs and GRCh38 positions into ALIDs, using the Stores' own variant tables. You get each ALID once for every Store that holds it:
+`og_variants_rsid()` and `og_variants_chrpos()` translate rsIDs and GRCh38 positions into ALIDs, using the GWAS Stores' own variant tables. You get each ALID once for every GWAS Store that holds it:
 
 ```{r variants, eval = FALSE}
 og_variants_rsid(src, "rs34159589", releases = "OGS-00011")
@@ -336,6 +348,24 @@ og_variants_chrpos(src, "16:53767042", releases = "OGS-00011")
 
 Every match is returned: one position can hold several ALIDs, and one rsID can name several.
 
+## Correlation between Analyses: the Rho Matrix {#rho-matrix}
+
+> **Planned.** `og_rho()` needs a Data API endpoint that doesn't exist yet.
+
+Analyses in one GWAS Store often share participants, and their traits can be correlated, so their z-scores are correlated even at variants with no effect on either trait. **Rho** is that correlation under the null: the traits' phenotypic correlation times the Analyses' proportion of sample overlap. A GWAS Store with a Dense Layout can carry a **Rho Matrix**: Rho for every pair of its Analyses, estimated by opengwasdb from their Observed null z-scores. Methods that combine Analyses and must allow for sample overlap, such as multivariable MR or multi-trait analyses, can use it rather than estimate it again.
+
+`og_rho()` will return the whole matrix for a GWAS Store, or the part for the Analyses you choose:
+
+```{r rho-matrix, eval = FALSE}
+rho_all <- og_rho(src, store = "OGS-00009")
+rho <- og_rho(src, analyses = c("OGS-00009:ukb-b-19953", "OGS-00009:ukb-b-2303", "OGS-00009:ukb-b-11842"))
+```
+
+- It returns a symmetric matrix named by Analysis `id`, with 1 on the diagonal. A pair with too few shared null variants to estimate Rho is `NA`.
+- `og_provenance(rho)$n_null` is the matching matrix of how many null variants supported each pair, and `og_provenance(rho)` also gives the settings that produced it, such as the null z threshold.
+- Give `store` for the whole matrix, or `analyses` for part of it. Rho is estimated within one GWAS Store, so all the `analyses` must share one.
+- A GWAS Store without a Rho Matrix is refused, with class `opengwasr_rho_unavailable`, a kind of `opengwasr_refusal`.
+
 ## What the columns mean {#columns}
 
 Every function that returns Associations (`og_tophits()`, `og_associations()`, `og_phewas()`, `og_range()`) returns the same columns:
@@ -343,11 +373,11 @@ Every function that returns Associations (`og_tophits()`, `og_associations()`, `
 | Column | Meaning |
 |---|---|
 | `id` | The Analysis, as `<store_id>:<analysis_id>` |
-| `store_id`, `analysis_id`, `analysis_label` | Its Store, its identifier within the Store, and its trait |
-| `alid`, `rsid`, `chromosome`, `position` | The variant, on GRCh38 |
-| `effect_allele`, `other_allele`, `eaf` | Its alleles, and the effect allele's frequency |
+| `store_id`, `analysis_id`, `analysis_label` | Its GWAS Store, its identifier within the GWAS Store, and its trait |
+| `alid`, `rsid`, `chromosome`, `position` | The variant, on GRCh38 (see [ALIDs](#alids)) |
+| `effect_allele`, `other_allele`, `eaf` | Its alleles (`A1` and `A2` of the ALID), and the effect allele's frequency |
 | `beta`, `se` | The effect of one copy of the effect allele, and its standard error |
-| `z`, `log10_p`, `pval` | The z-score, log10 of the p-value, and the p-value |
+| `z`, `pval` | The z-score and the p-value |
 | `effect_scale` | The scale `beta` and `se` are on: `"sd"`, `"log_or"`, or `"original"` when you ask for `original_units = TRUE` |
 | `n`, `sample_size_kind`, `ncase`, `ncontrol` | Sample size, and what kind of count it is |
 | `association_status` | `"observed"` or `"imputed"` |
@@ -355,22 +385,22 @@ Every function that returns Associations (`og_tophits()`, `og_associations()`, `
 
 ### Effects and p-values {#effects-and-p-values}
 
-The API stores `z`, `se` and `log10_p`. opengwasr adds `beta` = `z * se` and `pval` = `10^log10_p`, the same way everywhere. `log10_p` is negative: −97.6 means p = 10^−97.6.
+`z` and `se` are the GWAS Store's own. opengwasr adds `beta` = `z * se`, and computes `pval` from the p-value the API sends, so it matches the API exactly. All of them are computed the same way everywhere.
 
 ```{r effects-and-p-values, eval = FALSE}
 top <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE, limit = 3)
-top[, c("rsid", "z", "se", "beta", "log10_p", "pval")]
+top[, c("rsid", "z", "se", "beta", "pval")]
 ```
 
 ```text
 # illustrative
-       rsid        z         se        beta   log10_p pval
- rs56094641 -38.5342 0.00196838 -0.07585011 -324.1229    0
- rs11642015 -38.5327 0.00196838 -0.07584705 -324.0969    0
- rs62048402  38.5273 0.00196838  0.07583645 -324.0067    0
+       rsid        z         se        beta pval
+ rs56094641 -38.5342 0.00196838 -0.07585011    0
+ rs11642015 -38.5327 0.00196838 -0.07584705    0
+ rs62048402  38.5273 0.00196838  0.07583645    0
 ```
 
-When `log10_p` is below about −323, `pval` underflows to 0, because R can't represent a smaller number. `log10_p` keeps the value, so sort or filter on `log10_p` when the strongest signals matter.
+When |z| is above about 38.5, the p-value is smaller than R can represent (about 1e-323), so `pval` underflows to 0. `z` stays exact, so rank or filter the strongest signals by `abs(z)`, not by `pval`.
 
 ### Effect scale and original units {#effect-scale}
 
@@ -412,7 +442,7 @@ That error has class `opengwasr_original_units_unavailable`, a kind of `opengwas
 
 ### Sample size {#sample-size}
 
-`og_analyses()` returns the API's own metadata names (`sample_size`, `n_cases`, `n_controls`). Associations carry the names MR methods expect: `n`, `ncase` and `ncontrol`. `n` is the per-Association sample size where the Store holds one, and otherwise the Analysis's `sample_size`. `sample_size_kind` says what kind of count it is, so an effective N is never mistaken for a count of participants:
+`og_analyses()` returns the API's own metadata names (`sample_size`, `n_cases`, `n_controls`). Associations carry the names MR methods expect: `n`, `ncase` and `ncontrol`. `n` is the per-Association sample size where the GWAS Store holds one, and otherwise the Analysis's `sample_size`. `sample_size_kind` says what kind of count it is, so an effective N is never mistaken for a count of participants:
 
 - `"total"`: participants in the Analysis.
 - `"case_control"`: cases plus controls. `ncase` and `ncontrol` give each.
@@ -454,7 +484,7 @@ Including the Imputed Associations finds 999 of the 1,000 variants in the outcom
 
 ### Provenance {#provenance}
 
-Every Association carries the `store_id` and `release_id` it came from, and clumped data frames carry their clumping in columns too (see [clumping provenance](instruments-and-clumping.html#clumping-provenance)). These columns are the provenance that travels with each Association.
+Every Association carries the `store_id` and `release_id` it came from, and clumped data frames carry their clumping in columns too (see [clumping provenance](ld.html#clumping-provenance)). These columns are the provenance that travels with each Association.
 
 `og_provenance(x)` gives the details of the call that produced `x`, which no single Association can hold:
 
@@ -511,4 +541,4 @@ Skipping: ieu-a-2
 
 Each condition carries the details as fields, such as `e$ids` here, or the API's own error code and message as `e$api_error` and `e$api_message`.
 
-One warning is classed too: `opengwasr_legacy_successor`, when an old identifier is answered by a later release of its analysis (see [Legacy OpenGWAS identifiers](#legacy-ids)). It is a warning rather than an error because opengwasr does answer, and says which Analysis answered. It doesn't have class `opengwasr_error`.
+One warning is classed too: `opengwasr_legacy_successor`, when a legacy identifier is answered by a later release of its analysis (see [Legacy OpenGWAS identifiers](#legacy-ids)). It is a warning rather than an error because opengwasr does answer, and says which Analysis answered. It doesn't have class `opengwasr_error`.

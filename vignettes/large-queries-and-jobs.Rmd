@@ -172,9 +172,28 @@ Error in `og_job_result()`:
 
 The error has class `opengwasr_result_expired`.
 
-## Too large: download the Store {#too-large}
+## Standard variant subsets, such as HapMap3 {#variant-subsets}
 
-Separately from its shape limits, the API refuses a query it estimates would cost more than one Job may use. opengwasr doesn't split such a query to get round the limit. A query that large belongs on a local copy of the Store, not on the shared API. None of the queries in these vignettes comes near the limit. This is what the refusal looks like, for a hypothetical query over many large Analyses:
+> **Planned.** `og_variant_subset()` needs Data API support that doesn't exist yet.
+
+LD score regression and similar methods need an Analysis's Associations at a standard set of variants, such as the roughly 1.2 million HapMap3 variants, rather than its top hits or one region. A GWAS Store can hold such a set as an **Indexed Variant Subset**: every Analysis's Associations at those variants, stored so that one Analysis's can be read quickly. `og_variant_subset()` will fetch them:
+
+```{r variant-subsets, eval = FALSE}
+hm3 <- og_variant_subset(src, "OGS-00011:GCST90029007", subset = "hm3")
+```
+
+- It returns the same columns as `og_associations()` ([What the columns mean](opengwasr.html#columns)), one per variant of the subset the Analysis holds, and takes `observed_only`, `original_units` and `releases` as the other query functions do.
+- Each Analysis is fetched separately, so several Analyses run as several Jobs, a few at a time.
+- The subset's name is recorded in `og_provenance()`.
+- An Analysis whose GWAS Store holds no such subset is refused, with class `opengwasr_subset_unavailable`, a kind of `opengwasr_refusal`.
+
+It is a function of its own, not `og_associations(src, variants = <the HapMap3 list>, analyses)`, because the API answers it from the GWAS Store's named subset rather than from a list of variants you send. Sent to `og_associations()`, 1.2 million variants would be split into some 1,200 Jobs per Analysis.
+
+Still to be decided: whether one Job may return a whole subset, over the 100,000 Associations it otherwise holds. If not, opengwasr splits the subset into several Jobs and puts it back together, as it does other large queries.
+
+## Too large: download the Store Release {#too-large}
+
+Separately from its shape limits, the API refuses a query it estimates would cost more than one Job may use. opengwasr doesn't split such a query to get round the limit. A query that large belongs on a local copy of the Store Release, not on the shared API. None of the queries in these vignettes comes near the limit. This is what the refusal looks like, for a hypothetical query over many large Analyses:
 
 ```{r too-large, eval = FALSE}
 region <- tryCatch(

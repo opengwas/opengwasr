@@ -6,6 +6,6 @@ articles:
   navbar: Articles
   contents:
   - opengwasr
-  - instruments-and-clumping
+  - ld
   - large-queries-and-jobs
   - migrating-from-ieugwasr

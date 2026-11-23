@@ -193,6 +193,8 @@ test_that("the deadline starts with the call: looking up the Analyses counts", {
 })
 
 test_that("a request that runs out of time is the call's timeout, not an unreachable API", {
+  # A transport test: curl's own timeout is only real over a socket.
+  fake <- local_fake_api(n_synthetic = 1, socket = TRUE, env = environment())
   fake_set(fake, "delay_ms", "100", "0")
   src <- fake_source(fake, timeout = 0.15)
   started <- proc.time()[["elapsed"]]

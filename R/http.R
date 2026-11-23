@@ -1,10 +1,16 @@
 # Building and performing an HTTP request, and mapping every API error response to a classed
 # condition. The one request builder and the one error mapper.
 
+# The user agent, looked up once per session (`packageVersion()` reads the DESCRIPTION file each time).
+http_state <- new.env()
+user_agent_string <- function() {
+  http_state$user_agent <- http_state$user_agent %||% paste0("opengwasr/", utils::packageVersion("opengwasr"))
+}
+
 api_request <- function(src, path, query = NULL, body = NULL, timeout = NULL, method = NULL) {
   req <- httr2::request(src$url) |>
     httr2::req_url_path_append(path) |>
-    httr2::req_user_agent(paste0("opengwasr/", utils::packageVersion("opengwasr"))) |>
+    httr2::req_user_agent(user_agent_string()) |>
     httr2::req_timeout(min(src$timeout, timeout %||% Inf)) |>
     httr2::req_error(is_error = function(resp) FALSE)
   if (!is.null(method)) req <- httr2::req_method(req, method)

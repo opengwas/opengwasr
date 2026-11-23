@@ -456,3 +456,21 @@ test_that("og_clump(): Associations of mixed or Unassigned ancestry are refused 
   expect_equal(unique(kept$clump_ld_choice), "ancestry_default")
   expect_true(all(twice$id[twice$alid %in% kept$alid] %in% kept$id))
 })
+
+test_that("the default clumping r2 never rounds below the LD Store's t_far in a request body", {
+  t_far <- 0.03490787269681742
+  r2 <- clump_settings(list(t_far = t_far, far_bp = 1e7), NULL, NULL)$r2
+  expect_gte(r2, t_far)
+  expect_identical(signif(r2, 15), r2)
+})
+
+test_api("an explicit r2 equal to an LD Store's t_far is sent at or above it, in clumping and in proxies", {
+  t_far <- 0.03490787269681742  # the dev Data API's AFR t_far: 17 digits, which 15 would round down
+  hits <- data.frame(id = cad, alid = pair, z = c(5, 4))
+  og_clump(src, hits, ld = eur, r2 = t_far, kb = 10000)
+  og_ld_proxies(src, snv, ld = eur, r2 = t_far, kb = 10000)
+  for (endpoint in c("/api/ld/clump", "/api/ld/proxies")) {
+    sent <- ld_bodies(endpoint)
+    expect_gte(sent[[length(sent)]]$r2, t_far)
+  }
+}, live = FALSE)

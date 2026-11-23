@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 5,
+        "total_rows": 5,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 935,
+        "total_bytes": 935,
+        "sha256": "6a0889e7abebd5de56503046bf69baf23eb560e35dc24e628f6b0f80a8689c85",
+        "page_sha256": [
+            "6a0889e7abebd5de56503046bf69baf23eb560e35dc24e628f6b0f80a8689c85"
+        ],
+        "retention_expires_at": "2026-11-23T09:55:47.335973+00:00",
+        "page_encoding": "text",
+        "job_id": "16e02e41",
+        "fingerprint": "sha256:dccaae9f63dc2e450a6c7a96632ca24dd77a5194b938bb6d7b9c347911464d3a",
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "releases": [
+            {
+                "store_id": "OGS-00011",
+                "release_id": "OGS-00011-completed"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 5,
+    "byte_count": 935,
+    "sha256": "6a0889e7abebd5de56503046bf69baf23eb560e35dc24e628f6b0f80a8689c85",
+    "ndjson": "{\"alid\":\"5:75701728:A:AAAAT\",\"chromosome\":\"5\",\"effect_allele\":\"A\",\"other_allele\":\"AAAAT\",\"position\":75701728,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs34159589\",\"store_id\":\"OGS-00011\"}\n{\"alid\":\"5:75701728:AAAAT:AAAATAAAT\",\"chromosome\":\"5\",\"effect_allele\":\"AAAAT\",\"other_allele\":\"AAAATAAAT\",\"position\":75701728,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs34159589\",\"store_id\":\"OGS-00011\"}\n{\"alid\":\"16:53767042:A:G\",\"chromosome\":\"16\",\"effect_allele\":\"A\",\"other_allele\":\"G\",\"position\":53767042,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs1421085\",\"store_id\":\"OGS-00011\"}\n{\"alid\":\"16:53767042:C:T\",\"chromosome\":\"16\",\"effect_allele\":\"C\",\"other_allele\":\"T\",\"position\":53767042,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs1421085\",\"store_id\":\"OGS-00011\"}\n{\"alid\":\"18:60161902:C:T\",\"chromosome\":\"18\",\"effect_allele\":\"C\",\"other_allele\":\"T\",\"position\":60161902,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs6567160\",\"store_id\":\"OGS-00011\"}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

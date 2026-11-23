@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 2,
+        "total_rows": 2,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 392,
+        "total_bytes": 392,
+        "sha256": "21f2ae6cbaf921c0518ddab1c7a6bb0c182eb82fa21fbfbf6fa1e04328f5c405",
+        "page_sha256": [
+            "21f2ae6cbaf921c0518ddab1c7a6bb0c182eb82fa21fbfbf6fa1e04328f5c405"
+        ],
+        "retention_expires_at": "2026-11-23T09:55:55.845164+00:00",
+        "page_encoding": "text",
+        "job_id": "d23f9ff1",
+        "fingerprint": "sha256:9059ce2715d29bde975eac0425b840cf5fad208844d061b12bfcc23946ce0057",
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "releases": [
+            {
+                "store_id": "OGS-00011",
+                "release_id": "OGS-00011-completed"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 2,
+    "byte_count": 392,
+    "sha256": "21f2ae6cbaf921c0518ddab1c7a6bb0c182eb82fa21fbfbf6fa1e04328f5c405",
+    "ndjson": "{\"alid\":\"5:75701728:A:AAAAT\",\"chromosome\":\"5\",\"effect_allele\":\"A\",\"other_allele\":\"AAAAT\",\"position\":75701728,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs34159589\",\"store_id\":\"OGS-00011\"}\n{\"alid\":\"5:75701728:AAAAT:AAAATAAAT\",\"chromosome\":\"5\",\"effect_allele\":\"AAAAT\",\"other_allele\":\"AAAATAAAT\",\"position\":75701728,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs34159589\",\"store_id\":\"OGS-00011\"}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

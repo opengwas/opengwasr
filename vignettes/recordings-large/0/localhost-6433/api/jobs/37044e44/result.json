@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 5,
+        "total_rows": 5,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 1894,
+        "total_bytes": 1894,
+        "sha256": "b5bcd604969bfe81efabaf7008abc26de6ea9dc014a22b70a749ddb178c4a1fe",
+        "page_sha256": [
+            "b5bcd604969bfe81efabaf7008abc26de6ea9dc014a22b70a749ddb178c4a1fe"
+        ],
+        "retention_expires_at": "2026-11-23T09:57:27.480400+00:00",
+        "page_encoding": "text",
+        "job_id": "37044e44",
+        "fingerprint": "sha256:5de2a3272155ee652676aa70eb8537b3a18dbbd9740ee0f3cadc843dd9de4b2a",
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "releases": [
+            {
+                "store_id": "OGS-00011",
+                "release_id": "OGS-00011-completed"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 5,
+    "byte_count": 1894,
+    "sha256": "b5bcd604969bfe81efabaf7008abc26de6ea9dc014a22b70a749ddb178c4a1fe",
+    "ndjson": "{\"alid\":\"16:53772541:A:G\",\"analysis_id\":\"GCST90029007\",\"analysis_label\":\"Body mass index\",\"association_status\":\"observed\",\"chromosome\":\"16\",\"eaf\":0.5955849885940552,\"effect_allele\":\"A\",\"log10_p\":-324.12289271691776,\"other_allele\":\"G\",\"position\":53772541,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs56094641\",\"se\":0.0019683837890625,\"store_id\":\"OGS-00011\",\"z\":-38.53420639038086}\n{\"alid\":\"16:53768582:C:T\",\"analysis_id\":\"GCST90029007\",\"analysis_label\":\"Body mass index\",\"association_status\":\"observed\",\"chromosome\":\"16\",\"eaf\":0.5963540077209473,\"effect_allele\":\"C\",\"log10_p\":-324.09689300916597,\"other_allele\":\"T\",\"position\":53768582,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs11642015\",\"se\":0.0019683837890625,\"store_id\":\"OGS-00011\",\"z\":-38.53265380859375}\n{\"alid\":\"16:53769311:A:G\",\"analysis_id\":\"GCST90029007\",\"analysis_label\":\"Body mass index\",\"association_status\":\"observed\",\"chromosome\":\"16\",\"eaf\":0.4036250114440918,\"effect_allele\":\"A\",\"log10_p\":-324.0067006594099,\"other_allele\":\"G\",\"position\":53769311,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs62048402\",\"se\":0.0019683837890625,\"store_id\":\"OGS-00011\",\"z\":38.52726745605469}\n{\"alid\":\"16:53767042:C:T\",\"analysis_id\":\"GCST90029007\",\"analysis_label\":\"Body mass index\",\"association_status\":\"observed\",\"chromosome\":\"16\",\"eaf\":0.40350449085235596,\"effect_allele\":\"C\",\"log10_p\":-323.98913633388884,\"other_allele\":\"T\",\"position\":53767042,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs1421085\",\"se\":0.0019683837890625,\"store_id\":\"OGS-00011\",\"z\":38.52621841430664}\n{\"alid\":\"16:53769662:A:T\",\"analysis_id\":\"GCST90029007\",\"analysis_label\":\"Body mass index\",\"association_status\":\"observed\",\"chromosome\":\"16\",\"eaf\":0.4036940038204193,\"effect_allele\":\"A\",\"log10_p\":-323.9131362122184,\"other_allele\":\"T\",\"position\":53769662,\"release_id\":\"OGS-00011-completed\",\"rsid\":\"rs1558902\",\"se\":0.0019683837890625,\"store_id\":\"OGS-00011\",\"z\":38.52167892456055}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

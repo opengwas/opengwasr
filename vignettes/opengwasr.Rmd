@@ -11,7 +11,9 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** The sections on credentials, finding Analyses, ALIDs for your own data, top hits (unclumped), Associations (including Imputed ones), PheWAS, ranges and variant lookups, effects and p-values, effect scale and original units, sample size, provenance and errors run: their output is real (the API ones replayed from responses recorded against the development Data API on 22 November 2026). The other sections fix how opengwasr will be used, before their functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them. The blocks are replaced by recorded output as each function is implemented.
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, and the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue).
+>
+> *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
 The examples follow one Mendelian randomization question: does body mass index (BMI) affect coronary artery disease (CAD)?
 
@@ -65,6 +67,8 @@ src <- og_api()
 ```
 
 Without a key, `og_api()` stops straight away:
+
+This is illustrative, not recorded: the vignettes always run with a key set.
 
 ```text
 # illustrative
@@ -122,7 +126,7 @@ og_analyses(src, "finn-b-I9_CHD")[, c("requested_id", "id", "analysis_label")]
 
 The warning has class `opengwasr_legacy_successor`, and carries the identifier you gave in `w$requested_id` and the successor in `w$id`. Catch it with `tryCatch()` to stop instead, or muffle it with `withCallingHandlers()`. Every query function that takes Analyses does the same.
 
-If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two GWAS Stores:
+If an identifier could name more than one Analysis, opengwasr stops and lists them, with class `opengwasr_ambiguous_analysis`. No identifier is ambiguous in today's catalogue. This is what the error would look like, for a hypothetical bare `GCST90000001` held by two GWAS Stores (illustrative, not recorded, because there is nothing to provoke it with):
 
 ```text
 # illustrative

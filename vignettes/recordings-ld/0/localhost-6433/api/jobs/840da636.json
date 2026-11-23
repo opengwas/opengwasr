@@ -1,0 +1,74 @@
+{
+    "job_id": "840da636",
+    "query_hash": "sha256:0f292f15fda03e8ac2971a90451b0a758cf76ed67e74800fee93fb67f43ce6f0",
+    "status": "succeeded",
+    "endpoint": "/api/ld/clump",
+    "release_id": "ld:hgdp1kgp-v2-EUR-k10",
+    "created_at": "2026-11-23T09:55:30.034113+00:00",
+    "started_at": "2026-11-23T09:55:30.080971+00:00",
+    "completed_at": "2026-11-23T09:55:31.107800+00:00",
+    "expires_at": "2026-11-23T10:55:31.104094+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "ld:hgdp1kgp-v2-EUR-k10",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 198,
+            "total_rows": 198,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 23641,
+            "total_bytes": 23641,
+            "sha256": "a994911bdf41e737ad22f63d31b5862a9bb6e1fafc1a6d0d4136a3eb3c568389",
+            "page_sha256": [
+                "a994911bdf41e737ad22f63d31b5862a9bb6e1fafc1a6d0d4136a3eb3c568389"
+            ],
+            "retention_expires_at": "2026-11-23T10:55:31.104094+00:00",
+            "page_encoding": "text",
+            "job_id": "840da636",
+            "fingerprint": "sha256:0f292f15fda03e8ac2971a90451b0a758cf76ed67e74800fee93fb67f43ce6f0",
+            "release_id": "ld:hgdp1kgp-v2-EUR-k10",
+            "releases": [
+                {
+                    "store_id": "hgdp1kgp-v2-EUR-k10",
+                    "release_id": "hgdp1kgp-v2-EUR-k10"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/840da636/result",
+        "metadata": {
+            "store": "hgdp1kgp-v2-EUR-k10",
+            "ancestry": "EUR",
+            "t_far": 0.0319,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "absent": [
+
+            ],
+            "r2": 0.0319,
+            "kb": 10000,
+            "window_bp": 10000000,
+            "leads": 195,
+            "variants": 198
+        }
+    },
+    "compute": {
+        "cpu_seconds": 0.9851,
+        "run_seconds": 1.015,
+        "queue_seconds": 0.0469,
+        "attempts": 1,
+        "rows": 198,
+        "bytes": 23641
+    },
+    "status_url": "/api/jobs/840da636",
+    "poll_after_seconds": 0
+}

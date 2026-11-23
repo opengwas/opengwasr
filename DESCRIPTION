@@ -9,7 +9,7 @@ Description: Query OpenGWAS Analyses, Associations, top hits and linkage
     disequilibrium (LD), either through the OpenGWAS API or from Store
     Releases downloaded to a local machine.
 License: GPL-3
-URL: https://github.com/opengwas/opengwasr
+URL: https://opengwas.github.io/opengwasr/, https://github.com/opengwas/opengwasr
 BugReports: https://github.com/opengwas/opengwasr/issues
 Depends:
     R (>= 4.1.0)

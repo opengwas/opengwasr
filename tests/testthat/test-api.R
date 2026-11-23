@@ -307,3 +307,16 @@ test_api("an unknown Store Release surfaces with the API's message, as opengwasr
   expect_equal(c(conditionMessage(e), e$api_error), c(said$message, said$error))
   expect_equal(e$status, 404L)
 })
+
+test_that("JSON bodies are the same text whatever the last ulp of a number", {
+  src <- fake_source(fake)
+  body_text <- function(x) {
+    req <- api_request(src, "api/x", body = list(threshold = x))
+    rawToChar(httr2::req_dry_run(req, quiet = TRUE, redact_headers = TRUE)$body)
+  }
+  low <- 1e-50 * (1 - 2^-52)
+  expect_false(identical(low, 1e-50))
+  expect_identical(body_text(low), body_text(1e-50))
+  expect_match(body_text(1e-50), "1e-50", fixed = TRUE)
+  expect_identical(body_text(0.001 * (1 + 2^-52)), body_text(0.001))
+})

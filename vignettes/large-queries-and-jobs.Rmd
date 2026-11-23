@@ -9,7 +9,9 @@ vignette: >
 
 The OpenGWAS API answers every data query as a **Job**: it queues the query fairly between users, runs it, and keeps the answer for you to collect in pages. opengwasr's query functions hide this. They submit, wait and collect, and return a data frame. This vignette is for when you want to know what happens underneath, or to take control of it: big queries, many queries at once, long waits, interruptions, and queries too large for the API.
 
-> **Status.** The chunks that run, from responses recorded against the development Data API on 22 November 2026, are the setup, splitting, waiting, Job-function, reattaching and cancelling chunks. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026, shaped the way opengwasr will return them.
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026. The grey blocks marked `# illustrative` can't be produced on demand, and say why: the interactive progress display, the timeout and interrupt errors, a busy API, an expired result, and a query that is too large. The planned `og_variant_subset()` needs Data API support that doesn't exist yet.
+>
+> *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
 ```{r recordings, include = FALSE}
 source("recordings.R")
@@ -60,6 +62,8 @@ opengwasr splits a query only to fit these shapes. It never splits one to get ro
 
 While a Job is queued or running, opengwasr shows where it is:
 
+The Job's states can't be caught in a recording, so this is illustrative:
+
 ```text
 # illustrative
 ⠙ Job a1513652 queued (position 3) | 12s
@@ -75,6 +79,8 @@ Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by th
 src_quick <- og_api(timeout = 60)
 top <- og_tophits(src_quick, "OGS-00011:GCST90029007", clump = FALSE, limit = 5)
 ```
+
+The timeout can't be provoked on demand, so this error is illustrative, not recorded:
 
 ```text
 # illustrative
@@ -123,7 +129,7 @@ Any query function works the same way. It does its checks and lookups of Analyse
 
 ## Interrupting and reattaching {#interrupting}
 
-Pressing Esc or Ctrl-C while opengwasr waits doesn't cancel the Job. It stops waiting, with an error of class `opengwasr_interrupted` that carries the Job ids (`e$job_ids`) and the `og_jobs` object (`e$jobs`) to collect them with. The interrupt itself can't be shown here:
+Pressing Esc or Ctrl-C while opengwasr waits doesn't cancel the Job. It stops waiting, with an error of class `opengwasr_interrupted` that carries the Job ids (`e$job_ids`) and the `og_jobs` object (`e$jobs`) to collect them with. The interrupt itself can't be shown here (illustrative, not recorded):
 
 ```text
 # illustrative
@@ -156,7 +162,7 @@ A Job that has already finished is returned as it is, and the message says so.
 
 > Illustrative: shown as text, since a result can't be made to expire on demand.
 
-The API keeps a finished Job's result for an hour if nobody reads it, and for five minutes after it has been read in full. opengwasr reads every page in one go, so this only matters when you collect a Job yourself, late:
+The API keeps a finished Job's result for an hour if nobody reads it, and for five minutes after it has been read in full. opengwasr reads every page in one go, so this only matters when you collect a Job yourself, late. This is illustrative, not recorded:
 
 ```text
 # illustrative

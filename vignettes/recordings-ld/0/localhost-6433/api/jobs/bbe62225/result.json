@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 5,
+        "total_rows": 5,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 597,
+        "total_bytes": 597,
+        "sha256": "ac6f5f22a1668787bb158b2d52b23fb4ffa397d74343cfa2a7676ee7f15a783f",
+        "page_sha256": [
+            "ac6f5f22a1668787bb158b2d52b23fb4ffa397d74343cfa2a7676ee7f15a783f"
+        ],
+        "retention_expires_at": "2026-11-23T09:56:22.282060+00:00",
+        "page_encoding": "text",
+        "job_id": "bbe62225",
+        "fingerprint": "sha256:0a330688dd6821f307566391a7a57fff4c113a83ccaef25c9a3ed9d09f1990d9",
+        "release_id": "ld:hgdp1kgp-v2-EUR-k10",
+        "releases": [
+            {
+                "store_id": "hgdp1kgp-v2-EUR-k10",
+                "release_id": "hgdp1kgp-v2-EUR-k10"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 5,
+    "byte_count": 597,
+    "sha256": "ac6f5f22a1668787bb158b2d52b23fb4ffa397d74343cfa2a7676ee7f15a783f",
+    "ndjson": "{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"7:105919152:C:T\",\"chromosome\":\"7\",\"position\":105919152,\"r\":[1.0,-0.18199608610567514,null,null,null]}\n{\"a1\":\"A\",\"a2\":\"G\",\"alid\":\"7:105920689:A:G\",\"chromosome\":\"7\",\"position\":105920689,\"r\":[-0.18199608610567514,1.0,null,null,null]}\n{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"7:110998200:C:T\",\"chromosome\":\"7\",\"position\":110998200,\"r\":[null,null,1.0,null,null]}\n{\"a1\":\"A\",\"a2\":\"G\",\"alid\":\"7:117559403:A:G\",\"chromosome\":\"7\",\"position\":117559403,\"r\":[null,null,null,1.0,null]}\n{\"a1\":\"C\",\"a2\":\"T\",\"alid\":\"16:53767042:C:T\",\"chromosome\":\"16\",\"position\":53767042,\"r\":[null,null,null,null,1.0]}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

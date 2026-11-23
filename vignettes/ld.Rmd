@@ -11,7 +11,9 @@ Linkage disequilibrium (LD) is how strongly two variants are inherited together,
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** The sections on LD Stores, choosing the LD, LD matrices, LD proxies and clumping run: their output is real (replayed from responses recorded against the development Data API on 22 and 23 November 2026). The PLINK Reference works, but its section isn't run here: building the vignette would need a PLINK binary and a genotype fileset, which CRAN and CI don't have. Its code is shown but not evaluated, and its grey output blocks marked `# illustrative` are shaped the way opengwasr returns them (the API isn't involved in them). The package's tests run it against a small committed fileset.
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the PLINK Reference section, which is shown but not evaluated: building the vignette would need a PLINK binary and a genotype fileset, which CRAN and CI don't have. Its grey output blocks marked `# illustrative` are shaped the way opengwasr returns them (the API isn't involved in them). The package's tests run it against a small committed fileset.
+>
+> *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
 ```{r credentials, include = FALSE}
 source("recordings.R")

@@ -456,3 +456,10 @@ test_that("og_clump(): Associations of mixed or Unassigned ancestry are refused 
   expect_equal(unique(kept$clump_ld_choice), "ancestry_default")
   expect_true(all(twice$id[twice$alid %in% kept$alid] %in% kept$id))
 })
+
+test_that("the default clumping r2 never rounds below the LD Store's t_far in a request body", {
+  t_far <- 0.03490787269681742
+  r2 <- clump_settings(list(t_far = t_far, far_bp = 1e7), NULL, NULL)$r2
+  expect_gte(r2, t_far)
+  expect_identical(signif(r2, 15), r2)
+})

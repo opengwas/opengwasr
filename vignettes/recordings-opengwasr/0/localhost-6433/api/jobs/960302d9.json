@@ -1,0 +1,67 @@
+{
+    "job_id": "960302d9",
+    "query_hash": "sha256:0c90ea804bb9d678ef9c493b96a0af98ad471f18db23fd4e9b383f5d8816f496",
+    "status": "succeeded",
+    "endpoint": "/api/phewas",
+    "release_id": "OGS-00011/OGS-00011-completed",
+    "created_at": "2026-11-23T09:50:50.542643+00:00",
+    "started_at": "2026-11-23T09:50:50.558764+00:00",
+    "completed_at": "2026-11-23T09:50:51.015652+00:00",
+    "expires_at": "2026-11-23T09:55:51.607887+00:00",
+    "retrieved_at": "2026-11-23T09:50:51.607887+00:00",
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 0,
+            "total_rows": 0,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 0,
+            "total_bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "page_sha256": [
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            ],
+            "retention_expires_at": "2026-11-23T09:55:51.607887+00:00",
+            "page_encoding": "text",
+            "job_id": "960302d9",
+            "fingerprint": "sha256:0c90ea804bb9d678ef9c493b96a0af98ad471f18db23fd4e9b383f5d8816f496",
+            "release_id": "OGS-00011/OGS-00011-completed",
+            "releases": [
+                {
+                    "store_id": "OGS-00011",
+                    "release_id": "OGS-00011-completed"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/960302d9/result",
+        "metadata": {
+            "variant": "16:53767042:A:G",
+            "threshold": 1e-50,
+            "observed_only": false,
+            "total": 0,
+            "returned": 0,
+            "truncated": false
+        }
+    },
+    "compute": {
+        "cpu_seconds": 0.4516,
+        "run_seconds": 0.4411,
+        "queue_seconds": 0.0161,
+        "attempts": 1,
+        "rows": 0,
+        "bytes": 0
+    },
+    "status_url": "/api/jobs/960302d9",
+    "poll_after_seconds": 0
+}

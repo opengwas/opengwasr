@@ -1,0 +1,20 @@
+{
+    "job_id": "da27e109",
+    "query_hash": "sha256:d89e2e6c5ece111d06c9c70c4cd080726d926d6bc4767e4a0262acf823cf5892",
+    "status": "cancelled",
+    "endpoint": "/api/tophits",
+    "release_id": "OGS-00011/OGS-00011-completed",
+    "created_at": "2026-11-23T09:55:39.494803+00:00",
+    "started_at": null,
+    "completed_at": "2026-11-23T09:55:39.515222+00:00",
+    "expires_at": "2026-11-24T09:55:39.494803+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 0,
+    "error": null,
+    "error_kind": null,
+    "result": null,
+    "compute": null,
+    "status_url": "/api/jobs/da27e109",
+    "poll_after_seconds": 0
+}

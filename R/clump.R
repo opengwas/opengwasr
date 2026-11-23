@@ -114,7 +114,16 @@ check_clump_settings <- function(r2, kb, call = rlang::caller_env()) {
 
 # The r² and window sent: the user's, else the LD Store's own `t_far` and far window.
 clump_settings <- function(store, r2, kb) {
-  list(r2 = r2 %||% store$t_far, kb = kb %||% (store$far_bp / 1000))
+  list(r2 = r2 %||% round_up_15(store$t_far), kb = kb %||% (store$far_bp / 1000))
+}
+
+# Request bodies carry 15 significant digits (R/http.R). The LD Store's own `t_far` must not round
+# down in transit, or the API would refuse it as below `t_far`: send it rounded up to 15 digits.
+round_up_15 <- function(x) {
+  if (!is.numeric(x) || length(x) != 1 || is.na(x) || x == 0) return(x)
+  y <- signif(x, 15)
+  if (y < x) y <- y + 10^(floor(log10(abs(x))) - 14)
+  signif(y, 15)
 }
 
 # The clumping provenance columns, after the Association columns (vignette: Clumping provenance).

@@ -16,7 +16,12 @@ api_request <- function(src, path, query = NULL, body = NULL, timeout = NULL, me
   if (!is.null(method)) req <- httr2::req_method(req, method)
   req <- api_authorise(src, req)
   if (length(query) > 0) req <- httr2::req_url_query(req, !!!query)
-  if (!is.null(body)) req <- httr2::req_body_json(req, body, auto_unbox = TRUE, null = "null")
+  if (!is.null(body)) {
+    # 15 significant digits (`digits = NA`), not httr2's 22. R on Apple Silicon parses a literal such
+    # as 1e-50 one ulp low, and 22 digits would send that ulp; 15 sends the same bytes everywhere,
+    # which the vignette recordings (matched by body) rely on.
+    req <- httr2::req_body_json(req, body, auto_unbox = TRUE, null = "null", digits = NA)
+  }
   req
 }
 

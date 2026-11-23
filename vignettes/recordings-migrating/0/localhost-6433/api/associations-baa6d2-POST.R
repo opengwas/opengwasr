@@ -1,0 +1,10 @@
+structure(list(method = "POST", url = "http://localhost:6433/api/associations", 
+    status_code = 202L, headers = structure(list(date = "Mon, 23 Nov 2026 09:55:42 GMT", 
+        server = "uvicorn", location = "/api/jobs/10b18829", 
+        `x-ogdb-cost-estimate` = "2", `server-timing` = "queue;dur=79, run;dur=1200, cpu;dur=1205", 
+        `x-ogdb-cost` = "job=\"10b18829\", cpu_ms=1205, run_ms=1200, queue_ms=79, attempts=1, rows=1, bytes=377", 
+        `content-length` = "398", `content-type` = "application/json", 
+        `x-request-id` = "eee7e231"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"10b18829\",\"status_url\":\"/api/jobs/10b18829\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:c4a3e6f2eeabcc18f8835795aaaeb34b1c7d13c77db5341f898c3981bbcc7688\",\"query_hash\":\"sha256:c4a3e6f2eeabcc18f8835795aaaeb34b1c7d13c77db5341f898c3981bbcc7688\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 7.8e-05, 
+    starttransfer = 0.007096, total = 0.007244), cache = new.env(parent = emptyenv())), class = "httr2_response")

@@ -1,10 +1,10 @@
 structure(list(method = "POST", url = "http://localhost:6433/api/phewas", 
-    status_code = 202L, headers = structure(list(date = "Sun, 22 Nov 2026 22:58:32 GMT", 
-        server = "uvicorn", location = "/api/jobs/78659e17", 
-        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=87, run;dur=1058, cpu;dur=1057", 
-        `x-ogdb-cost` = "job=\"78659e17\", cpu_ms=1057, run_ms=1058, queue_ms=87, attempts=1, rows=27, bytes=10485", 
+    status_code = 202L, headers = structure(list(date = "Mon, 23 Nov 2026 09:54:45 GMT", 
+        server = "uvicorn", location = "/api/jobs/e5880015", 
+        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=4, run;dur=1262, cpu;dur=1229", 
+        `x-ogdb-cost` = "job=\"e5880015\", cpu_ms=1229, run_ms=1262, queue_ms=4, attempts=1, rows=27, bytes=10485", 
         `content-length` = "398", `content-type` = "application/json", 
-        `x-request-id` = "5bcbd507"), class = "httr2_headers"), 
-    body = charToRaw("{\"job_id\":\"78659e17\",\"status_url\":\"/api/jobs/78659e17\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:16357be4acb7eedb525f395283db359a39ff0fffe05a479a600733a577ac7be3\",\"query_hash\":\"sha256:16357be4acb7eedb525f395283db359a39ff0fffe05a479a600733a577ac7be3\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
-    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 7.9e-05, 
-    starttransfer = 0.005994, total = 0.006181), cache = new.env(parent = emptyenv())), class = "httr2_response")
+        `x-request-id` = "610d5f64"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"e5880015\",\"status_url\":\"/api/jobs/e5880015\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:16357be4acb7eedb525f395283db359a39ff0fffe05a479a600733a577ac7be3\",\"query_hash\":\"sha256:16357be4acb7eedb525f395283db359a39ff0fffe05a479a600733a577ac7be3\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 8.5e-05, 
+    starttransfer = 0.005774, total = 0.006006), cache = new.env(parent = emptyenv())), class = "httr2_response")

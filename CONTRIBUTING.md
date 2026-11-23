@@ -26,8 +26,9 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
   check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
-                    analyses_per_job = tophits_analyses_per_job(limit), order = "api",
-                    truncated = function(ids) truncated_message(ids, threshold, limit))
+                    analyses_per_job = if (clump) 1L else tophits_analyses_per_job(limit), order = "api",
+                    truncated = function(ids) truncated_message(ids, threshold, limit, clump),
+                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb)))
 }
 ```
 
@@ -38,12 +39,12 @@ What the spec can say:
 - `analyses_per_job`: fewer Analyses per Job than the API's limit, for example when each Analysis may return many rows.
 - `order`: `"position"` (the default) or `"api"`, to keep the API's own order within each Analysis (top hits, strongest first).
 - `order = "jobs"`: rows as the Jobs returned them, for a query that names no Analyses.
-- `spec`: one list for what a few queries add, never more named arguments. `all_analyses = TRUE` lets `analyses` be `NULL` (every Analysis of the Store Releases; metadata is looked up once, for the Analyses in the result, in `finish`: the one thing a `finish` may look up, against the pinned Store Releases; an error there is the API's). `one_variant = TRUE` sends one ALID per Job as `variant`. `interval = list(chromosome, start, end, limit)` cuts a range into windows. `og_phewas()` (`all_analyses`, `one_variant`) and `og_range()` (`interval`) are each a few lines over it. Inside the engine each of these is a contribution (a split dimension and the body fields of a piece), so the next one adds a contribution, not a branch.
+- `spec`: one list for what a few queries add, never more named arguments. `all_analyses = TRUE` lets `analyses` be `NULL` (every Analysis of the Store Releases; metadata is looked up once, for the Analyses in the result, in `finish`: the one thing a `finish` may look up, against the pinned Store Releases; an error there is the API's). `one_variant = TRUE` sends one ALID per Job as `variant`. `interval = list(chromosome, start, end, limit)` cuts a range into windows. `clump = list(ld, r2, kb)` clumps each Analysis on the server in its own LD Store (one Analysis per Job). `og_phewas()` (`all_analyses`, `one_variant`), `og_range()` (`interval`) and `og_tophits()` (`clump`) are each a few lines over it. Inside the engine each of these is a contribution: a split dimension (or `along` another contribution's, as clumping follows the Analyses) and the body fields of a piece, and optionally a `finish` that adds columns and provenance to the shaped rows. So the next one adds a contribution, not a branch.
 - `truncated`: the endpoint cuts rows off at a `limit`. Each Job must then report `total` and `truncated`, and the engine checks both against the rows it read. When a Job was cut off, the engine warns with the message this function gives.
 
 Provenance records the method's own arguments as the user gave them, read from its frame. So call the engine directly from the method, and don't reassign an argument before the call. An argument the method gains is recorded automatically.
 
-A query that returns something other than Associations, such as an LD matrix, doesn't use the engine. It follows the query-plan contract at the top of `R/query-plan.R` directly, which keeps `og_submit()` working for it. It reuses the same parts: `local_query()`, `resolve_variants()`, `lookup_requests()` and `lookup_rows()` (the variant lookups, `R/variant-lookups.R`), the splitter (`R/split.R`), `query_plan()` and `run_query()`, and `attach_provenance()`.
+An LD operation (`og_ld_matrix()`, `og_ld_proxies()`, `og_clump()`) is a thin spec over the LD engine, `ld_query()` in `R/ld-query.R`: its endpoint, how its variants split into Jobs, its body fields (a list, or a function of a piece's ALIDs and the LD Store), how its Jobs' rows assemble into its value, and optionally further provenance. The LD engine chooses the LD Store (`choose_ld_store()`), resolves rsIDs and warns about absent variants. Both engines, and the variant lookups, sit on one scaffold, `engine_query()` in `R/query-plan.R`: the method's arguments, the call's deadline, the record of the call, a plan whose finish attaches provenance, and `run_query()`, which keeps `og_submit()` working. A query of a new kind builds on `engine_query()` the same way, following the query-plan contract at the top of `R/query-plan.R`.
 
 ## Pull requests
 

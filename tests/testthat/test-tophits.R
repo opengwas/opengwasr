@@ -257,14 +257,6 @@ test_that("an answer the client can't trust raises opengwasr_job_invalid, never 
 
 # --- what the API or the arguments refuse ---------------------------------------------------
 
-test_that("clumping and original units say which ticket brings them", {
-  src <- fake_source(fake)
-  e <- expect_error(og_tophits(src, cad), class = "opengwasr_not_implemented")
-  expect_s3_class(e, "opengwasr_error")
-  expect_match(conditionMessage(e), "#13", fixed = TRUE)
-  expect_error(og_tophits(src, cad, clump = TRUE), class = "opengwasr_not_implemented")
-})
-
 # Sample size and original units (#8).
 ukb <- "OGS-00009:ukb-b-19953"
 ukb_rel <- c(rel, "OGS-00009/OGS-00009-completed")
@@ -460,6 +452,8 @@ test_that("og_tophits() is a Source generic, and checks its arguments", {
   expect_error(og_tophits(src, cad, limit = 10001, clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, observed_only = NA, clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, clump = NA), class = "opengwasr_argument")
+  expect_error(og_tophits(src, cad, r2 = "0.1"), class = "opengwasr_argument")
+  expect_error(og_tophits(src, cad, kb = c(1, 2)), class = "opengwasr_argument")
 })
 
 test_that("og_provenance() says so when a data frame has none", {

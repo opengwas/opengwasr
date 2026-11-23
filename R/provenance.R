@@ -25,6 +25,10 @@
 #'   * `cost_estimate`: the API's cost estimate for the Jobs, summed.
 #'   * `total`, `truncated`: how many Associations matched (what the API counted), and whether `limit` cut any off; `returned`: the rows of `x`.
 #'   * `retrieved`: when the answer was read, as a `POSIXct`.
+#'   * Clumped results: `clump`, a data frame with one row per Analysis clumped (one row, `id` `NA`,
+#'     for [og_clump()]'s one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
+#'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants).
+#'   * LD results: `ld`, `ld_choice` and `absent` (see [og_ld_matrix()]).
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class
 #'   `opengwasr_no_provenance`; one whose rows changed after `rbind()` or subsetting keeps a stale
@@ -95,7 +99,7 @@ provenance_fingerprint <- function(x) {
 # "og_tophits(threshold = 5e-08, limit = 3)" from a function name and named arguments.
 provenance_query <- function(name, args) {
   shown <- vapply(args, function(a) paste(deparse(a, width.cutoff = 500), collapse = ""), "")
-  paste0(name, "(", paste0(names(args), " = ", shown, collapse = ", "), ")")
+  paste0(name, "(", if (length(args) > 0) paste0(names(args), " = ", shown, collapse = ", "), ")")
 }
 
 #' @export
@@ -113,6 +117,7 @@ format.og_provenance <- function(x, ...) {
     paste0("\u2022 Store Releases: ", paste(x$store_releases, collapse = ", ")),
     if (!is.null(x$ld)) paste0("\u2022 LD Store: ", x$ld, " (", x$ld_choice, "); ",
                                length(x$absent), " variant(s) absent"),
+    if (!is.null(x$clump)) format_clump(x$clump),
     paste0("\u2022 Jobs: ", paste(x$job_ids, collapse = ", ")),
     counts,
     paste0("\u2022 Retrieved: ", retrieved)

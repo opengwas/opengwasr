@@ -49,3 +49,17 @@ test_that("a Job's total and truncated must fit the rows read", {
     expect_error(check(bad, 5), class = "opengwasr_job_invalid")
   }
 })
+
+test_that("the query engines share one scaffold, and a contribution may follow another's dimension", {
+  ns <- asNamespace("opengwasr")
+  for (engine in c("association_query", "ld_query", "lookup_query")) {
+    called <- all.names(body(ns[[engine]]))
+    expect_true("engine_query" %in% called, info = engine)
+    expect_false(any(c("run_query", "query_plan", "attach_provenance", "local_query", "method_arguments") %in% called), info = engine)
+  }
+  body_of <- getFromNamespace("request_body", "opengwasr")
+  contributions <- list(scope = list(dim = TRUE, body = function(chunk) list(analyses = as.list(chunk), releases = "r")),
+                        clump = list(along = "scope", body = function(chunk) list(clump = list(of = chunk))))
+  expect_equal(body_of(contributions, list(scope = 2L), list(limit = 5L), FALSE),
+               list(analyses = list(2L), limit = 5L, clump = list(of = 2L), observed_only = FALSE, releases = "r"))
+})

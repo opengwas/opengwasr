@@ -18,6 +18,10 @@ A list of class \code{og_provenance}:
 \item \code{cost_estimate}: the API's cost estimate for the Jobs, summed.
 \item \code{total}, \code{truncated}: how many Associations matched (what the API counted), and whether \code{limit} cut any off; \code{returned}: the rows of \code{x}.
 \item \code{retrieved}: when the answer was read, as a \code{POSIXct}.
+\item Clumped results: \code{clump}, a data frame with one row per Analysis clumped (one row, \code{id} \code{NA},
+for \code{\link[=og_clump]{og_clump()}}'s one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
+(the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants).
+\item LD results: \code{ld}, \code{ld_choice} and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
 }
 
 A data frame whose provenance was dropped (by \code{merge()}, say) raises an error of class

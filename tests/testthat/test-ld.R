@@ -53,6 +53,20 @@ test_that("several LD Stores of one ancestry are refused unless the API declares
   m <- og_ld_matrix(src, pair, ld = "EUR")
   expect_equal(og_provenance(m)$ld, eur)
   expect_equal(og_provenance(m)$ld_choice, "ancestry_default")
+  # Matched by Assigned Ancestry (`ld = NULL`), the declared default breaks the tie, and says so.
+  matched <- og_ld_matrix(src, associations_of(c(cad, cad), pair))
+  expect_equal(og_provenance(matched)$ld, eur)
+  expect_equal(og_provenance(matched)$ld_choice, "ancestry_default")
+  withr::local_options(opengwasr.progress = TRUE)
+  said <- character()
+  top <- withCallingHandlers(suppressWarnings(og_tophits(src, cad, releases = "OGS-00011/OGS-00011-completed")),
+                             message = function(m) {
+                               if (inherits(m, "opengwasr_clumping")) said <<- c(said, conditionMessage(m))
+                               invokeRestart("muffleMessage")
+                             })
+  expect_equal(unique(top$clump_ld), eur)
+  expect_equal(unique(top$clump_ld_choice), "ancestry_default")
+  expect_match(said, "the declared default LD Store of its Assigned Ancestry (EUR)", fixed = TRUE)
 })
 
 test_api("the LD Store is chosen by name, by ancestry code, or matched from the Associations' ancestry", {
@@ -275,7 +289,7 @@ test_that("the LD queries stay thin: each is a spec over the LD engine", {
   ns <- asNamespace("opengwasr")
   users <- Filter(function(n) is.function(ns[[n]]) && "ld_query" %in% all.names(body(ns[[n]])),
                   ls(ns, all.names = TRUE))
-  expect_setequal(users, c("og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source"))
+  expect_setequal(users, c("og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source", "og_clump.og_api_source"))
   # Neither runs a Job, or looks anything up, on its own.
   for (m in users) {
     called <- all.names(body(ns[[m]]))
@@ -321,4 +335,124 @@ test_that("an LD Store that isn't ready is listed, and choosing it says so", {
   }
   expect_length(ld_bodies("/api/ld/matrix"), before)
   expect_equal(og_provenance(og_ld_matrix(src, pair, ld = "EUR"))$ld, eur)
+})
+
+# --- Clumping (#13) -----------------------------------------------------------------------------
+
+rel <- "OGS-00011/OGS-00011-completed"
+clump_columns <- c("clump_ld", "clump_ld_choice", "clump_r2", "clump_kb", "clump_size")
+t_far <- function(src, ancestry) { s <- og_ld_stores(src); s$t_far[s$ancestry == ancestry] }
+
+test_that("og_tophits() clumps each Analysis in the LD Store of its Assigned Ancestry, one Job each, grouped by LD Store, at the LD Store's own thresholds", {
+  fake_set(fake, "afr_analysis", "true", "false")
+  src <- fake_source(fake)
+  bmi <- "OGS-00011:GCST90029007"
+  before <- length(ld_bodies("/api/tophits"))
+  # The "Clumping ..." messages come with progress on (one per LD Store); scripts are quiet.
+  withr::local_options(opengwasr.progress = TRUE)
+  messages <- character()
+  w <- expect_warning(
+    withCallingHandlers(top <- og_tophits(src, c(cad, afr_analysis, bmi), releases = rel),
+                        message = function(m) {
+                          if (inherits(m, "opengwasr_clumping")) messages <- c(messages, conditionMessage(m))
+                          messages <<- messages
+                          invokeRestart("muffleMessage")
+                        }),
+    class = "opengwasr_clump_absent")
+  expect_length(messages, 2)
+  expect_match(messages[[2]], "hgdp1kgp-v2-AFR-k10, matched to its Assigned Ancestry (AFR)", fixed = TRUE)
+  # One Job per Analysis, submitted grouped by LD Store (EUR, EUR, AFR), each sent its LD Store, its
+  # t_far and its far window.
+  sent <- ld_bodies("/api/tophits")
+  sent <- sent[seq_along(sent) > before]
+  expect_equal(lapply(sent, function(b) unlist(b$analyses)), list(cad, bmi, afr_analysis))
+  eur_clump <- list(store = eur, r2 = t_far(src, "EUR"), kb = 10000)
+  expect_equal(lapply(sent, `[[`, "clump"),
+               list(eur_clump, eur_clump, list(store = "hgdp1kgp-v2-AFR-k10", r2 = t_far(src, "AFR"), kb = 10000)))
+  # The answer is in the order asked for. The leads (the fake's greedy clumping of fake_ld_r()) have
+  # clump_size from the API and the clumping provenance columns after the Association columns.
+  expect_equal(unique(top$id), c(cad, afr_analysis, bmi))
+  expect_equal(top$alid[1:3], c("9:22098620:A:G", "9:22098575:A:G", "1:5000:A:G"))
+  expect_equal(utils::tail(names(top), 5), clump_columns)
+  expect_equal(top$clump_size[1:3], c(3L, 2L, 2L))
+  expect_equal(top$clump_ld, ifelse(top$id == afr_analysis, "hgdp1kgp-v2-AFR-k10", eur))
+  expect_equal(unique(top$clump_ld_choice), "matched")
+  expect_equal(unique(top$clump_kb), 10000)
+  # The API's counts, per Analysis in the order asked for; the one top hit the AFR LD Store doesn't hold is warned about.
+  prov <- og_provenance(top)
+  expect_equal(prov$clump$id, c(cad, afr_analysis, bmi))
+  expect_equal(prov$clump[1:2, c("hits", "absent", "leads")], data.frame(hits = c(5, 3), absent = c(0, 1), leads = c(2, 1)))
+  expect_equal(w$count, 1)
+  expect_equal(w$ids, afr_analysis)
+  expect_match(format(prov), "Clumped: OGS-00011:GCST003116 in hgdp1kgp-v2-EUR-k10 (matched)", fixed = TRUE, all = FALSE)
+  # `limit` counts the leads (the API's), and says so when it cuts them off; og_submit() collects the
+  # very same answer, and says nothing with progress off.
+  expect_match(getFromNamespace("truncated_message", "opengwasr")(cad, 5e-8, 1, clump = TRUE)[[1]], "1 index variants")
+  withr::local_options(opengwasr.progress = FALSE)
+  expect_silent(handle <- og_submit(src, og_tophits, c(cad, afr_analysis, bmi), releases = rel))
+  expect_equal(suppressWarnings(og_job_result(src, handle)), top, ignore_attr = TRUE)
+})
+
+test_api("og_tophits(): `ld` names an LD Store or an ancestry; an Unassigned Analysis is refused before any Job; the API refuses r2 below t_far beyond 3 Mb", {
+  cad_top <- function(...) suppressMessages(suppressWarnings(og_tophits(src, cad, limit = 2, releases = rel, ...)))
+  by_name <- cad_top(ld = eur)
+  by_ancestry <- cad_top(ld = "EUR")
+  expect_equal(unique(by_name$clump_ld_choice), "user")
+  expect_equal(unique(by_ancestry$clump_ld_choice), "ancestry_default")
+  expect_equal(by_name$alid, by_ancestry$alid)
+  before <- if (backend == "fake") length(ld_bodies("/api/tophits"))
+  e <- expect_error(og_tophits(src, c(cad, unassigned)), class = "opengwasr_ld_unmatched")
+  expect_match(conditionMessage(e), unassigned, fixed = TRUE)
+  if (backend == "fake") expect_length(ld_bodies("/api/tophits"), before)
+  said <- suppressMessages(suppressWarnings(og_tophits(src, unassigned, ld = "AMR", limit = 2)))
+  expect_equal(og_provenance(said)$clump$ld, "hgdp1kgp-v2-AMR-k10")
+  e <- expect_error(suppressMessages(og_tophits(src, cad, r2 = 0.001, kb = 10000, releases = rel)),
+                    class = "opengwasr_ld_refusal")
+  expect_s3_class(e, "opengwasr_refusal")
+  expect_equal(e$reason, "threshold_below_t_far")
+  expect_equal(e$near_bp, 3000000)
+  # Sent as given, never adjusted to something the LD Store could answer.
+  if (backend == "fake") {
+    expect_equal(utils::tail(ld_bodies("/api/tophits"), 1)[[1]]$clump, list(store = eur, r2 = 0.001, kb = 10000))
+  }
+})
+
+test_api("og_clump() clumps a data frame of Associations as one set, in the LD Store of its Analyses' ancestry", {
+  top <- suppressWarnings(og_tophits(src, cad, clump = FALSE, limit = 5, releases = rel))
+  joint <- suppressWarnings(og_clump(src, top))
+  expect_true(all(joint$alid %in% top$alid))
+  expect_equal(utils::tail(names(joint), 5), clump_columns)
+  expect_equal(unique(joint$clump_ld), eur)
+  expect_equal(unique(joint$clump_ld_choice), "matched")
+  expect_equal(unique(joint$clump_r2), t_far(src, "EUR"))
+  prov <- og_provenance(joint)
+  expect_true(is.na(prov$clump$id))
+  expect_equal(prov$clump$leads, nrow(joint))
+  expect_equal(sum(joint$clump_size) + prov$clump$absent, nrow(top))
+  expect_equal(prov$query, "og_clump()")
+  if (backend == "fake") {
+    expect_equal(joint$alid, c("9:22098620:A:G", "9:22098575:A:G"))
+    expect_equal(joint$clump_size, c(3L, 2L))
+    sent <- utils::tail(ld_bodies("/api/ld/clump"), 1)[[1]]
+    expect_equal(unlist(sent$scores), abs(top$z))
+    expect_equal(sent[c("store", "r2", "kb")], list(store = eur, r2 = t_far(src, "EUR"), kb = 10000))
+  }
+})
+
+test_that("og_clump(): Associations of mixed or Unassigned ancestry are refused unless `ld` is given; a variant in several Analyses is ranked by its largest |z|", {
+  fake_set(fake, "afr_analysis", "true", "false")
+  src <- fake_source(fake)
+  before <- length(ld_bodies("/api/ld/clump"))
+  mixed <- data.frame(id = c(cad, afr_analysis), alid = pair, z = c(5, -9))
+  expect_error(og_clump(src, mixed), class = "opengwasr_ld_unmatched")
+  expect_error(og_clump(src, data.frame(id = unassigned, alid = snv, z = 3)), class = "opengwasr_ld_unmatched")
+  expect_error(og_clump(src, mixed[c("alid", "z")]), class = "opengwasr_ld_unmatched")
+  expect_length(ld_bodies("/api/ld/clump"), before)
+  expect_error(og_clump(src, mixed["alid"], ld = "EUR"), class = "opengwasr_argument")
+  expect_error(og_clump(src, mixed, ld = "EUR", r2 = "0.1"), class = "opengwasr_argument")
+  twice <- rbind(mixed, data.frame(id = afr_analysis, alid = snv, z = 2))
+  kept <- og_clump(src, twice, ld = "EUR")
+  expect_equal(unlist(utils::tail(ld_bodies("/api/ld/clump"), 1)[[1]]$scores), c(5, 9))
+  expect_equal(unique(kept$clump_ld_choice), "ancestry_default")
+  expect_true(all(twice$id[twice$alid %in% kept$alid] %in% kept$id))
 })

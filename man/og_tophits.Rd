@@ -32,11 +32,13 @@ og_tophits(
 
 \item{clump}{Clump the top hits to one per independent signal.}
 
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match each Analysis's
-Assigned Ancestry. Only with \code{clump = TRUE}.}
+\item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
+\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} to match each Analysis's Assigned Ancestry. Only with
+\code{clump = TRUE}.}
 
 \item{r2, kb}{The r² above which a top hit joins an index variant's clump, and the window in
-kilobases; \code{NULL} for the LD Store's \code{t_far} and far window. Only with \code{clump = TRUE}.}
+kilobases; \code{NULL} for the LD Store's \code{t_far} and far window, but required with a PLINK
+Reference. Only with \code{clump = TRUE}.}
 
 \item{original_units}{Give \code{beta} and \code{se} in the trait's original units: Analyses stored per SD are
 multiplied by their recorded phenotype SD (\code{original_sd}), and log-odds Analyses are unchanged. It
@@ -68,6 +70,14 @@ can't be clumped: they are left out, with a warning of class \code{opengwasr_clu
 Clumped rows add \code{clump_ld}, \code{clump_ld_choice}, \code{clump_r2}, \code{clump_kb} and \code{clump_size}, and
 \code{og_provenance(x)$clump} has each Analysis's \code{hits}, \code{absent} and \code{leads}. Pass \code{clump = FALSE}
 for every top hit.
+
+With a PLINK Reference in \code{ld} (see \code{\link[=og_plink_reference]{og_plink_reference()}}) the clumping is local: each Analysis's
+top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
+(those not in it are left out, with a message) and clumped by PLINK, and \code{limit} is then applied
+to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an
+\code{opengwasr_truncated} warning that clumping saw only the strongest; clumping on the server (an LD
+Store in \code{ld}) has no such cap. \code{og_provenance(x)$clump} names the reference's path and the \code{r2}
+and \code{kb}.
 
 The columns are those the vignette section "What the columns mean" lists: the Analysis \code{id}, the variant, \code{beta} (\code{z * se}), \code{se}, \code{z}, \code{pval}, \code{effect_scale}
 (\code{"sd"} or \code{"log_or"} from the Analysis's stored effect scale, or \code{"original"} with

@@ -11,9 +11,9 @@ og_ld_matrix(src, variants, ld = NULL, fill_below_t_far = FALSE)
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
 
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match the Assigned
-Ancestry of the Associations' Analyses (refused for Unassigned or mixed ancestries, and for
-variants given without Analyses).}
+\item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
+\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} to match the Assigned Ancestry of the Associations' Analyses
+(refused for Unassigned or mixed ancestries, and for variants given without Analyses).}
 
 \item{fill_below_t_far}{Set pairs below the Far Threshold to 0, as above.}
 }
@@ -40,6 +40,14 @@ pair.
 With \code{fill_below_t_far = TRUE}, a pair of variants on one chromosome, within the LD Store's
 \code{far_bp} of each other, that it doesn't hold (so its r² is below the LD Store's Far Threshold)
 is set to 0. Pairs further apart, or on different chromosomes, stay \code{NA}.
+
+With a PLINK Reference as \code{ld} (see \code{\link[=og_plink_reference]{og_plink_reference()}}), PLINK computes the matrix on your
+machine. Variants are matched to the reference by rsID (an ALID by its \code{rsid} column, if
+\code{variants} is a data frame that has one, else by the GWAS Stores' variant table); those with no
+rsID, or not in the reference, are left out, with a message (class \code{opengwasr_plink_unmatched},
+\code{count}). The matrix holds every pair, in the order of \code{variants}, and is named
+\verb{<rsid>_<allele>_<allele>} with the reference's alleles: the sign of r refers to the first one.
+\code{fill_below_t_far} doesn't apply. Provenance's \code{ld} is the reference's path.
 
 A request the LD Store can't answer is refused by the API (\code{opengwasr_ld_refusal}, with \code{reason},
 \code{t_far}, \code{near_bp} and \code{far_bp}); a choice of LD Store that can't be made without guessing is

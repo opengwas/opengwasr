@@ -12,6 +12,8 @@
 #' 1,000 variants; more are split.
 #'
 #' @inheritParams og_ld_matrix
+#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match the Assigned
+#'   Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.
 #' @param r2 The smallest r² of a proxy.
 #' @param kb The window, in kilobases either side of the variant.
 #' @return A data frame with [og_provenance()] attached (`ld`, `ld_choice`, `absent`), one row per

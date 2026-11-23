@@ -22,7 +22,10 @@
 #'   query's value from the Jobs' `list(rows, job)` (in piece order) and `ctx`, `list(alids, absent,
 #'   store, choice)`: the ALIDs asked for, those the LD Store doesn't hold, its row of
 #'   [og_ld_stores()] and how it was chosen; optionally `provenance`, `function(results, ctx)`:
-#'   further provenance fields (clumping's `clump`).
+#'   further provenance fields (clumping's `clump`); and `local`, `function(ctx)`, for a query that can
+#'   read a PLINK Reference (R/plink.R): its `list(value, provenance)`, with `ctx` as above, but
+#'   `ctx$map` (`alid` and `rsid`, one row per variant matched) and `ctx$plink`; a query without it
+#'   refuses a PLINK Reference.
 #' @return The value `assemble()` returns with [og_provenance()] attached (`ld`, `ld_choice`,
 #'   `absent`); under [og_submit()], the `og_jobs` handle whose collection returns the same.
 #' @noRd
@@ -32,6 +35,8 @@ ld_query <- function(src, path, variants, ld, spec) {
   engine_query(src, method, fn, function(deadline) {
     prep <- ld_prepare(src, variants, ld, deadline, method)
     alids <- prep$alids
+    # A PLINK Reference is read on this machine: no Job to run, the same preparation and provenance.
+    if (!is.null(prep$plink)) return(ld_query_plink(prep, spec, method))
     requests <- lapply(if (length(alids) > 0) spec$pieces(length(alids)), function(idx) {
       own <- if (is.function(spec$body)) spec$body(alids[idx], prep$store) else spec$body
       list(path = path, body = c(list(store = prep$store$ld_store, alids = as.list(alids[idx])), own))
@@ -69,6 +74,8 @@ ld_prepare <- function(src, variants, ld, deadline, call) {
     ancestries <- NULL
   }
   chosen <- choose_ld_store(src, ld, ancestries, call)
+  # A PLINK Reference is matched by rsID and read locally (R/plink.R).
+  if (!is.null(chosen$plink)) return(ld_prepare_plink(src, variants, kinds, chosen, deadline, call))
   resolved <- resolve_variants(src, kinds, if (length(kinds$rsids) > 0) resolve_releases(src, NULL, call),
                                deadline, call)
   list(alids = resolved$alids, store = chosen$store, choice = chosen$choice,

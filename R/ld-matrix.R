@@ -18,15 +18,23 @@
 #' `far_bp` of each other, that it doesn't hold (so its r² is below the LD Store's Far Threshold)
 #' is set to 0. Pairs further apart, or on different chromosomes, stay `NA`.
 #'
+#' With a PLINK Reference as `ld` (see [og_plink_reference()]), PLINK computes the matrix on your
+#' machine. Variants are matched to the reference by rsID (an ALID by its `rsid` column, if
+#' `variants` is a data frame that has one, else by the GWAS Stores' variant table); those with no
+#' rsID, or not in the reference, are left out, with a message (class `opengwasr_plink_unmatched`,
+#' `count`). The matrix holds every pair, in the order of `variants`, and is named
+#' `<rsid>_<allele>_<allele>` with the reference's alleles: the sign of r refers to the first one.
+#' `fill_below_t_far` doesn't apply. Provenance's `ld` is the reference's path.
+#'
 #' A request the LD Store can't answer is refused by the API (`opengwasr_ld_refusal`, with `reason`,
 #' `t_far`, `near_bp` and `far_bp`); a choice of LD Store that can't be made without guessing is
 #' refused by opengwasr (`opengwasr_ld_unmatched`, with the LD Stores in `ld_stores`).
 #'
 #' @param src A Source, from [og_api()].
 #' @param variants ALIDs and rsIDs, or a data frame of Associations.
-#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match the Assigned
-#'   Ancestry of the Associations' Analyses (refused for Unassigned or mixed ancestries, and for
-#'   variants given without Analyses).
+#' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
+#'   [og_plink_reference()], or `NULL` to match the Assigned Ancestry of the Associations' Analyses
+#'   (refused for Unassigned or mixed ancestries, and for variants given without Analyses).
 #' @param fill_below_t_far Set pairs below the Far Threshold to 0, as above.
 #' @return A numeric matrix (class `og_ld_matrix`, which is also a `matrix`) with [og_provenance()] attached: `ld` (the LD Store that answered),
 #'   `ld_choice` (`"user"`, `"ancestry_default"` or `"matched"`) and `absent`.
@@ -48,7 +56,12 @@ og_ld_matrix.og_api_source <- function(src, variants, ld = NULL, fill_below_t_fa
   ld_query(src, "api/ld/matrix", variants, ld, list(
     # Every pair is in some piece: pieces of two chunks hold every pair of their union.
     pieces = function(n) lapply(split_pairs(n, job_limits()$ld_matrix), function(p) union(p$a, p$b)),
-    assemble = function(results, ctx) ld_matrix_assemble(results, ctx, fill_below_t_far)))
+    assemble = function(results, ctx) ld_matrix_assemble(results, ctx, fill_below_t_far),
+    # A PLINK Reference holds every pair, so `fill_below_t_far` has nothing to fill.
+    local = function(ctx) {
+      m <- plink_ld_matrix(ctx$plink, unique(ctx$map$rsid))
+      list(value = structure(m, class = c("og_ld_matrix", "matrix", "array")), provenance = NULL)
+    }))
 }
 
 # The one matrix of every present variant, from the Jobs' rows. A row is `alid` and `r`, its r with

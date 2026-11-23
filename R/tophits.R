@@ -18,6 +18,14 @@
 #' `og_provenance(x)$clump` has each Analysis's `hits`, `absent` and `leads`. Pass `clump = FALSE`
 #' for every top hit.
 #'
+#' With a PLINK Reference in `ld` (see [og_plink_reference()]) the clumping is local: each Analysis's
+#' top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
+#' (those not in it are left out, with a message) and clumped by PLINK, and `limit` is then applied
+#' to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an
+#' `opengwasr_truncated` warning that clumping saw only the strongest; clumping on the server (an LD
+#' Store in `ld`) has no such cap. `og_provenance(x)$clump` names the reference's path and the `r2`
+#' and `kb`.
+#'
 #' The columns are those the vignette section "What the columns mean" lists: the Analysis `id`, the variant, `beta` (`z * se`), `se`, `z`, `pval`, `effect_scale`
 #' (`"sd"` or `"log_or"` from the Analysis's stored effect scale, or `"original"` with
 #' `original_units = TRUE`), `n`, `sample_size_kind`, `ncase` and `ncontrol`, `association_status` and
@@ -44,10 +52,12 @@
 #' @param limit The most top hits to return per Analysis, at most 10,000.
 #' @param observed_only Leave out Imputed Associations.
 #' @param clump Clump the top hits to one per independent signal.
-#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match each Analysis's
-#'   Assigned Ancestry. Only with `clump = TRUE`.
+#' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
+#'   [og_plink_reference()], or `NULL` to match each Analysis's Assigned Ancestry. Only with
+#'   `clump = TRUE`.
 #' @param r2,kb The r² above which a top hit joins an index variant's clump, and the window in
-#'   kilobases; `NULL` for the LD Store's `t_far` and far window. Only with `clump = TRUE`.
+#'   kilobases; `NULL` for the LD Store's `t_far` and far window, but required with a PLINK
+#'   Reference. Only with `clump = TRUE`.
 #' @param original_units Give `beta` and `se` in the trait's original units: Analyses stored per SD are
 #'   multiplied by their recorded phenotype SD (`original_sd`), and log-odds Analyses are unchanged. It
 #'   refuses, with class `opengwasr_original_units_unavailable` and before any query runs, when an
@@ -73,13 +83,19 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
                                      observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
                                      kb = NULL, original_units = FALSE, releases = NULL) {
   check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
+  # Clumped by PLINK on this machine, the Jobs fetch the most top hits the API gives (`limit` then
+  # counts index variants, and is applied after clumping), several Analyses to a Job.
+  local <- clump && is_plink_reference(ld)
+  fetched <- if (local) max_tophits_per_analysis else limit
   # `limit` applies to each Analysis, so no split changes it; a Job's rows (`limit` x Analyses) must
   # fit the row cap. Clumped, each Analysis is one Job, in its own LD Store; `limit` counts its leads.
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
-                    body = list(threshold = threshold, limit = as.integer(limit)),
-                    analyses_per_job = if (clump) 1L else tophits_analyses_per_job(limit), order = "api",
-                    truncated = function(ids) truncated_message(ids, threshold, limit, clump),
-                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb)))
+                    body = list(threshold = threshold, limit = as.integer(fetched)),
+                    analyses_per_job = if (clump && !local) 1L else tophits_analyses_per_job(fetched), order = "api",
+                    truncated = function(ids) {
+                      if (local) local_truncated_message(ids, threshold) else truncated_message(ids, threshold, limit, clump)
+                    },
+                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
 }
 
 # Kept: R argument types and shapes, and `limit`'s range, which the splitter needs to size Jobs.
@@ -96,6 +112,7 @@ check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = 
     bad("`ld`, `r2` and `kb` only apply with `clump = TRUE`.")
   }
   check_clump_settings(r2, kb, call)
+  if (clump) check_plink_settings(ld, r2, kb, call)
 }
 
 # Kept: the R types of `threshold` and `limit` (shared by og_tophits() and og_phewas()); their
@@ -116,4 +133,14 @@ truncated_message <- function(ids, threshold, limit, clump = FALSE) {
     i = if (limit < max_tophits_per_analysis) {
       paste0("Raise `limit` (at most ", format(max_tophits_per_analysis, big.mark = ","), ") for more.")
     })
+}
+
+# What the `opengwasr_truncated` warning says when the API cut top hits off before a PLINK Reference
+# clumped them: clumping saw only the strongest.
+local_truncated_message <- function(ids, threshold) {
+  who <- if (length(ids) == 1) ids else paste0("At least one of the ", length(ids), " Analyses")
+  max <- format(max_tophits_per_analysis, big.mark = ",")
+  c(paste0(who, " has more than ", max, " top hits at p <= ", format(threshold),
+           ", the most the API returns, so clumping saw only the strongest ", max, "."),
+    i = "Raise the threshold's strictness, or clump on the server with an LD Store in `ld`, which clumps every top hit.")
 }

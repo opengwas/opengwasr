@@ -25,6 +25,7 @@ reference:
   - og_ld_matrix
   - og_ld_proxies
   - og_clump
+  - og_plink_reference
 - title: Jobs
   contents:
   - og_submit

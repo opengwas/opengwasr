@@ -12,14 +12,16 @@ og_clump(src, data, ld = NULL, r2 = NULL, kb = NULL)
 \item{data}{A data frame of Associations, with \code{alid} and \code{z}, and \code{id} for the LD Store to be
 matched by the Analyses' Assigned Ancestry.}
 
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match the Assigned
+\item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
+\code{\link[=og_plink_reference]{og_plink_reference()}} (clumped locally by PLINK), or \code{NULL} to match the Assigned
 Ancestry of the Analyses in \code{data} (refused, with class \code{opengwasr_ld_unmatched}, when they
 differ, when one is Unassigned, or when \code{data} has no \code{id}).}
 
 \item{r2}{The r² above which a variant joins an index variant's clump; \code{NULL} for the LD Store's
-\code{t_far}.}
+\code{t_far}. Required with a PLINK Reference.}
 
-\item{kb}{The window, in kilobases; \code{NULL} for the LD Store's far window.}
+\item{kb}{The window, in kilobases; \code{NULL} for the LD Store's far window. Required with a PLINK
+Reference.}
 }
 \value{
 The rows of \code{data} whose variant is an index variant, in their order in \code{data}, with
@@ -41,6 +43,13 @@ are left out, with a warning of class \code{opengwasr_ld_absent_variants}.
 \code{r2} and \code{kb} default to the LD Store's Far Threshold (\code{t_far}) and its far window (\code{far_bp},
 10,000 kb), which it can always answer exactly. A pair it can't answer exactly is refused by the
 API (\code{opengwasr_ld_refusal}, with \code{reason}, \code{t_far}, \code{near_bp} and \code{far_bp}).
+
+With a PLINK Reference as \code{ld}, PLINK clumps on your machine (see \code{\link[=og_plink_reference]{og_plink_reference()}}): \code{r2}
+and \code{kb} are required (there are no defaults to take, so without them it stops, with class
+\code{opengwasr_plink_settings_required}). Variants are matched by rsID, from \code{data}'s \code{rsid} column
+if it has one, else the GWAS Stores' variant table; those with no rsID match are left out, with
+a message (class \code{opengwasr_plink_unmatched}, \code{count}). Provenance's \code{clump} names the reference's
+path as \code{ld}, and \code{clump_ld} is the same path.
 }
 \examples{
 \dontrun{

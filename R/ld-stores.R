@@ -45,13 +45,14 @@ ld_stores <- function(src, call = rlang::caller_env()) {
 #' Choose the one LD Store an LD operation uses.
 #'
 #' @param src The Source.
-#' @param ld An LD Store's name (wins: `"user"`), an ancestry code (that ancestry's LD Store:
+#' @param ld A PLINK Reference from [og_plink_reference()] (`"user"`; `store` is then `list(ld_store =
+#'   <its path>)` and `plink` the reference), an LD Store's name (wins: `"user"`), an ancestry code (that ancestry's LD Store:
 #'   `"ancestry_default"`), or `NULL` (matched from `ancestries`: `"matched"`, or
 #'   `"ancestry_default"` when several LD Stores serve that ancestry and its declared default chose).
 #' @param ancestries `NULL` when the operation has no Analyses behind its variants, else a character
 #'   vector of the Assigned Ancestry of each Analysis (`NA` for Unassigned), named by Analysis id.
 #'   Only read when `ld` is `NULL`.
-#' @return `list(store, choice)`: `store` is the LD Store's row of [og_ld_stores()] (one-row data
+#' @return `list(store, choice)` (and `plink` for a PLINK Reference): `store` is the LD Store's row of [og_ld_stores()] (one-row data
 #'   frame), `choice` is how it was chosen.
 #'
 #' Refuses with `opengwasr_ld_unmatched` (a refusal, with the LD Stores in `e$ld_stores`) when `ld`
@@ -59,6 +60,11 @@ ld_stores <- function(src, call = rlang::caller_env()) {
 #' several ancestries. Kept: the API would answer a request that names no LD Store from European LD.
 #' @noRd
 choose_ld_store <- function(src, ld, ancestries = NULL, call = rlang::caller_env()) {
+  # A PLINK Reference is the user's own choice, read locally: no LD Store row, and no API call.
+  # `store$ld_store` is its path, which is what every result records as the LD used.
+  if (is_plink_reference(ld)) {
+    return(list(store = list(ld_store = ld$path), choice = "user", plink = ld))
+  }
   # Kept: an R argument's type.
   if (!is.null(ld) && (!is.character(ld) || length(ld) != 1 || is.na(ld) || !nzchar(ld))) {
     og_abort("`ld` must be one LD Store name or ancestry code, or `NULL`.", class = "opengwasr_argument", call = call)

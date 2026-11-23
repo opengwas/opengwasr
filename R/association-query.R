@@ -40,7 +40,9 @@
 #'     rsID naming several ALIDs runs one Job per ALID).
 #'   * `interval = list(chromosome, start, end, limit)`: the Jobs cover consecutive windows of at most
 #'     `limit` positions, sent as `chromosome`, `start` and `end` (integers).
-#'   * `clump = list(ld, r2, kb)`: each Job (one Analysis: `analyses_per_job = 1`) is clumped on the
+#'   * `clump = list(ld, r2, kb, limit, threshold)`: with a PLINK Reference as `ld`, the Jobs fetch
+#'     unclumped top hits and the rows are clumped on this machine (`plink_clump_contribution()`).
+#'     Otherwise each Job (one Analysis: `analyses_per_job = 1`) is clumped on the
 #'     server in its Analysis's LD Store, sent as `clump` (`clump_contribution()`, R/clump.R); the
 #'     rows gain the clumping columns and provenance its `clump`.
 #' @param truncated `NULL` when the endpoint returns every Association it matches (one over the
@@ -127,6 +129,7 @@ association_query <- function(src, path, analyses, observed_only, original_units
         if (is.null(contribution$finish)) next
         done <- contribution$finish(shaped, results, pieces, method)
         shaped <- done$value
+        if (isTRUE(done$truncated) && length(all_jobs) > 0) all_jobs[[length(all_jobs)]]$truncated <- TRUE
         provenance <- c(provenance, done$provenance)
       }
       list(value = shaped, jobs = all_jobs, provenance = provenance)
@@ -226,7 +229,11 @@ query_record <- function(given, releases) {
   args$releases <- releases
   # A data frame of Associations given as an argument (to an LD query) is recorded as the variants
   # and Analyses it names, not the whole frame.
-  args <- lapply(args, function(a) if (is.data.frame(a)) list(alids = unique(a$alid), ids = unique(a$id)) else a)
+  args <- lapply(args, function(a) {
+    if (is.data.frame(a)) list(alids = unique(a$alid), ids = unique(a$id))
+    else if (is_plink_reference(a)) a$path  # its path names it: the PLINK it ran is in provenance
+    else a
+  })
   args <- Filter(Negate(is.null), args)
   shown <- args[setdiff(names(args), c("analyses", "variants", "data", "releases", "rsids", "positions"))]
   list(query = provenance_query(given$generic, shown), args = args)

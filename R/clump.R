@@ -23,15 +23,24 @@
 #' 10,000 kb), which it can always answer exactly. A pair it can't answer exactly is refused by the
 #' API (`opengwasr_ld_refusal`, with `reason`, `t_far`, `near_bp` and `far_bp`).
 #'
+#' With a PLINK Reference as `ld`, PLINK clumps on your machine (see [og_plink_reference()]): `r2`
+#' and `kb` are required (there are no defaults to take, so without them it stops, with class
+#' `opengwasr_plink_settings_required`). Variants are matched by rsID, from `data`'s `rsid` column
+#' if it has one, else the GWAS Stores' variant table; those with no rsID match are left out, with
+#' a message (class `opengwasr_plink_unmatched`, `count`). Provenance's `clump` names the reference's
+#' path as `ld`, and `clump_ld` is the same path.
+#'
 #' @param src A Source, from [og_api()].
 #' @param data A data frame of Associations, with `alid` and `z`, and `id` for the LD Store to be
 #'   matched by the Analyses' Assigned Ancestry.
-#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match the Assigned
+#' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
+#'   [og_plink_reference()] (clumped locally by PLINK), or `NULL` to match the Assigned
 #'   Ancestry of the Analyses in `data` (refused, with class `opengwasr_ld_unmatched`, when they
 #'   differ, when one is Unassigned, or when `data` has no `id`).
 #' @param r2 The r² above which a variant joins an index variant's clump; `NULL` for the LD Store's
-#'   `t_far`.
-#' @param kb The window, in kilobases; `NULL` for the LD Store's far window.
+#'   `t_far`. Required with a PLINK Reference.
+#' @param kb The window, in kilobases; `NULL` for the LD Store's far window. Required with a PLINK
+#'   Reference.
 #' @return The rows of `data` whose variant is an index variant, in their order in `data`, with
 #'   columns `clump_ld`, `clump_ld_choice`, `clump_r2`, `clump_kb` and `clump_size` (the variants
 #'   the index variant stands for, itself included), and [og_provenance()] attached: `ld`,
@@ -49,6 +58,7 @@ og_clump <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) UseMethod("og_c
 #' @export
 og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
   check_clump_settings(r2, kb)
+  check_plink_settings(ld, r2, kb)
   # Kept: an R argument's type (the scores sent are |z|).
   if (!is.data.frame(data) || !is.numeric(data$z)) {
     og_abort("`data` must be a data frame of Associations, with `alid` and `z` columns.", class = "opengwasr_argument")
@@ -59,6 +69,7 @@ og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
       score <- tapply(abs(data$z), data$alid, max)
       c(list(scores = as.list(unname(score[alids]))), clump_settings(store, r2, kb))
     },
+    local = function(ctx) local_clump(data, ctx, r2, kb),
     assemble = function(results, ctx) {
       rows <- result_rows(results)
       size <- table(rows$lead)
@@ -74,6 +85,24 @@ og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
       list(clump = clump_summary(NA_character_, ctx$store$ld_store, ctx$choice, settings$r2, settings$kb,
                                  length(ctx$alids), length(ctx$absent), leads))
     }))
+}
+
+# `og_clump()` over a PLINK Reference: each variant matched by rsID, scored by its largest |z|, clumped
+# by PLINK; the rows of `data` of each index variant, as for an LD Store, with the same columns.
+local_clump <- function(data, ctx, r2, kb) {
+  rsid <- ctx$map$rsid[match(data$alid, ctx$map$alid)]  # NA: not matched, so not clumped
+  at <- which(!is.na(rsid))
+  rsids <- unique(rsid[at])
+  score <- as.numeric(tapply(abs(data$z[at]), factor(rsid[at], levels = rsids), max))
+  clumped <- plink_clump(ctx$plink, rsids, score, r2, kb)
+  keep <- at[rsid[at] %in% clumped$lead]
+  out <- data[keep, , drop = FALSE]
+  attr(out, "og_provenance") <- NULL
+  rownames(out) <- NULL
+  out <- clump_columns(out, ctx$store$ld_store, ctx$choice, r2, kb, clumped$size[match(rsid[keep], clumped$lead)])
+  list(value = out,
+       provenance = list(clump = clump_summary(NA_character_, ctx$store$ld_store, ctx$choice, r2, kb,
+                                               length(ctx$alids), length(ctx$absent), nrow(clumped))))
 }
 
 # Kept: R argument types. Which `r2` and `kb` an LD Store can answer is the API's to say.
@@ -113,6 +142,9 @@ clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads) {
 # to each Job's body; its Jobs are submitted grouped by LD Store (`group`); its `finish` adds the clumping columns and provenance and warns about
 # top hits the LD Store doesn't hold.
 clump_contribution <- function(src, clump, info, call) {
+  if (is_plink_reference(clump$ld)) {
+    return(plink_clump_contribution(choose_ld_store(src, clump$ld, call = call), clump, info, call))
+  }
   ancestry <- stats::setNames(as.character(info$assigned_ancestry), info$id)
   group <- if (is.null(clump$ld)) ancestry else rep("ld", length(ancestry))
   groups <- unique(group)

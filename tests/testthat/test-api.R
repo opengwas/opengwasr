@@ -312,7 +312,8 @@ test_that("JSON bodies are the same text whatever the last ulp of a number", {
   src <- fake_source(fake)
   body_text <- function(x) {
     req <- api_request(src, "api/x", body = list(threshold = x))
-    rawToChar(httr2::req_dry_run(req, quiet = TRUE, redact_headers = TRUE)$body)
+    # httr2 serialises the stored data with the stored parameters (`digits`, `auto_unbox`, `null`).
+    as.character(do.call(jsonlite::toJSON, c(list(req$body$data), req$body$params)))
   }
   low <- 1e-50 * (1 - 2^-52)
   expect_false(identical(low, 1e-50))

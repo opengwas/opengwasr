@@ -1,4 +1,4 @@
-# The fake Data API's server side. Self-contained (base R, jsonlite, webfakes), because webfakes
+# The fake Data API's server side. Self-contained (base R, jsonlite, rlang, webfakes), because webfakes
 # runs the app in a separate R process, which loads this file itself. helper-fake-api.R sources it
 # into the test session too, so tests can use `fake_world()`, `schema_problems()` and friends.
 # `fixture_dir` must be set before sourcing.
@@ -855,6 +855,8 @@ fake_api <- function(world = fake_world()) {
     res$send_json(list(times = times), auto_unbox = TRUE)
   })
   app$get("/api/status", function(req, res) {
+    delay <- as.numeric(req$app$locals$world$mode$delay_ms) / 1000
+    if (delay > 0) Sys.sleep(delay)
     res$send_json(req$app$locals$world$status, auto_unbox = TRUE, null = "null")
   })
   app$get("/api/user", function(req, res) {
@@ -904,8 +906,8 @@ fake_api <- function(world = fake_world()) {
 
     if (!is.null(ids)) {
       if (length(ids) > 1000) return(fail(req, res, "invalid_request"))
-      return(res$send_json(fake_lookup(world, analyses, unique(ids), release_id),
-                           auto_unbox = TRUE, null = "null"))
+      found <- fake_lookup(world, analyses, unique(ids), release_id)
+      return(res$send_json(text = fake_analyses_json(found, found$analyses)))
     }
     limit <- as.integer(body$limit %||% req$query$limit %||% 100)
     after <- body$after %||% req$query$after
@@ -920,15 +922,32 @@ fake_api <- function(world = fake_world()) {
     # "cursor": next_after, as the real API. "offset": total only. "truncating": total only, and
     # offset is ignored (a broken API that can't be completed).
     next_after <- if (mode == "cursor" && more) page[[length(page)]]$id else NULL
-    res$send_json(list(release_id = release_id, catalog_version = "fake", offset = start, after = after,
-                       limit = limit, total = length(all_ids),
-                       analyses = page, next_after = next_after),
-                  auto_unbox = TRUE, null = "null")
+    res$send_json(text = fake_analyses_json(
+      list(release_id = release_id, catalog_version = "fake", offset = start, after = after,
+           limit = limit, total = length(all_ids), analyses = NULL, next_after = next_after), page))
   }
   app$get("/api/gwasinfo", gwasinfo)
   app$post("/api/gwasinfo", gwasinfo)
   app
 }
+
+# The JSON text of `body`, whose `analyses` member is `rows` (a list of Analysis rows): byte for byte what
+# `jsonlite::toJSON(body, auto_unbox = TRUE, null = "null", digits = NA)` writes. Serialising a row is the
+# slow part of answering a catalogue page, and the same rows are served again and again, so each row is
+# serialised once (keyed by its content) and the page is assembled from the pieces. `body` has an
+# `analyses` member, whose value is replaced.
+fake_analyses_json <- local({
+  cache <- new.env()
+  function(body, rows) {
+    pieces <- vapply(rows, function(row) {
+      key <- rlang::hash(row)
+      cache[[key]] %||% (cache[[key]] <- unclass(jsonlite::toJSON(row, auto_unbox = TRUE, null = "null", digits = NA)))
+    }, "", USE.NAMES = FALSE)
+    body["analyses"] <- list("@@analyses@@")
+    text <- unclass(jsonlite::toJSON(body, auto_unbox = TRUE, null = "null", digits = NA))
+    sub("\"@@analyses@@\"", paste0("[", paste(pieces, collapse = ","), "]"), text, fixed = TRUE)
+  }
+})
 
 # POST /api/gwasinfo with `id`, as the real API answers it: one row per Analysis however many ids
 # name it, legacy OpenGWAS ids resolved through `world$legacy`, retired and unknown ids listed.

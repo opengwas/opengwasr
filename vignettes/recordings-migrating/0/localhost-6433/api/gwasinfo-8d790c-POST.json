@@ -1,0 +1,65 @@
+{
+    "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024,OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+    "requested": 1,
+    "total": 1,
+    "analyses": [
+        {
+            "id": "OGS-00011:GCST003116",
+            "store_id": "OGS-00011",
+            "analysis_id": "GCST003116",
+            "status": "validated",
+            "listed": 1,
+            "analysis_label": "Coronary artery disease",
+            "source_label": "Coronary artery disease",
+            "source_analysis_id": "GCST003116",
+            "trait_ontology_id": "MONDO:0005010",
+            "trait_ontology_label": "coronary artery disorder",
+            "trait_ontology_mapping_method": "source_provided",
+            "tissue": null,
+            "context": null,
+            "trait_chr": null,
+            "trait_bp": null,
+            "assigned_ancestry": "EUR",
+            "ancestry_assignment_method": "af_assigned",
+            "source_ancestry_label": "European",
+            "sample_size_kind": "case_control",
+            "sample_size_scope": "analysis_level",
+            "sample_size": 187599,
+            "n_cases": 61289,
+            "n_controls": 126310,
+            "stored_effect_scale": "log_or",
+            "original_effect_scale": "log_or",
+            "original_sd": null,
+            "original_sd_method": "binary_trait",
+            "maf_threshold": 0.005,
+            "info_score_threshold": null,
+            "license": "EBI GWAS Catalog terms of use",
+            "publication_doi": null,
+            "publication_pmid": "26343387",
+            "consortium": null,
+            "first_author": "Nikpay M",
+            "outcome_type": "binary",
+            "trait_class": "phenotype",
+            "ancestry_category": "EUR",
+            "label_from_source": 0,
+            "release_id": "OGS-00011-completed"
+        }
+    ],
+    "not_found": [
+
+    ],
+    "catalog_version": "2b9d06d6f8b200d2",
+    "retired": [
+
+    ],
+    "opengwas": [
+        {
+            "id": "ebi-a-GCST003116",
+            "batch": "ebi-a",
+            "catalog_ids": [
+                "OGS-00011:GCST003116"
+            ],
+            "match": "exact"
+        }
+    ]
+}

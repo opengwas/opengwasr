@@ -27,10 +27,8 @@ og_variants_rsid <- function(src, rsids, releases = NULL) UseMethod("og_variants
 
 #' @export
 og_variants_rsid.og_api_source <- function(src, rsids, releases = NULL) {
-  deadline <- local_query(src)
-  given <- method_arguments(environment(), sys.function())
-  lookup_query(src, deadline, "api/variants/rsid", "rsids", check_lookup_values(rsids, "rsids", tolower),
-               releases, given, limit = "rsids")
+  lookup_query(src, "api/variants/rsid", "rsids", check_lookup_values(rsids, "rsids", tolower),
+               releases, limit = "rsids")
 }
 
 #' @rdname og_variants_rsid
@@ -39,10 +37,8 @@ og_variants_chrpos <- function(src, positions, releases = NULL) UseMethod("og_va
 
 #' @export
 og_variants_chrpos.og_api_source <- function(src, positions, releases = NULL) {
-  deadline <- local_query(src)
-  given <- method_arguments(environment(), sys.function())
-  lookup_query(src, deadline, "api/variants/chrpos", "positions",
-               check_lookup_values(positions, "positions", identity), releases, given, limit = "positions")
+  lookup_query(src, "api/variants/chrpos", "positions",
+               check_lookup_values(positions, "positions", identity), releases, limit = "positions")
 }
 
 # Kept: R argument types, which the API can't see. What a value looks like is the API's to say.
@@ -57,23 +53,25 @@ check_lookup_values <- function(x, arg, normalise, call = rlang::caller_env()) {
 # The one body of a lookup query: Store Releases, the Jobs (split by values and Store Releases) and
 # the rows they return, under the query-plan contract so og_submit() works.
 # `field` is the body field of the values, `limit` the job limit (`job_limits()`) on how many one Job takes.
-lookup_query <- function(src, deadline, path, field, values, releases, given, limit) {
+lookup_query <- function(src, path, field, values, releases, limit) {
   method <- parent.frame()
-  releases <- resolve_releases(src, releases, method)
-  record <- query_record(given, releases)
-  plan <- query_plan(lookup_requests(path, field, values, releases, limit), function(results) {
-    # A lookup that reports `total` and `truncated` is checked against its rows; one that doesn't
-    # (the endpoints don't cut off) counts its rows.
-    jobs <- lapply(results, function(r) {
-      n <- nrow(r$rows)
-      if (is.null(r$job$total) && is.null(r$job$truncated)) {
-        utils::modifyList(r$job, list(total = n, truncated = FALSE))
-      } else {
-        check_job_metadata(r$job, n, method)
-        r$job
-      }
-    })
-    attach_provenance(lookup_rows(results), query = record$query, args = record$args, jobs = jobs)
+  fn <- sys.function(sys.parent())
+  engine_query(src, method, fn, function(deadline) {
+    releases <- resolve_releases(src, releases, method)
+    list(requests = lookup_requests(path, field, values, releases, limit), releases = releases,
+         finish = function(results) {
+           # A lookup that reports `total` and `truncated` is checked against its rows; one that
+           # doesn't (the endpoints don't cut off) counts its rows.
+           jobs <- lapply(results, function(r) {
+             n <- nrow(r$rows)
+             if (is.null(r$job$total) && is.null(r$job$truncated)) {
+               utils::modifyList(r$job, list(total = n, truncated = FALSE))
+             } else {
+               check_job_metadata(r$job, n, method)
+               r$job
+             }
+           })
+           list(value = lookup_rows(results), jobs = jobs)
+         })
   })
-  run_query(src, plan, deadline, method)
 }

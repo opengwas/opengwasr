@@ -13,7 +13,7 @@ opengwasr replaces ieugwasr as the way R reaches OpenGWAS data. ieugwasr talks t
 
 opengwasr is not a drop-in replacement for ieugwasr. Its functions are named after the new API's own terms (Analysis, Association, GWAS Store, LD Store), and they behave differently where the new data differ. Familiar names that quietly behaved differently would be worse.
 
-> **Status.** Only the ALIDs section runs (its output is replayed from responses recorded against the development Data API on 22 November 2026). The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026. ieugwasr code is shown for comparison only.
+> **Status.** The workflow, and the sections on proxies, clumping defaults, ALIDs and derived `beta` and `pval`, run: their output is replayed from responses recorded against the development Data API on 22 and 23 November 2026. The rest fixes how opengwasr will be used, before the functions are written. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 November 2026. ieugwasr code is shown for comparison only.
 
 ```{r recordings, include = FALSE}
 source("recordings.R")
@@ -34,25 +34,15 @@ outcome <- associations(exposure$rsid, "ebi-a-GCST003116") # LD proxies for miss
 
 With opengwasr:
 
-```{r workflow, eval = FALSE}
+```{r workflow}
 library(opengwasr)
 src <- og_api()                                          # reads OPENGWAS_JWT
-exposure <- og_tophits(src, "ukb-b-19953")               # clumped in the matching LD Store
+exposure <- og_tophits(src, "ukb-b-19953", limit = 100)  # clumped in the matching LD Store
 outcome <- og_associations(src, exposure$alid, "ebi-a-GCST003116")
 table(outcome$association_status)                        # Imputed Associations, labelled
 ```
 
-```text
-# illustrative
-ℹ Clumping OGS-00009:ukb-b-19953 in LD Store hgdp1kgp-v2-EUR-k10, matched to its Assigned Ancestry (EUR): r² 0.0319 within 10,000 kb.
-Warning messages:
-1: 10,655 of the 79,248 top hits of OGS-00009:ukb-b-19953 aren't in LD Store hgdp1kgp-v2-EUR-k10, so they can't be clumped and were left out.
-2: OGS-00009:ukb-b-19953 has 1,014 index variants; only the strongest 1,000 were returned.
-ℹ Raise `limit` for more.
-
- imputed observed
-      85      911
-```
+`limit = 100` keeps this example small: it returns the 100 strongest of the index variants.
 
 Every call takes a Source first: `og_api()` here. Legacy OpenGWAS identifiers still work where they name one Analysis, but opengwasr returns the new ones (`OGS-00009:ukb-b-19953`, `OGS-00011:GCST003116`). Use those in new code.
 
@@ -92,18 +82,13 @@ These are the reasons the same analysis can give different numbers through openg
 
 ieugwasr's `associations()` asked for an LD proxy by default when an outcome Analysis lacked a variant: a nearby variant in LD, found in European 1000 Genomes data, with its alleles realigned. opengwasr has no proxy lookup. The new Store Releases are Reference-Completed: beside the Associations each source reported, they hold an **Imputed Association** for most variants the source didn't report, built once, consistently, when the GWAS Store was built.
 
-So a missing variant comes back as itself, labelled `association_status == "imputed"`, rather than as a different variant. Imputed Associations are included by default; `observed_only = TRUE` leaves them out. In the example above, 996 of the 1,000 BMI instruments are found in CAD, 85 of them Imputed; with Observed Associations only, 911. Report how many of your outcome Associations were Imputed.
+So a missing variant comes back as itself, labelled `association_status == "imputed"`, rather than as a different variant. Imputed Associations are included by default; `observed_only = TRUE` leaves them out. In the example above, all 100 BMI instruments are found in CAD, 7 of them Imputed; with Observed Associations only, 93. Report how many of your outcome Associations were Imputed.
 
 To look up the variants in LD with a given one, as a question about LD rather than a substitute Association, use `og_ld_proxies()` (see [LD proxies](ld.html#ld-proxies)).
 
-```{r no-proxies, eval = FALSE}
+```{r no-proxies}
 observed <- og_associations(src, exposure$alid, "ebi-a-GCST003116", observed_only = TRUE)
 nrow(observed)
-```
-
-```text
-# illustrative
-[1] 911
 ```
 
 ### Continuous traits are per SD {#per-sd}
@@ -131,14 +116,8 @@ ieugwasr and TwoSampleMR clumped at r² 0.001 within 10,000 kb. The new LD Store
 
 Expect different instrument counts from before. Each clumped data frame records the LD Store, r² and window it used (see [clumping provenance](ld.html#clumping-provenance)).
 
-```{r clumping-defaults, eval = FALSE}
+```{r clumping-defaults}
 unique(exposure[, c("clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
-```
-
-```text
-# illustrative
-            clump_ld clump_ld_choice   clump_r2 clump_kb
- hgdp1kgp-v2-EUR-k10         matched 0.03186544    10000
 ```
 
 ### The LD Store matches the Analysis's ancestry {#ld-by-ancestry}
@@ -171,15 +150,8 @@ og_variants_rsid(src, "rs1421085", releases = "OGS-00011")[, c("rsid", "alid")]
 
 The new API stores `z` and `se`, not `beta`. opengwasr adds `beta` = `z * se` to every Association, and `pval` computed from the p-value the API sends. When |z| is above about 38.5, `pval` underflows to 0, the limit of R's numbers, while `z` stays exact. Column names follow the new API (`effect_allele`, `other_allele`, `chromosome`); TwoSampleMR maps them to its own.
 
-```{r derived-beta-pval, eval = FALSE}
+```{r derived-beta-pval}
 head(exposure[, c("rsid", "z", "se", "beta", "pval")], 2)
-```
-
-```text
-# illustrative
-       rsid        z         se        beta          pval
- rs56094641 -36.4907 0.00201634 -0.07357775 1.555977e-291
-  rs6567160  23.1299 0.00233775  0.05407187 2.317582e-118
 ```
 
 ```{r end-recordings, include = FALSE}

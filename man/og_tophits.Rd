@@ -30,9 +30,13 @@ og_tophits(
 
 \item{observed_only}{Leave out Imputed Associations.}
 
-\item{clump}{Clump the top hits to one per independent signal. Not yet available.}
+\item{clump}{Clump the top hits to one per independent signal.}
 
-\item{ld, r2, kb}{Clumping settings, used only with \code{clump = TRUE}.}
+\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match each Analysis's
+Assigned Ancestry. Only with \code{clump = TRUE}.}
+
+\item{r2, kb}{The r² above which a top hit joins an index variant's clump, and the window in
+kilobases; \code{NULL} for the LD Store's \code{t_far} and far window. Only with \code{clump = TRUE}.}
 
 \item{original_units}{Give \code{beta} and \code{se} in the trait's original units: Analyses stored per SD are
 multiplied by their recorded phenotype SD (\code{original_sd}), and log-odds Analyses are unchanged. It
@@ -51,9 +55,19 @@ Returns each Analysis's Associations at or below a p-value \code{threshold}, str
 \code{vignette("large-queries-and-jobs")}).
 }
 \details{
-Clumping (\code{clump = TRUE}, the default once it is built) isn't available yet: asking for it raises
-an error of class \code{opengwasr_not_implemented}. Pass
-\code{clump = FALSE} for every top hit. \code{ld}, \code{r2} and \code{kb} only mean something with clumping.
+By default (\code{clump = TRUE}) the top hits are clumped on the API, one index variant per
+independent signal (see \code{vignette("ld")}): every top hit at \code{threshold} is clumped, and \code{limit}
+then caps the index variants. Each Analysis is clumped in the LD Store matching its Assigned
+Ancestry, or in the one \code{ld} names; an Unassigned Analysis is refused (\code{opengwasr_ld_unmatched})
+unless \code{ld} is given, before any Job runs. The Jobs, one per Analysis, are submitted grouped by
+LD Store; with progress on (option \code{opengwasr.progress}), a message of class
+\code{opengwasr_clumping} says which LD Store each Analysis is clumped in. \code{r2} and \code{kb} default to the LD Store's Far Threshold
+(\code{t_far}) and its far window (\code{far_bp}, 10,000 kb), and are always sent. A pair the LD Store can't
+answer exactly is refused by the API (\code{opengwasr_ld_refusal}). Top hits the LD Store doesn't hold
+can't be clumped: they are left out, with a warning of class \code{opengwasr_clump_absent} (\code{count}).
+Clumped rows add \code{clump_ld}, \code{clump_ld_choice}, \code{clump_r2}, \code{clump_kb} and \code{clump_size}, and
+\code{og_provenance(x)$clump} has each Analysis's \code{hits}, \code{absent} and \code{leads}. Pass \code{clump = FALSE}
+for every top hit.
 
 The columns are those the vignette section "What the columns mean" lists: the Analysis \code{id}, the variant, \code{beta} (\code{z * se}), \code{se}, \code{z}, \code{pval}, \code{effect_scale}
 (\code{"sd"} or \code{"log_or"} from the Analysis's stored effect scale, or \code{"original"} with

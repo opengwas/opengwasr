@@ -39,12 +39,11 @@ og_ld_proxies.og_api_source <- function(src, variants, ld = NULL, r2 = 0.8, kb =
 }
 
 ld_proxies_assemble <- function(results, ctx) {
-  found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
-  if (length(found) == 0) {
+  rows <- result_rows(results)
+  if (nrow(rows) == 0) {
     return(data.frame(alid = character(), proxy_alid = character(), r = numeric(), r2 = numeric(),
                       distance = integer(), stringsAsFactors = FALSE))
   }
-  rows <- bind_frames(found)
   out <- data.frame(alid = rows$query, proxy_alid = rows$proxy, r = rows$r, r2 = rows$r2,
                     distance = rows$distance, stringsAsFactors = FALSE)
   out <- out[order(match(out$alid, ctx$alids), -out$r2, method = "radix"), , drop = FALSE]

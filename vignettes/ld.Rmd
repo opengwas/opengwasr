@@ -11,7 +11,7 @@ Linkage disequilibrium (LD) is how strongly two variants are inherited together,
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** The sections on LD Stores, choosing the LD, LD matrices and LD proxies run: their output is real (replayed from responses recorded against the development Data API on 22 November 2026). Clumping and the PLINK Reference aren't written yet: they fix how opengwasr will be used. Each grey output block marked `# illustrative` holds values taken from the development Data API on 21 and 22 November 2026, shaped the way opengwasr will return them. The PLINK Reference examples are illustrative too, but the API isn't involved in them.
+> **Status.** The sections on LD Stores, choosing the LD, LD matrices, LD proxies and clumping run: their output is real (replayed from responses recorded against the development Data API on 22 and 23 November 2026). The PLINK Reference isn't written yet: its section fixes how opengwasr will be used, and its grey output blocks marked `# illustrative` are shaped the way opengwasr will return them (the API isn't involved in them).
 
 ```{r credentials, include = FALSE}
 source("recordings.R")
@@ -40,18 +40,16 @@ og_ld_stores(src)
 
 ### Matching by Assigned Ancestry {#ld-store-matching}
 
-By default, opengwasr uses the LD Store that matches the **Assigned Ancestry** of the Analyses behind your variants, the ancestry opengwasdb inferred from an Analysis's allele frequencies. It reads them from the `id` column of a data frame of Associations. One call uses one LD Store, so each of these Analyses's top hits gets its own LD matrix (clumping, [below](#clumping), will choose the same way):
+By default, opengwasr uses the LD Store that matches each Analysis's **Assigned Ancestry**, the ancestry opengwasdb inferred from the Analysis's allele frequencies. Analyses of different ancestries in one call each get their own LD Store. Here, two Analyses' top hits are clumped (see [Clumping](#clumping)):
 
 ```{r ld-store-matching, warning = FALSE}
-both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"), clump = FALSE, limit = 5)
-tapply(both$alid, both$id, function(alid) {
-  og_provenance(og_ld_matrix(src, both[both$alid %in% alid, ]))$ld
-})
+both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"))
+unique(both[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
 ```
 
-`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is read from African LD. A non-European Analysis is never given European LD unless you ask for it. `og_provenance()` records the choice: `ld` is the LD Store, and `ld_choice` is `"matched"` here.
+`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is clumped against African LD, at that LD Store's own `t_far`. A non-European Analysis is never given European LD unless you ask for it. An LD matrix or LD proxies of a data frame of Associations choose the same way, from its `id` column, and `og_provenance()` records the choice in `ld` and `ld_choice`.
 
-If several LD Stores serve one ancestry, opengwasr uses the one the LD Store list declares as that ancestry's default, and `ld_choice` says `"ancestry_default"`. Today each ancestry has one LD Store. (`og_ld_stores()`'s `default` column says which; it is `NA` until the API declares one, and an ancestry with several LD Stores and no declared default is refused.)
+If several LD Stores serve one ancestry, opengwasr uses the one the LD Store list declares as that ancestry's default, and `clump_ld_choice` (or `ld_choice`) says `"ancestry_default"`. Today each ancestry has one LD Store. (`og_ld_stores()`'s `default` column says which; it is `NA` until the API declares one, and an ancestry with several LD Stores and no declared default is refused.)
 
 ### The `ld` argument {#ld-argument}
 
@@ -68,11 +66,9 @@ An exact LD Store name wins; otherwise `ld` is read as an ancestry code and reso
 
 `ld` is separate from the Source the Associations come from, so the same LD choice keeps working whichever Source you use.
 
-```{r choosing-ld, warning = FALSE}
-cad <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE, limit = 5)
-by_name <- og_ld_matrix(src, cad, ld = "hgdp1kgp-v2-EUR-k10")
-by_ancestry <- og_ld_matrix(src, cad, ld = "EUR")
-c(og_provenance(by_name)$ld_choice, og_provenance(by_ancestry)$ld_choice)
+```{r choosing-ld}
+cad_eur <- og_tophits(src, "OGS-00011:GCST003116", ld = "hgdp1kgp-v2-EUR-k10")
+unique(cad_eur$clump_ld_choice)
 ```
 
 A plain vector of variants has no ancestry to match, so `og_ld_matrix()` and `og_ld_proxies()` need `ld` when given one.
@@ -81,16 +77,15 @@ A plain vector of variants has no ancestry to match, so `og_ld_matrix()` and `og
 
 An Analysis whose allele frequencies match no single ancestry confidently is **Unassigned** (`assigned_ancestry` is `NA` in `og_analyses()`). opengwasr won't guess an LD Store for it, and never falls back to European LD:
 
-```{r unassigned, error = TRUE, warning = FALSE}
-basophils <- og_tophits(src, "OGS-00014:GCST90475125", clump = FALSE, limit = 5)
-og_ld_matrix(src, basophils)
+```{r unassigned, error = TRUE}
+og_tophits(src, "OGS-00014:GCST90475125")
 ```
 
 The error has class `opengwasr_ld_unmatched`, a kind of `opengwasr_refusal`, with the LD Stores in `e$ld_stores`. If you decide AMR LD is right for it (its source describes it as "AMR"), say so:
 
-```{r unassigned-ld}
-m <- og_ld_matrix(src, basophils, ld = "AMR")
-og_provenance(m)$ld
+```{r unassigned-ld, warning = FALSE}
+basophils <- og_tophits(src, "OGS-00014:GCST90475125", ld = "AMR")
+unique(basophils$clump_ld)
 ```
 
 The same refusal applies whenever one LD Store is needed for several Analyses (an LD matrix, or `og_clump()`), and their ancestries differ or one of them is Unassigned. One LD Store is never applied to a different ancestry without your say-so.
@@ -115,15 +110,10 @@ round(m, 3)
 
 Given a data frame of Associations, `og_ld_matrix()` matches the LD Store by the Analyses' Assigned Ancestry:
 
-```{r ld-matrices-matched, eval = FALSE}
+```{r ld-matrices-matched, warning = FALSE}
 cad <- og_tophits(src, "OGS-00011:GCST003116")
 m <- og_ld_matrix(src, cad)
 og_provenance(m)$ld
-```
-
-```text
-# illustrative
-[1] "hgdp1kgp-v2-EUR-k10"
 ```
 
 ### Missing pairs, and filling them with 0 {#ld-matrix-fill}
@@ -170,25 +160,10 @@ Clumping keeps one variant per independent signal.
 
 `og_tophits()` clumps unless you pass `clump = FALSE`:
 
-```{r default-clumping, eval = FALSE}
+```{r default-clumping}
 cad <- og_tophits(src, "OGS-00011:GCST003116")
 nrow(cad)
 head(cad[, c("rsid", "alid", "beta", "pval", "clump_size")], 5)
-```
-
-```text
-# illustrative
-ℹ Clumping OGS-00011:GCST003116 in LD Store hgdp1kgp-v2-EUR-k10, matched to its Assigned Ancestry (EUR): r² 0.0319 within 10,000 kb.
-Warning message:
-234 of the 2,194 top hits of OGS-00011:GCST003116 aren't in LD Store hgdp1kgp-v2-EUR-k10, so they can't be clumped and were left out.
-
-[1] 49
-        rsid            alid        beta         pval clump_size
-   rs2891168  9:22098620:A:G -0.19335911 2.296241e-98        193
-  rs55730499 6:160584578:C:T -0.31671619 5.392728e-39         94
-   rs7528419 1:109274570:A:G  0.11453085 1.968746e-23          9
-   rs4711863  6:12915185:C:G -0.09856474 1.613590e-21         96
- rs115654617 2:203029276:A:C  0.13790739 3.119371e-18        316
 ```
 
 The 2,194 top hits at p ≤ 5e-8 reduce to 49 index variants. `clump_size` counts the top hits each index variant stands for, itself included.
@@ -207,19 +182,13 @@ ieugwasr's default, r² 0.001 within 10,000 kb, is not. Beyond 3,000 kb an LD St
 
 Pass `r2` and `kb` to clump with your own thresholds. If the LD Store can answer them exactly, it does. If not, the API refuses and says why, and opengwasr passes its message on. It never clumps at something close to what you asked.
 
-```{r refusals, eval = FALSE}
+```{r refusals, error = TRUE}
 og_tophits(src, "OGS-00011:GCST003116", r2 = 0.001, kb = 10000)
 ```
 
-```text
-# illustrative
-Error in `og_tophits()`:
-! r2=0.001 is below t_far=0.03186544342507645: beyond 3,000,000 bp the store holds only the Bound r² < t_far for unstored pairs, which does not decide r̂² ≥ r2
-```
+The message is the API's. The error has class `opengwasr_ld_refusal`, a kind of `opengwasr_refusal`. It carries the API's reason and the LD Store's limits as fields, so a script can decide what to do: here, any `r2` is answered within `near_bp`, 3,000 kb, and an `r2` of at least `t_far` within `far_bp`, 10,000 kb. Catch `opengwasr_ld_refusal` itself to read those fields; the parent class `opengwasr_refusal` also covers refusals that don't have them:
 
-The message is the API's (the development Data API's answer to this request on 22 November 2026). The error has class `opengwasr_ld_refusal`, a kind of `opengwasr_refusal`. It carries the API's reason and the LD Store's limits as fields, so a script can decide what to do: here, any `r2` is answered within `near_bp`, 3,000 kb, and an `r2` of at least `t_far` within `far_bp`, 10,000 kb. Catch `opengwasr_ld_refusal` itself to read those fields; the parent class `opengwasr_refusal` also covers refusals that don't have them:
-
-```{r refusals-catch, eval = FALSE}
+```{r refusals-catch, warning = FALSE}
 cad_strict <- tryCatch(
   og_tophits(src, "OGS-00011:GCST003116", r2 = 0.001, kb = 10000),
   opengwasr_ld_refusal = function(e) {
@@ -229,46 +198,24 @@ cad_strict <- tryCatch(
 )
 ```
 
-```text
-# illustrative
-Refused (threshold_below_t_far); clumping within 3000 kb instead.
-```
-
 Fields, as the API sends them: `e$reason` (here `"threshold_below_t_far"`), `e$store` (the LD Store), `e$ancestry`, `e$t_far`, `e$near_bp` and `e$far_bp`. `og_ld_proxies()` refuses in the same way.
 
 ### Clumping data you already have {#og-clump}
 
-`og_clump()` clumps any data frame of Associations as one set, such as the top hits of several Analyses together. It needs `alid` (or `rsid`) and `z`, and an `id` column if the LD Store is to be matched by ancestry. A variant listed several times is ranked by its largest |z|, and every Association of a kept variant is returned.
+`og_clump()` clumps any data frame of Associations as one set, such as the top hits of several Analyses together. It needs `alid` and `z`, and an `id` column if the LD Store is to be matched by ancestry. A variant listed several times is ranked by its largest |z|, and every Association of a kept variant is returned. Here the 100 strongest index variants of each Analysis are clumped together:
 
-```{r og-clump, eval = FALSE}
-bmi <- og_tophits(src, "OGS-00011:GCST90029007")
-ldl <- og_tophits(src, "OGS-00011:GCST90002412")
+```{r og-clump, warning = FALSE, message = FALSE}
+bmi <- og_tophits(src, "OGS-00011:GCST90029007", limit = 100)
+ldl <- og_tophits(src, "OGS-00011:GCST90002412", limit = 100)
 joint <- og_clump(src, rbind(bmi, ldl))
 table(joint$id)
 ```
 
-```text
-# illustrative
-ℹ Clumping 1,993 variants from 2 Analyses in LD Store hgdp1kgp-v2-EUR-k10, matched to their Assigned Ancestry (EUR): r² 0.0319 within 10,000 kb.
-
-OGS-00011:GCST90002412 OGS-00011:GCST90029007
-                   962                    932
-```
-
 `og_clump()` takes `ld`, `r2` and `kb` exactly as `og_tophits()` does. With the default `ld = NULL`, every Analysis in `data` must share one Assigned Ancestry:
 
-```{r og-clump-mixed, eval = FALSE}
-hba1c_afr <- og_tophits(src, "OGS-00013:GCST90475090")
+```{r og-clump-mixed, error = TRUE, warning = FALSE, message = FALSE}
+hba1c_afr <- og_tophits(src, "OGS-00013:GCST90475090", limit = 100)
 og_clump(src, rbind(bmi, hba1c_afr))
-```
-
-```text
-# illustrative
-Error in `og_clump()`:
-! Can't choose one LD Store for these Analyses: their Assigned Ancestries differ.
-• EUR: OGS-00011:GCST90029007
-• AFR: OGS-00013:GCST90475090
-ℹ Choose the LD with `ld`, from: "EUR", "AFR", "EAS", "SAS", "AMR" (see `og_ld_stores()`).
 ```
 
 A data frame with no `id` column has no Assigned Ancestry to match, so `ld` must be given.
@@ -286,21 +233,12 @@ Every clumped data frame records how it was clumped, in columns that survive sub
 
 `og_provenance()` (defined in [Getting started](opengwasr.html#provenance)) adds the counts behind them. Unlike the columns, it doesn't survive `rbind()`:
 
-```{r clumping-provenance, eval = FALSE}
+```{r clumping-provenance}
 og_provenance(cad)
+og_provenance(cad)$clump
 ```
 
-```text
-# illustrative
-── opengwasr provenance ─────────────────────
-• Query: og_tophits(threshold = 5e-08, limit = 1000, observed_only = FALSE, clump = TRUE)
-• Store Releases: OGS-00011/OGS-00011-completed
-• Clumped: OGS-00011:GCST003116 in hgdp1kgp-v2-EUR-k10 (matched), r² 0.0319 within 10,000 kb
-• Top hits: 2,194 at p <= 5e-08; 234 not in the LD Store; 49 index variants
-• Retrieved: 2026-11-21 23:25:02 UTC
-```
-
-Two clumpings that differ can be explained from these alone.
+`hits` counts the top hits at the threshold, `absent` those the LD Store doesn't hold, and `leads` the index variants. Two clumpings that differ can be explained from these alone.
 
 ## Using a PLINK Reference {#plink-reference}
 

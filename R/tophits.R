@@ -4,9 +4,19 @@
 #' `limit` per Analysis. The query runs as a Job on the API, and `og_tophits()` waits for it (see
 #' `vignette("large-queries-and-jobs")`).
 #'
-#' Clumping (`clump = TRUE`, the default once it is built) isn't available yet: asking for it raises
-#' an error of class `opengwasr_not_implemented`. Pass
-#' `clump = FALSE` for every top hit. `ld`, `r2` and `kb` only mean something with clumping.
+#' By default (`clump = TRUE`) the top hits are clumped on the API, one index variant per
+#' independent signal (see `vignette("ld")`): every top hit at `threshold` is clumped, and `limit`
+#' then caps the index variants. Each Analysis is clumped in the LD Store matching its Assigned
+#' Ancestry, or in the one `ld` names; an Unassigned Analysis is refused (`opengwasr_ld_unmatched`)
+#' unless `ld` is given, before any Job runs. The Jobs, one per Analysis, are submitted grouped by
+#' LD Store; with progress on (option `opengwasr.progress`), a message of class
+#' `opengwasr_clumping` says which LD Store each Analysis is clumped in. `r2` and `kb` default to the LD Store's Far Threshold
+#' (`t_far`) and its far window (`far_bp`, 10,000 kb), and are always sent. A pair the LD Store can't
+#' answer exactly is refused by the API (`opengwasr_ld_refusal`). Top hits the LD Store doesn't hold
+#' can't be clumped: they are left out, with a warning of class `opengwasr_clump_absent` (`count`).
+#' Clumped rows add `clump_ld`, `clump_ld_choice`, `clump_r2`, `clump_kb` and `clump_size`, and
+#' `og_provenance(x)$clump` has each Analysis's `hits`, `absent` and `leads`. Pass `clump = FALSE`
+#' for every top hit.
 #'
 #' The columns are those the vignette section "What the columns mean" lists: the Analysis `id`, the variant, `beta` (`z * se`), `se`, `z`, `pval`, `effect_scale`
 #' (`"sd"` or `"log_or"` from the Analysis's stored effect scale, or `"original"` with
@@ -33,8 +43,11 @@
 #'   `5e-4` and refuses a looser one (`opengwasr_unsupported_threshold`).
 #' @param limit The most top hits to return per Analysis, at most 10,000.
 #' @param observed_only Leave out Imputed Associations.
-#' @param clump Clump the top hits to one per independent signal. Not yet available.
-#' @param ld,r2,kb Clumping settings, used only with `clump = TRUE`.
+#' @param clump Clump the top hits to one per independent signal.
+#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match each Analysis's
+#'   Assigned Ancestry. Only with `clump = TRUE`.
+#' @param r2,kb The r² above which a top hit joins an index variant's clump, and the window in
+#'   kilobases; `NULL` for the LD Store's `t_far` and far window. Only with `clump = TRUE`.
 #' @param original_units Give `beta` and `se` in the trait's original units: Analyses stored per SD are
 #'   multiplied by their recorded phenotype SD (`original_sd`), and log-odds Analyses are unchanged. It
 #'   refuses, with class `opengwasr_original_units_unavailable` and before any query runs, when an
@@ -61,11 +74,12 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
                                      kb = NULL, original_units = FALSE, releases = NULL) {
   check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
   # `limit` applies to each Analysis, so no split changes it; a Job's rows (`limit` x Analyses) must
-  # fit the row cap.
+  # fit the row cap. Clumped, each Analysis is one Job, in its own LD Store; `limit` counts its leads.
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
-                    analyses_per_job = tophits_analyses_per_job(limit), order = "api",
-                    truncated = function(ids) truncated_message(ids, threshold, limit))
+                    analyses_per_job = if (clump) 1L else tophits_analyses_per_job(limit), order = "api",
+                    truncated = function(ids) truncated_message(ids, threshold, limit, clump),
+                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb)))
 }
 
 # Kept: R argument types and shapes, and `limit`'s range, which the splitter needs to size Jobs.
@@ -78,12 +92,10 @@ check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = 
     bad(paste0("`limit` must be one whole number from 1 to ", format(max_tophits_per_analysis, big.mark = ","), "."))
   }
   if (!is_flag(clump)) bad("`clump` must be `TRUE` or `FALSE`.")
-  if (clump) {
-    not_implemented("`clump = TRUE`", "#13", "Pass `clump = FALSE` for every top hit.", call)
-  }
-  if (!is.null(ld) || !is.null(r2) || !is.null(kb)) {
+  if (!clump && (!is.null(ld) || !is.null(r2) || !is.null(kb))) {
     bad("`ld`, `r2` and `kb` only apply with `clump = TRUE`.")
   }
+  check_clump_settings(r2, kb, call)
 }
 
 # Kept: the R types of `threshold` and `limit` (shared by og_tophits() and og_phewas()); their
@@ -96,17 +108,11 @@ check_threshold_limit <- function(threshold, limit, call = rlang::caller_env()) 
   }
 }
 
-# A feature the vignettes promise and a later ticket builds.
-not_implemented <- function(what, ticket, advice, call) {
-  og_abort(c(paste0(what, " isn't available yet: opengwasr ticket ", ticket, " builds it."), i = advice),
-           class = "opengwasr_not_implemented", ticket = ticket, call = call)
-}
-
 # What the `opengwasr_truncated` warning says when `limit` cut an Analysis's top hits off.
-truncated_message <- function(ids, threshold, limit) {
+truncated_message <- function(ids, threshold, limit, clump = FALSE) {
   who <- if (length(ids) == 1) ids else paste0("At least one of the ", length(ids), " Analyses")
-  c(paste0(who, " has more than ", format(limit, big.mark = ","), " top hits at p <= ",
-           format(threshold), "; only the strongest ", format(limit, big.mark = ","), " were returned."),
+  c(paste0(who, " has more than ", format(limit, big.mark = ","), if (clump) " index variants" else " top hits",
+           " at p <= ", format(threshold), "; only the strongest ", format(limit, big.mark = ","), " were returned."),
     i = if (limit < max_tophits_per_analysis) {
       paste0("Raise `limit` (at most ", format(max_tophits_per_analysis, big.mark = ","), ") for more.")
     })

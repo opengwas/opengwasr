@@ -24,6 +24,7 @@ reference:
   - og_ld_stores
   - og_ld_matrix
   - og_ld_proxies
+  - og_clump
 - title: Jobs
   contents:
   - og_submit

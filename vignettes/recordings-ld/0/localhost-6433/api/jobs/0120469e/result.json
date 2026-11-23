@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 16,
+        "total_rows": 16,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 6179,
+        "total_bytes": 6179,
+        "sha256": "7f02ff8f4fec4fe4b609d054445b0a7df6f639072296f2e7078514e396e82448",
+        "page_sha256": [
+            "7f02ff8f4fec4fe4b609d054445b0a7df6f639072296f2e7078514e396e82448"
+        ],
+        "retention_expires_at": "2026-11-23T01:03:43.872423+00:00",
+        "page_encoding": "text",
+        "job_id": "0120469e",
+        "fingerprint": "sha256:453b17294996e198b7eccac5fec9fd8580e721861aeef2425696f4f337918cc7",
+        "release_id": "OGS-00014/OGS-00014-completed",
+        "releases": [
+            {
+                "store_id": "OGS-00014",
+                "release_id": "OGS-00014-completed"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 16,
+    "byte_count": 6179,
+    "sha256": "7f02ff8f4fec4fe4b609d054445b0a7df6f639072296f2e7078514e396e82448",
+    "ndjson": "{\"alid\":\"19:33263642:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"19\",\"clump_size\":34,\"eaf\":0.9170013070106506,\"effect_allele\":\"C\",\"log10_p\":-59.150136136909275,\"other_allele\":\"T\",\"position\":33263642,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs78744187\",\"se\":0.015844155102968216,\"store_id\":\"OGS-00014\",\"z\":16.3203125}\n{\"alid\":\"3:128597592:A:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"3\",\"clump_size\":181,\"eaf\":0.8329766988754272,\"effect_allele\":\"A\",\"log10_p\":-36.93179929381251,\"other_allele\":\"G\",\"position\":128597592,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs4328821\",\"se\":0.011596351861953735,\"store_id\":\"OGS-00014\",\"z\":12.826171875}\n{\"alid\":\"14:23116124:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"14\",\"clump_size\":15,\"eaf\":0.3822714388370514,\"effect_allele\":\"C\",\"log10_p\":-17.271106455023645,\"other_allele\":\"T\",\"position\":23116124,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs4982731\",\"se\":0.009476250037550926,\"store_id\":\"OGS-00014\",\"z\":-8.6455078125}\n{\"alid\":\"19:33259704:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"19\",\"clump_size\":18,\"eaf\":0.8812609910964966,\"effect_allele\":\"C\",\"log10_p\":-13.19505794368861,\"other_allele\":\"T\",\"position\":33259704,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs68187643\",\"se\":0.01359461434185505,\"store_id\":\"OGS-00014\",\"z\":-7.5}\n{\"alid\":\"19:33241688:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"19\",\"clump_size\":2,\"eaf\":0.4009084403514862,\"effect_allele\":\"C\",\"log10_p\":-12.575024798982657,\"other_allele\":\"T\",\"position\":33241688,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs752503\",\"se\":0.009465578943490982,\"store_id\":\"OGS-00014\",\"z\":7.310546875}\n{\"alid\":\"19:33301842:A:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"19\",\"clump_size\":1,\"eaf\":0.03121272288262844,\"effect_allele\":\"A\",\"log10_p\":-10.58897283769128,\"other_allele\":\"G\",\"position\":33301842,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs192240793\",\"se\":0.03197835013270378,\"store_id\":\"OGS-00014\",\"z\":-6.6689453125}\n{\"alid\":\"3:3151502:A:AAAAACTAC\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"3\",\"clump_size\":17,\"eaf\":0.29446864128112793,\"effect_allele\":\"A\",\"log10_p\":-9.54765530031251,\"other_allele\":\"AAAAACTAC\",\"position\":3151502,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs3840225\",\"se\":0.010142344050109386,\"store_id\":\"OGS-00014\",\"z\":6.3076171875}\n{\"alid\":\"20:32632005:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"20\",\"clump_size\":7,\"eaf\":0.3488696813583374,\"effect_allele\":\"C\",\"log10_p\":-9.533963470055218,\"other_allele\":\"T\",\"position\":32632005,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs464063\",\"se\":0.009673170745372772,\"store_id\":\"OGS-00014\",\"z\":6.302734375}\n{\"alid\":\"14:23126214:A:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"14\",\"clump_size\":6,\"eaf\":0.9489423632621765,\"effect_allele\":\"A\",\"log10_p\":-9.509343694167557,\"other_allele\":\"G\",\"position\":23126214,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs17198995\",\"se\":0.021611912176012993,\"store_id\":\"OGS-00014\",\"z\":-6.2939453125}\n{\"alid\":\"11:2297734:C:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"11\",\"clump_size\":9,\"eaf\":0.17903999984264374,\"effect_allele\":\"C\",\"log10_p\":-8.16018910869056,\"other_allele\":\"G\",\"position\":2297734,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs61873115\",\"se\":0.011995553970336914,\"store_id\":\"OGS-00014\",\"z\":-5.79296875}\n{\"alid\":\"1:87275139:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"1\",\"clump_size\":9,\"eaf\":0.830682635307312,\"effect_allele\":\"C\",\"log10_p\":-7.984338523778482,\"other_allele\":\"T\",\"position\":87275139,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs4655950\",\"se\":0.011805188842117786,\"store_id\":\"OGS-00014\",\"z\":5.724609375}\n{\"alid\":\"7:75852294:C:T\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"7\",\"clump_size\":10,\"eaf\":0.9262147545814514,\"effect_allele\":\"C\",\"log10_p\":-7.979343271230818,\"other_allele\":\"T\",\"position\":75852294,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs6969965\",\"se\":0.018007390201091766,\"store_id\":\"OGS-00014\",\"z\":-5.72265625}\n{\"alid\":\"4:87075593:A:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"4\",\"clump_size\":3,\"eaf\":0.36804860830307007,\"effect_allele\":\"A\",\"log10_p\":-7.969357606827294,\"other_allele\":\"G\",\"position\":87075593,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs17605615\",\"se\":0.009111912921071053,\"store_id\":\"OGS-00014\",\"z\":-5.71875}\n{\"alid\":\"1:233745158:T:TC\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"1\",\"clump_size\":1,\"eaf\":0.030647166073322296,\"effect_allele\":\"T\",\"log10_p\":-7.827763068045568,\"other_allele\":\"TC\",\"position\":233745158,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs200871045\",\"se\":0.03305165469646454,\"store_id\":\"OGS-00014\",\"z\":-5.6630859375}\n{\"alid\":\"3:101605415:A:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"3\",\"clump_size\":3,\"eaf\":0.15383502840995789,\"effect_allele\":\"A\",\"log10_p\":-7.741468239058637,\"other_allele\":\"G\",\"position\":101605415,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs59233351\",\"se\":0.012794078327715397,\"store_id\":\"OGS-00014\",\"z\":5.62890625}\n{\"alid\":\"3:3081642:A:G\",\"analysis_id\":\"GCST90475125\",\"analysis_label\":\"GCST90475125\",\"association_status\":\"observed\",\"chromosome\":\"3\",\"clump_size\":1,\"eaf\":0.7745012044906616,\"effect_allele\":\"A\",\"log10_p\":-7.303076966560909,\"other_allele\":\"G\",\"position\":3081642,\"release_id\":\"OGS-00014-completed\",\"rsid\":\"rs163546\",\"se\":0.010775852017104626,\"store_id\":\"OGS-00014\",\"z\":5.4521484375}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

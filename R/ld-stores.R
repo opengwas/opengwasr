@@ -1,7 +1,7 @@
 # LD Stores: what the API serves, and the one owner of choosing one.
 #
 # An LD Store holds the LD of one reference panel of one ancestry. Every LD operation (the matrix and
-# proxies here, clumping in #13) names exactly one, and gets it from `choose_ld_store()`: never
+# proxies here, clumping in R/clump.R) names exactly one, and gets it from `choose_ld_store()`: never
 # write a second chooser.
 
 #' List the LD Stores
@@ -46,7 +46,8 @@ ld_stores <- function(src, call = rlang::caller_env()) {
 #'
 #' @param src The Source.
 #' @param ld An LD Store's name (wins: `"user"`), an ancestry code (that ancestry's LD Store:
-#'   `"ancestry_default"`), or `NULL` (matched from `ancestries`: `"matched"`).
+#'   `"ancestry_default"`), or `NULL` (matched from `ancestries`: `"matched"`, or
+#'   `"ancestry_default"` when several LD Stores serve that ancestry and its declared default chose).
 #' @param ancestries `NULL` when the operation has no Analyses behind its variants, else a character
 #'   vector of the Assigned Ancestry of each Analysis (`NA` for Unassigned), named by Analysis id.
 #'   Only read when `ld` is `NULL`.
@@ -120,7 +121,9 @@ choose_ld_store <- function(src, ld, ancestries = NULL, call = rlang::caller_env
   if (nrow(own) != 1) {
     refuse(paste0("No single LD Store serves ancestry ", ancestries[[1]], "."))
   }
-  list(store = own, choice = "matched")
+  # Several LD Stores serve the ancestry, and its declared default broke the tie.
+  several <- sum(stores$ready & stores$ancestry %in% ancestries[[1]]) > 1
+  list(store = own, choice = if (several) "ancestry_default" else "matched")
 }
 
 # The Assigned Ancestry of each Analysis in a data frame of Associations (its `id` column), named by

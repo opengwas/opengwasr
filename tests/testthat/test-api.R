@@ -267,7 +267,7 @@ test_that("each kept client check raises before any request", {
     argument = quote(og_analyses(src, NA_character_)),
     argument = quote(og_analyses(src, "x", releases = 7)),
     argument = quote(og_associations(src, "16:53767042:T:C", cad)),   # non-canonical ALID (until ogdb-api#183)
-    not_implemented = quote(og_tophits(src, cad, clump = TRUE)),
+    argument = quote(og_tophits(src, cad, r2 = "0.1")),
     auth = quote(withr::with_envvar(c(OPENGWAS_DEV_KEY = NA), og_api(url = "http://x.test")))
   )
   for (i in seq_along(kept)) {

@@ -279,8 +279,38 @@ fake_tophits <- function() {
     "OGS-00011:GCST90029007" = list(
       bmi("16:53767042:A:C", "rs1558902", -40, 0.001, -350),
       bmi("16:53800000:A:G", "rs9939609", 6, 0.25, -8)
+    ),
+    # The AFR Analysis (`afr_analysis` scenario): one hit no LD Store holds (position ending 999).
+    "OGS-00011:GCST90475090" = list(
+      hit("OGS-00011", "OGS-00011-completed", "GCST90475090", "HbA1c in African ancestry", "1:5000:A:G", "rs51", 9, 0.02, -19),
+      hit("OGS-00011", "OGS-00011-completed", "GCST90475090", "HbA1c in African ancestry", "1:5999:A:G", "rs52", 8, 0.02, -15),
+      hit("OGS-00011", "OGS-00011-completed", "GCST90475090", "HbA1c in African ancestry", "1:5200:A:G", "rs53", 7, 0.02, -12)
     )
   )
+}
+
+# Clumping as the API does it (plink's greedy rule): strongest score first, each lead takes every
+# weaker variant not yet clumped within `kb` whose r^2 with it (fake_ld_r()) is above `r2`. Returns
+# each variant's lead and r with it.
+fake_clump <- function(alids, scores, store, r2, kb) {
+  lead <- rep(NA_character_, length(alids))
+  r <- rep(NA_real_, length(alids))
+  order <- order(-scores)
+  position <- function(a) as.numeric(strsplit(a, ":", fixed = TRUE)[[1]][[2]])
+  for (i in order) {
+    if (!is.na(lead[i])) next
+    lead[i] <- alids[i]
+    r[i] <- 1
+    for (j in order) {
+      if (!is.na(lead[j])) next
+      rr <- fake_ld_r(alids[i], alids[j], store)
+      if (!is.na(rr) && abs(position(alids[i]) - position(alids[j])) < kb * 1000 && rr^2 > r2) {
+        lead[j] <- alids[i]
+        r[j] <- rr
+      }
+    }
+  }
+  list(lead = lead, r = r)
 }
 
 # The variant table of GWAS Store OGS-00011: one row per ALID an rsID names, as the dev Data API
@@ -506,18 +536,44 @@ fake_api <- function(world = fake_world()) {
     if (threshold > 5e-4) return(fail(req, res, "unsupported_threshold"))
     limit <- body$limit %||% 1000L
     ids <- unlist(body$analyses)
+    # Clumped (`clump`): every hit at the threshold is clumped in the LD Store (by default EUR, r^2
+    # 0.001 within 3,000 kb, as the API's own defaults are), and `limit` counts the leads.
+    clump <- body$clump
+    if (!is.null(clump)) {
+      if (length(ids) == 0) return(fail(req, res, "invalid_request", problems = "clump needs analyses"))
+      store <- ld_store_of(req, res, clump)
+      if (is.null(store)) return()
+      clump$r2 <- clump$r2 %||% 0.001
+      clump$kb <- clump$kb %||% 3000
+      if (ld_refusal(req, res, store, clump)) return()
+      counts <- list(hits = 0L, leads = 0L, absent = 0L)
+    }
     rows <- list()
     truncated <- FALSE
     for (id in ids) {
       hits <- world$tophits[[id]] %||% list()
       hits <- Filter(function(h) h$association_status == "observed" || !isTRUE(body$observed_only), hits)
       hits <- Filter(function(h) 10^h$log10_p <= threshold || h$log10_p < -300, hits)
+      if (!is.null(clump)) {
+        held <- Filter(function(h) fake_ld_holds(h$alid), hits)
+        alids <- vapply(held, function(h) h$alid, "")
+        clumped <- fake_clump(alids, vapply(held, function(h) abs(h$z), 0), store, clump$r2, clump$kb)
+        leads <- held[clumped$lead == alids]
+        leads <- lapply(leads, function(h) c(h, list(clump_size = sum(clumped$lead == h$alid))))
+        counts <- list(hits = counts$hits + length(hits), leads = counts$leads + length(leads),
+                       absent = counts$absent + length(hits) - length(held))
+        hits <- leads
+      }
       if (length(hits) > limit) truncated <- TRUE
       rows <- c(rows, utils::head(hits, limit))
     }
-    submit_job(req, res, "/api/tophits", body, rows,
-               list(threshold = threshold, observed_only = isTRUE(body$observed_only),
-                    total = length(rows), truncated = truncated))
+    metadata <- list(threshold = threshold, observed_only = isTRUE(body$observed_only),
+                     total = length(rows), truncated = truncated)
+    if (!is.null(clump)) {
+      metadata$clump <- c(list(r2 = clump$r2, kb = clump$kb), counts,
+                          list(ld_stores = stats::setNames(list(store$store), store$ancestry)))
+    }
+    submit_job(req, res, "/api/tophits", body, rows, metadata)
   })
   # Variants in Analyses. `variants` are rsIDs or ALIDs, as the API takes them; an rsID stands for
   # every ALID it names. Rows come in the order of the Analyses asked for, then genome position .
@@ -585,7 +641,7 @@ fake_api <- function(world = fake_world()) {
   }
   app$get("/api/ld/stores", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
-    res$send_json(list(stores = ld_served(req)), auto_unbox = TRUE, null = "null")
+    res$send_json(list(stores = ld_served(req)), auto_unbox = TRUE, null = "null", digits = NA)
   })
   # The 422 a store gives for a request it can't answer exactly (`r2` below `t_far` over more than `near_bp`).
   ld_refusal <- function(req, res, store, body) {
@@ -610,7 +666,7 @@ fake_api <- function(world = fake_world()) {
     if (identical(endpoint, "/api/ld/matrix") && length(body$alids) > 500 && !isTRUE(req$app$locals$world$mode$lift_limits)) {
       return(fail(req, res, "invalid_request", problems = "at most 500 alids"))
     }
-    if (identical(endpoint, "/api/ld/proxies") && ld_refusal(req, res, store, body)) return()
+    if (endpoint %in% c("/api/ld/proxies", "/api/ld/clump") && ld_refusal(req, res, store, body)) return()
     alids <- unlist(body$alids)
     held <- alids[vapply(alids, fake_ld_holds, NA)]
     made <- make_rows(held, store, body)
@@ -628,6 +684,21 @@ fake_api <- function(world = fake_world()) {
              r = lapply(held, function(b) { r <- fake_ld_r(a, b, store); if (is.na(r)) NULL else r }))
       })
       list(rows = rows, metadata = list(variants = length(held)))
+    })
+  })
+  # Clumping a set of variants by their scores: every held variant's row, with its lead and r with it.
+  app$post("/api/ld/clump", function(req, res) {
+    ld_job(req, res, "/api/ld/clump", function(held, store, body) {
+      alids <- unlist(body$alids)
+      scores <- unlist(body$scores)[match(held, alids)]
+      clumped <- fake_clump(held, scores, store, body$r2, body$kb)
+      rows <- lapply(seq_along(held), function(i) {
+        parts <- strsplit(held[[i]], ":", fixed = TRUE)[[1]]
+        list(alid = held[[i]], chromosome = parts[[1]], lead = clumped$lead[[i]],
+             position = as.integer(parts[[2]]), r = clumped$r[[i]], score = scores[[i]])
+      })
+      list(rows = rows, metadata = list(r2 = body$r2, kb = body$kb, window_bp = body$kb * 1000,
+                                        leads = length(unique(clumped$lead)), variants = length(held)))
     })
   })
   # Proxies of a held variant: held variants 100 bp either side and 250 bp and 300 bp away, with r of
@@ -772,7 +843,7 @@ fake_api <- function(world = fake_world()) {
     env <- req$app$locals$bodies
     keys <- ls(env)
     keys <- keys[order(as.integer(sub("^b", "", keys)))]
-    res$send_json(lapply(keys, function(k) get(k, envir = env)), auto_unbox = TRUE, null = "null")
+    res$send_json(lapply(keys, function(k) get(k, envir = env)), auto_unbox = TRUE, null = "null", digits = NA)
   })
   # Submissions, completions (a status look that found the Job succeeded), cancellations, in the order they happened.
   app$get("/_fake/events", function(req, res) {

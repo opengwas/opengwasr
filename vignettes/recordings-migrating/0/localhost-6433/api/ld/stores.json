@@ -1,0 +1,104 @@
+{
+    "stores": [
+        {
+            "store": "hgdp1kgp-v2-EUR-k10",
+            "ancestry": "EUR",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-EUR",
+            "n": 665,
+            "k": 10,
+            "t_far": 0.03186544342507645,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 8586889,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-AFR-k10",
+            "ancestry": "AFR",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-AFR",
+            "n": 608,
+            "k": 10,
+            "t_far": 0.03490787269681742,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 14374341,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-EAS-k10",
+            "ancestry": "EAS",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-EAS",
+            "n": 724,
+            "k": 10,
+            "t_far": 0.029228611500701263,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 7837854,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-SAS-k10",
+            "ancestry": "SAS",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-SAS",
+            "n": 672,
+            "k": 10,
+            "t_far": 0.03152798789712557,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 8879035,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-AMR-k10",
+            "ancestry": "AMR",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-AMR",
+            "n": 341,
+            "k": 10,
+            "t_far": 0.06315151515151515,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 7561067,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        }
+    ]
+}

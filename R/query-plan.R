@@ -28,6 +28,31 @@
 
 query_plan <- function(requests, finish) list(requests = requests, finish = finish)
 
+# The scaffold both query engines share (association_query(), ld_query()): the method's arguments
+# (read from its frame, `method`, with `fn` its function), the call's deadline, the record of the
+# call for provenance, a plan whose finish attaches provenance, and run_query(). `prepare(deadline)`
+# is the engine's own preparation: it returns `list(requests, releases, finish)`, `releases` the
+# Store Releases provenance records, and `finish(results)` returns `list(value, jobs, provenance)`:
+# the query's value, every Job behind it, and any further provenance fields.
+engine_query <- function(src, method, fn, prepare) {
+  given <- method_arguments(method, fn)
+  deadline <- local_query(src)
+  q <- prepare(deadline)
+  record <- query_record(given, q$releases)
+  plan <- query_plan(q$requests, finish = function(results) {
+    out <- q$finish(results)
+    do.call(attach_provenance, c(list(out$value, query = record$query, args = record$args, jobs = out$jobs),
+                                 out$provenance))
+  })
+  run_query(src, plan, deadline, method)
+}
+
+# The rows of the Jobs that returned any, bound into one data frame (none: an empty one).
+result_rows <- function(results) {
+  found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
+  if (length(found) == 0) data.frame() else bind_frames(found)
+}
+
 # The state of the user's call that is running, one scoped place: when its deadline is (on the
 # `job_now()` clock), how many queries deep we are, and whether og_submit() is collecting a handle.
 query_state <- new.env()

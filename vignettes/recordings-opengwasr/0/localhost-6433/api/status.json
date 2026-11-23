@@ -173,8 +173,8 @@
     },
     "results_cache": {
         "state": "available",
-        "bytes": 533146554,
-        "results": 141,
+        "bytes": 535153032,
+        "results": 161,
         "max_bytes": 4294967296,
         "max_age_seconds": 86400,
         "grace_seconds": 300,
@@ -194,7 +194,7 @@
         "processes": true,
         "running": 60,
         "retiring": 0,
-        "restarts": 1
+        "restarts": 5
     },
     "runtime_limits": {
         "capacity": {

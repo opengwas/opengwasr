@@ -1,0 +1,10 @@
+structure(list(method = "POST", url = "http://localhost:6433/api/ld/proxies", 
+    status_code = 202L, headers = structure(list(date = "Mon, 23 Nov 2026 09:55:02 GMT", 
+        server = "uvicorn", location = "/api/jobs/535e6407", 
+        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=15, run;dur=11, cpu;dur=10", 
+        `x-ogdb-cost` = "job=\"535e6407\", cpu_ms=10, run_ms=11, queue_ms=15, attempts=1, rows=98, bytes=11468", 
+        `content-length` = "398", `content-type` = "application/json", 
+        `x-request-id` = "3f31cd78"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"535e6407\",\"status_url\":\"/api/jobs/535e6407\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:198ee1763a8101d9eebe89f3722f8b8ae1a2d16613794049311d3eda6a37063c\",\"query_hash\":\"sha256:198ee1763a8101d9eebe89f3722f8b8ae1a2d16613794049311d3eda6a37063c\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 8.6e-05, 
+    starttransfer = 0.005883, total = 0.00597), cache = new.env(parent = emptyenv())), class = "httr2_response")

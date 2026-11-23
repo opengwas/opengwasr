@@ -1,0 +1,69 @@
+{
+    "job_id": "812eed5f",
+    "query_hash": "sha256:2cc05d402fd2aedf1740d63a320d0a7e213d52ebfd2c831257c505591f0920ff",
+    "status": "succeeded",
+    "endpoint": "/api/tophits",
+    "release_id": "OGS-00011/OGS-00011-completed,OGS-00027/OGS-00027",
+    "created_at": "2026-11-23T09:50:59.657674+00:00",
+    "started_at": "2026-11-23T09:50:59.708761+00:00",
+    "completed_at": "2026-11-23T09:51:03.340661+00:00",
+    "expires_at": "2026-11-23T09:56:03.808810+00:00",
+    "retrieved_at": "2026-11-23T09:51:03.808810+00:00",
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00011/OGS-00011-completed,OGS-00027/OGS-00027",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 10,
+            "total_rows": 10,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 3713,
+            "total_bytes": 3713,
+            "sha256": "742504addf86670c43729364843790242ff57534144e6cc1c9f03f778ee66c8c",
+            "page_sha256": [
+                "742504addf86670c43729364843790242ff57534144e6cc1c9f03f778ee66c8c"
+            ],
+            "retention_expires_at": "2026-11-23T09:56:03.808810+00:00",
+            "page_encoding": "text",
+            "job_id": "812eed5f",
+            "fingerprint": "sha256:2cc05d402fd2aedf1740d63a320d0a7e213d52ebfd2c831257c505591f0920ff",
+            "release_id": "OGS-00011/OGS-00011-completed,OGS-00027/OGS-00027",
+            "releases": [
+                {
+                    "store_id": "OGS-00011",
+                    "release_id": "OGS-00011-completed"
+                },
+                {
+                    "store_id": "OGS-00027",
+                    "release_id": "OGS-00027"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/812eed5f/result",
+        "metadata": {
+            "threshold": 5e-08,
+            "observed_only": false,
+            "total": 10,
+            "truncated": true
+        }
+    },
+    "compute": {
+        "cpu_seconds": 3.5023,
+        "run_seconds": 3.6187,
+        "queue_seconds": 0.0511,
+        "attempts": 1,
+        "rows": 10,
+        "bytes": 3713
+    },
+    "status_url": "/api/jobs/812eed5f",
+    "poll_after_seconds": 0
+}

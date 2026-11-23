@@ -1,0 +1,75 @@
+{
+    "job_id": "ca02b9f8",
+    "query_hash": "sha256:7c5b4105fec91e1461db659dacbab643624a2520657264db60208eadaeb8eee2",
+    "status": "succeeded",
+    "endpoint": "/api/tophits",
+    "release_id": "OGS-00011/OGS-00011-completed",
+    "created_at": "2026-11-23T09:55:15.529869+00:00",
+    "started_at": "2026-11-23T09:55:21.732419+00:00",
+    "completed_at": "2026-11-23T09:55:29.708457+00:00",
+    "expires_at": "2026-11-23T10:55:29.706704+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00011/OGS-00011-completed",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 100,
+            "total_rows": 100,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 42076,
+            "total_bytes": 42076,
+            "sha256": "53135adf0697279b9f382a349ccccd8aa56c9afbb824bfb78b72f581f8c1844c",
+            "page_sha256": [
+                "53135adf0697279b9f382a349ccccd8aa56c9afbb824bfb78b72f581f8c1844c"
+            ],
+            "retention_expires_at": "2026-11-23T10:55:29.706704+00:00",
+            "page_encoding": "text",
+            "job_id": "ca02b9f8",
+            "fingerprint": "sha256:7c5b4105fec91e1461db659dacbab643624a2520657264db60208eadaeb8eee2",
+            "release_id": "OGS-00011/OGS-00011-completed",
+            "releases": [
+                {
+                    "store_id": "OGS-00011",
+                    "release_id": "OGS-00011-completed"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/ca02b9f8/result",
+        "metadata": {
+            "threshold": 5e-08,
+            "observed_only": false,
+            "total": 100,
+            "truncated": true,
+            "clump": {
+                "r2": 0.0319,
+                "kb": 10000,
+                "hits": 95340,
+                "leads": 1090,
+                "absent": 22735,
+                "ld_stores": {
+                    "EUR": "hgdp1kgp-v2-EUR-k10"
+                }
+            }
+        }
+    },
+    "compute": {
+        "cpu_seconds": 14.155,
+        "run_seconds": 13.1378,
+        "queue_seconds": 6.2025,
+        "attempts": 2,
+        "rows": 100,
+        "bytes": 42076
+    },
+    "status_url": "/api/jobs/ca02b9f8",
+    "poll_after_seconds": 0
+}

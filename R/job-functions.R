@@ -1,6 +1,7 @@
 # The exported Job functions. They work for every query function through query plans
 # (see R/query-plan.R), so a new query function needs nothing to be submitted and collected this way.
 
+# Kept: an R argument's type; without a Source there is no API to ask.
 check_source <- function(src, call = rlang::caller_env()) {
   if (!inherits(src, "og_api_source")) {
     og_abort("`src` must be a Source, from `og_api()`.", class = "opengwasr_argument", call = call)
@@ -49,6 +50,7 @@ check_source <- function(src, call = rlang::caller_env()) {
 #' }
 #' @export
 og_submit <- function(src, fn, ...) {
+  # Kept: og_submit()'s contract with the query function it runs, which the API never sees.
   check_source(src)
   if (!is.function(fn)) {
     og_abort("`fn` must be a query function, such as `og_tophits`.", class = "opengwasr_argument")
@@ -86,7 +88,7 @@ print.og_jobs <- function(x, ...) {
   invisible(x)
 }
 
-# The Job ids of an og_jobs object or text.
+# The Job ids of an og_jobs object or text. Kept: an R argument's type.
 job_ids <- function(job, call = rlang::caller_env()) {
   ids <- if (inherits(job, "og_jobs")) job$job_ids else job
   if (!is.character(ids) || length(ids) == 0 || anyNA(ids) || any(!nzchar(ids))) {
@@ -123,6 +125,7 @@ job_frame <- function(ids, statuses) {
 #' @export
 og_job_result <- function(src, job, raw = FALSE) {
   check_source(src)
+  # Kept: only a handle says how its rows are shaped, and whether it is whole; the API can't say.
   if (!inherits(job, "og_jobs")) {
     ids <- job_ids(job)
     if (!isTRUE(raw)) {

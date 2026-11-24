@@ -63,6 +63,7 @@ print.og_plink_reference <- function(x, ...) {
 }
 
 # The PLINK binary: `plink_bin`, else genetics.binaRies' if it is installed, else the one on PATH.
+# Kept (here and in plink_run()): PLINK runs on this machine; the API isn't involved.
 find_plink <- function(plink_bin, call = rlang::caller_env()) {
   usable <- function(p) is.character(p) && length(p) == 1 && !is.na(p) && nzchar(p) && file.exists(p) &&
     unname(file.access(p, 1)) == 0

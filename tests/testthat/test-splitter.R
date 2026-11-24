@@ -9,8 +9,8 @@ test_that("the splitter cuts each dimension to its limit, in order", {
   expect_equal(lapply(two, function(p) c(p$a[[1]], p$b[[1]])), list(c(1, 1), c(1, 4), c(3, 1), c(3, 4)))
   expect_length(split_pieces(list(a = split_dim(3, 100), b = split_dim(3, 1000))), 1)
   expect_equal(split_pieces(list(a = split_dim(0, 5)))[[1]]$a, integer())
-  expect_error(split_dim(3, 0), class = "opengwasr_argument")
-  expect_error(split_dim(c(1, 2), 5), class = "opengwasr_argument")
+  expect_error(split_dim(3, 0), class = "opengwasr_internal")
+  expect_error(split_dim(c(1, 2), 5), class = "opengwasr_internal")
 })
 
 test_that("exact multiples of a limit and one over", {
@@ -55,8 +55,8 @@ test_that("pairs: every pair is covered, one chunk is one piece, and a limit und
   expect_length(split_pairs(4, 4), 1)
   expect_equal(split_pairs(4, 4)[[1]]$a, 1:4)
   expect_length(split_pairs(8, 4), 6)   # exact multiple: 4 chunks of 2
-  expect_error(split_pairs(10, 1), class = "opengwasr_argument")
-  expect_error(split_pairs(10, 0), class = "opengwasr_argument")
+  expect_error(split_pairs(10, 1), class = "opengwasr_internal")
+  expect_error(split_pairs(10, 0), class = "opengwasr_internal")
 })
 
 test_that("an interval is a dimension: it crosses other dimensions, and is checked", {
@@ -68,7 +68,7 @@ test_that("an interval is a dimension: it crosses other dimensions, and is check
   expect_length(crossed, 6)
   expect_equal(crossed[[2]]$range, c(10e6 + 1, 20e6))
   expect_equal(crossed[[2]]$analyses, 1:2)
-  expect_error(split_interval(5, 1, 10), class = "opengwasr_argument")
+  expect_error(split_interval(5, 1, 10), class = "opengwasr_internal")
 })
 
 test_that("a top-hits Job takes `limit` x Analyses within the 100,000-row cap", {

@@ -52,6 +52,8 @@
 og_alid <- function(data, chromosome = "chromosome", position = "position",
                     effect_allele = "effect_allele", other_allele = "other_allele",
                     eaf = "eaf", beta = "beta", z = "z", reference = NULL) {
+  # Kept: every check here (and in check_column_name(), check_reference()) is of the user's own data,
+  # on this machine; the API never sees it.
   if (!is.data.frame(data)) {
     og_abort("`data` must be a data frame.", "opengwasr_argument")
   }

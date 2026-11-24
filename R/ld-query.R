@@ -68,7 +68,7 @@ ld_query <- function(src, path, variants, ld, spec) {
 # jobs)`. The LD Store is chosen before any Job runs, so a refusal costs none.
 ld_prepare <- function(src, variants, ld, deadline, call, spec) {
   if (is.data.frame(variants)) {
-    if (!is.character(variants$alid)) {
+    if (!is.character(variants$alid)) {  # Kept: an R argument's shape
       og_abort("A data frame of `variants` needs an `alid` column.", class = "opengwasr_argument", call = call)
     }
     kinds <- classify_variants(variants$alid, "variants$alid", call)

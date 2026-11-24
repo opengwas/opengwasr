@@ -1,0 +1,49 @@
+url: https://opengwas.github.io/opengwasr/
+destination: docs/_site
+template:
+  bootstrap: 5
+reference:
+- title: Getting started
+  desc: Find Analyses, then read their Associations.
+  contents:
+  - og_analyses
+  - og_tophits
+  - og_associations
+  - og_phewas
+  - og_range
+  - og_variants_rsid
+  - og_variants_chrpos
+  - og_provenance
+- title: Large queries and Jobs
+  desc: Run many queries at once, or collect them yourself.
+  contents:
+  - og_submit
+  - og_job_status
+  - og_job_result
+  - og_job_cancel
+- title: LD
+  desc: LD Stores, LD matrices, proxies and reflookup, and clumping.
+  contents:
+  - og_ld_stores
+  - og_ld_matrix
+  - og_ld_proxies
+  - og_ld_reflookup
+  - og_clump
+  - og_plink_reference
+- title: Your own data
+  contents:
+  - og_alid
+- title: Sources and access
+  desc: Where queries are answered, and who you are signed in as.
+  contents:
+  - og_api
+  - og_status
+  - og_user
+articles:
+- title: User journeys
+  navbar: Articles
+  contents:
+  - opengwasr
+  - large-queries-and-jobs
+  - ld
+  - migrating-from-ieugwasr

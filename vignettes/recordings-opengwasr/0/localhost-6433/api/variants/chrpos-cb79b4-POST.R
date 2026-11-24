@@ -1,0 +1,10 @@
+structure(list(method = "POST", url = "http://localhost:6433/api/variants/chrpos", 
+    status_code = 202L, headers = structure(list(date = "Mon, 23 Nov 2026 09:54:45 GMT", 
+        server = "uvicorn", location = "/api/jobs/fbf6c2ce", 
+        `x-ogdb-cost-estimate` = "1", `server-timing` = "queue;dur=7, run;dur=431, cpu;dur=425", 
+        `x-ogdb-cost` = "job=\"fbf6c2ce\", cpu_ms=425, run_ms=431, queue_ms=7, attempts=1, rows=2, bytes=362", 
+        `content-length` = "398", `content-type` = "application/json", 
+        `x-request-id` = "fa8a6b7d"), class = "httr2_headers"), 
+    body = charToRaw("{\"job_id\":\"fbf6c2ce\",\"status_url\":\"/api/jobs/fbf6c2ce\",\"status\":\"succeeded\",\"request_fingerprint\":\"sha256:6f848898d3fcf8ee78e2ddcaa840e0585023f7270a2a0ca15e4cb131fcb3b28f\",\"query_hash\":\"sha256:6f848898d3fcf8ee78e2ddcaa840e0585023f7270a2a0ca15e4cb131fcb3b28f\",\"existing\":true,\"queue_position\":null,\"poll_after_seconds\":0,\"ignored_fields\":[]}"), 
+    timing = c(redirect = 0, namelookup = 0, connect = 0, pretransfer = 9.4e-05, 
+    starttransfer = 0.007042, total = 0.007276), cache = new.env(parent = emptyenv())), class = "httr2_response")

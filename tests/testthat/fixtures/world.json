@@ -1,0 +1,327 @@
+{
+  "releases": [
+    {
+      "store_id": "OGS-00006",
+      "release_id": "OGS-00006-completed"
+    },
+    {
+      "store_id": "OGS-00009",
+      "release_id": "OGS-00009-completed"
+    },
+    {
+      "store_id": "OGS-00011",
+      "release_id": "OGS-00011-completed"
+    },
+    {
+      "store_id": "OGS-00012",
+      "release_id": "OGS-00012-completed"
+    },
+    {
+      "store_id": "OGS-00013",
+      "release_id": "OGS-00013-completed"
+    },
+    {
+      "store_id": "OGS-00014",
+      "release_id": "OGS-00014-completed"
+    },
+    {
+      "store_id": "OGS-00015",
+      "release_id": "OGS-00015-completed"
+    },
+    {
+      "store_id": "OGS-00016",
+      "release_id": "OGS-00016"
+    },
+    {
+      "store_id": "OGS-00017",
+      "release_id": "OGS-00017-completed"
+    },
+    {
+      "store_id": "OGS-00024",
+      "release_id": "OGS-00024"
+    },
+    {
+      "store_id": "OGS-00025",
+      "release_id": "OGS-00025"
+    },
+    {
+      "store_id": "OGS-00026",
+      "release_id": "OGS-00026"
+    },
+    {
+      "store_id": "OGS-00027",
+      "release_id": "OGS-00027"
+    }
+  ],
+  "analyses": [
+    {
+      "id": "OGS-00011:GCST90029007",
+      "store_id": "OGS-00011",
+      "analysis_id": "GCST90029007",
+      "status": "validated",
+      "listed": 1,
+      "analysis_label": "Body mass index",
+      "source_label": "Body mass index",
+      "source_analysis_id": "GCST90029007",
+      "trait_ontology_id": "http://www.ebi.ac.uk/efo/EFO_0004340",
+      "trait_ontology_label": "body mass index",
+      "trait_ontology_mapping_method": "source_provided",
+      "tissue": null,
+      "context": null,
+      "trait_chr": null,
+      "trait_bp": null,
+      "assigned_ancestry": "EUR",
+      "ancestry_assignment_method": "af_assigned",
+      "source_ancestry_label": "European",
+      "sample_size_kind": "total",
+      "sample_size_scope": "analysis_level",
+      "sample_size": 532396,
+      "n_cases": null,
+      "n_controls": null,
+      "stored_effect_scale": "sd",
+      "original_effect_scale": "sd",
+      "original_sd": 0.9931,
+      "original_sd_method": "estimated_from_source_maf",
+      "maf_threshold": 0.005,
+      "info_score_threshold": null,
+      "license": "EBI GWAS Catalog terms of use",
+      "publication_doi": null,
+      "publication_pmid": "29892013",
+      "consortium": null,
+      "first_author": "Loh PR",
+      "outcome_type": "continuous",
+      "trait_class": "phenotype",
+      "ancestry_category": "EUR",
+      "label_from_source": 0,
+      "release_id": "OGS-00011-completed"
+    },
+    {
+      "id": "OGS-00011:GCST003116",
+      "store_id": "OGS-00011",
+      "analysis_id": "GCST003116",
+      "status": "validated",
+      "listed": 1,
+      "analysis_label": "Coronary artery disease",
+      "source_label": "Coronary artery disease",
+      "source_analysis_id": "GCST003116",
+      "trait_ontology_id": "MONDO:0005010",
+      "trait_ontology_label": "coronary artery disorder",
+      "trait_ontology_mapping_method": "source_provided",
+      "tissue": null,
+      "context": null,
+      "trait_chr": null,
+      "trait_bp": null,
+      "assigned_ancestry": "EUR",
+      "ancestry_assignment_method": "af_assigned",
+      "source_ancestry_label": "European",
+      "sample_size_kind": "case_control",
+      "sample_size_scope": "analysis_level",
+      "sample_size": 187599,
+      "n_cases": 61289,
+      "n_controls": 126310,
+      "stored_effect_scale": "log_or",
+      "original_effect_scale": "log_or",
+      "original_sd": null,
+      "original_sd_method": "binary_trait",
+      "maf_threshold": 0.005,
+      "info_score_threshold": null,
+      "license": "EBI GWAS Catalog terms of use",
+      "publication_doi": null,
+      "publication_pmid": "26343387",
+      "consortium": null,
+      "first_author": "Nikpay M",
+      "outcome_type": "binary",
+      "trait_class": "phenotype",
+      "ancestry_category": "EUR",
+      "label_from_source": 0,
+      "release_id": "OGS-00011-completed"
+    },
+    {
+      "id": "OGS-00009:ukb-b-19953",
+      "store_id": "OGS-00009",
+      "analysis_id": "ukb-b-19953",
+      "status": "validated",
+      "listed": 1,
+      "analysis_label": "Body mass index (BMI)",
+      "source_label": "Body mass index (BMI)",
+      "source_analysis_id": "ukb-b-19953",
+      "trait_ontology_id": null,
+      "trait_ontology_label": null,
+      "trait_ontology_mapping_method": "unmapped",
+      "tissue": null,
+      "context": null,
+      "trait_chr": null,
+      "trait_bp": null,
+      "assigned_ancestry": "EUR",
+      "ancestry_assignment_method": "source_fallback",
+      "source_ancestry_label": "European",
+      "sample_size_kind": "total",
+      "sample_size_scope": "analysis_level",
+      "sample_size": 461460,
+      "n_cases": null,
+      "n_controls": null,
+      "stored_effect_scale": "sd",
+      "original_effect_scale": "sd",
+      "original_sd": null,
+      "original_sd_method": "declared_standardised",
+      "maf_threshold": null,
+      "info_score_threshold": null,
+      "license": "UK Biobank terms of access",
+      "publication_doi": null,
+      "publication_pmid": null,
+      "consortium": "MRC-IEU",
+      "first_author": "Ben Elsworth",
+      "outcome_type": "continuous",
+      "trait_class": "phenotype",
+      "ancestry_category": "EUR",
+      "label_from_source": 0,
+      "release_id": "OGS-00009-completed"
+    },
+    {
+      "id": "OGS-00017:finngen-r13-I9_CHD",
+      "store_id": "OGS-00017",
+      "analysis_id": "finngen-r13-I9_CHD",
+      "status": "validated",
+      "listed": 1,
+      "analysis_label": "Major coronary heart disease event",
+      "source_label": "Major coronary heart disease event",
+      "source_analysis_id": "I9_CHD",
+      "trait_ontology_id": null,
+      "trait_ontology_label": null,
+      "trait_ontology_mapping_method": "unmapped",
+      "tissue": null,
+      "context": null,
+      "trait_chr": null,
+      "trait_bp": null,
+      "assigned_ancestry": null,
+      "ancestry_assignment_method": "unassigned",
+      "source_ancestry_label": "Finnish",
+      "sample_size_kind": "case_control",
+      "sample_size_scope": "analysis_level",
+      "sample_size": 500186,
+      "n_cases": 90714,
+      "n_controls": 409472,
+      "stored_effect_scale": "log_or",
+      "original_effect_scale": "log_or",
+      "original_sd": null,
+      "original_sd_method": "binary_trait",
+      "maf_threshold": null,
+      "info_score_threshold": null,
+      "license": "FinnGen public data",
+      "publication_doi": null,
+      "publication_pmid": null,
+      "consortium": "FinnGen",
+      "first_author": null,
+      "outcome_type": "binary",
+      "trait_class": "phenotype",
+      "ancestry_category": null,
+      "label_from_source": 0,
+      "release_id": "OGS-00017-completed"
+    },
+    {
+      "id": "OGS-00027:ENSG00000000419",
+      "store_id": "OGS-00027",
+      "analysis_id": "ENSG00000000419",
+      "status": "validated",
+      "listed": 1,
+      "analysis_label": "DPM1",
+      "source_label": "DPM1",
+      "source_analysis_id": "ENSG00000000419",
+      "trait_ontology_id": null,
+      "trait_ontology_label": null,
+      "trait_ontology_mapping_method": "unmapped",
+      "tissue": "whole_blood",
+      "context": null,
+      "trait_chr": "20",
+      "trait_bp": 49563248,
+      "assigned_ancestry": "EUR",
+      "ancestry_assignment_method": "af_assigned",
+      "source_ancestry_label": null,
+      "sample_size_kind": "variant_level",
+      "sample_size_scope": "variant_level",
+      "sample_size": 30895,
+      "n_cases": null,
+      "n_controls": null,
+      "stored_effect_scale": "sd",
+      "original_effect_scale": "sd",
+      "original_sd": null,
+      "original_sd_method": "declared_standardised",
+      "maf_threshold": null,
+      "info_score_threshold": null,
+      "license": null,
+      "publication_doi": null,
+      "publication_pmid": "34475573",
+      "consortium": null,
+      "first_author": "Võsa",
+      "outcome_type": "continuous",
+      "trait_class": "molecular",
+      "ancestry_category": "EUR",
+      "label_from_source": 0,
+      "release_id": "OGS-00027"
+    }
+  ],
+  "legacy": {
+    "finn-b-I9_CHD": {
+      "catalog_ids": [
+        "OGS-00017:finngen-r13-I9_CHD"
+      ],
+      "match": "successor"
+    },
+    "ebi-a-GCST003116": {
+      "catalog_ids": [
+        "OGS-00011:GCST003116"
+      ],
+      "match": "exact"
+    },
+    "ieu-a-2": {
+      "catalog_ids": [],
+      "reason": "OpenGWAS batch ieu-a is not held by any Store"
+    }
+  },
+  "user": {
+    "user": "user:opengwasr-dev",
+    "role": "gateway",
+    "key_name": "current",
+    "tier": "gateway",
+    "allowance": 1000,
+    "concurrency_budget": 10
+  },
+  "status": {
+    "status": "ok",
+    "ready": true,
+    "execution": {
+      "limits": {
+        "result_rows": 100000,
+        "result_bytes": 50000000,
+        "page_rows": 1000,
+        "page_bytes": 1048576,
+        "retention_seconds": 86400,
+        "result_grace_seconds": 300,
+        "result_cache_bytes": 1073741824,
+        "result_cache_principal_bytes": 268435456,
+        "result_unread_seconds": 3600,
+        "failed_job_seconds": 300,
+        "store_timeout_seconds": 30,
+        "backend_max_running": 180,
+        "job_workers": 40,
+        "job_workers_max": 224,
+        "job_processes": true,
+        "queue_max_age_seconds": 3600,
+        "admission": {
+          "global_capacity": 100,
+          "principal_capacity": 10,
+          "max_request_cost": 300,
+          "queue_capacity": 1000,
+          "principal_queue_capacity": 100
+        },
+        "backend_max_per_release": null,
+        "backend_release_limits": {},
+        "range_span": 10000000,
+        "lookup_variants": 1000,
+        "lookup_analyses": 100,
+        "analysis_analyses": 10,
+        "range_analyses": 10
+      }
+    }
+  }
+}

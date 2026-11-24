@@ -1,0 +1,75 @@
+{
+    "job_id": "0de352d1",
+    "query_hash": "sha256:e580cca27e6890f37389b968b946b1bcaf6f9ce5561979cecb21d5768033440f",
+    "status": "succeeded",
+    "endpoint": "/api/tophits",
+    "release_id": "OGS-00013/OGS-00013-completed",
+    "created_at": "2026-11-23T09:55:31.729872+00:00",
+    "started_at": "2026-11-23T09:55:32.789753+00:00",
+    "completed_at": "2026-11-23T09:55:34.540879+00:00",
+    "expires_at": "2026-11-23T10:55:34.538818+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00013/OGS-00013-completed",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 80,
+            "total_rows": 80,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 30912,
+            "total_bytes": 30912,
+            "sha256": "febea58ab6d89b0fedc28ec09f40ccae965009947981b564def8ee6304d34cbb",
+            "page_sha256": [
+                "febea58ab6d89b0fedc28ec09f40ccae965009947981b564def8ee6304d34cbb"
+            ],
+            "retention_expires_at": "2026-11-23T10:55:34.538818+00:00",
+            "page_encoding": "text",
+            "job_id": "0de352d1",
+            "fingerprint": "sha256:e580cca27e6890f37389b968b946b1bcaf6f9ce5561979cecb21d5768033440f",
+            "release_id": "OGS-00013/OGS-00013-completed",
+            "releases": [
+                {
+                    "store_id": "OGS-00013",
+                    "release_id": "OGS-00013-completed"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/0de352d1/result",
+        "metadata": {
+            "threshold": 5e-08,
+            "observed_only": false,
+            "total": 80,
+            "truncated": false,
+            "clump": {
+                "r2": 0.0349,
+                "kb": 10000,
+                "hits": 1879,
+                "leads": 80,
+                "absent": 550,
+                "ld_stores": {
+                    "AFR": "hgdp1kgp-v2-AFR-k10"
+                }
+            }
+        }
+    },
+    "compute": {
+        "cpu_seconds": 3.7986,
+        "run_seconds": 2.5351,
+        "queue_seconds": 1.0599,
+        "attempts": 2,
+        "rows": 80,
+        "bytes": 30912
+    },
+    "status_url": "/api/jobs/0de352d1",
+    "poll_after_seconds": 0
+}

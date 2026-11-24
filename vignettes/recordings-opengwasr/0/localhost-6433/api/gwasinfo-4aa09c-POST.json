@@ -1,0 +1,65 @@
+{
+    "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024,OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+    "requested": 1,
+    "total": 1,
+    "analyses": [
+        {
+            "id": "OGS-00017:finngen-r13-I9_CHD",
+            "store_id": "OGS-00017",
+            "analysis_id": "finngen-r13-I9_CHD",
+            "status": "validated",
+            "listed": 1,
+            "analysis_label": "Major coronary heart disease event",
+            "source_label": "Major coronary heart disease event",
+            "source_analysis_id": "I9_CHD",
+            "trait_ontology_id": null,
+            "trait_ontology_label": null,
+            "trait_ontology_mapping_method": "unmapped",
+            "tissue": null,
+            "context": null,
+            "trait_chr": null,
+            "trait_bp": null,
+            "assigned_ancestry": null,
+            "ancestry_assignment_method": "unassigned",
+            "source_ancestry_label": "Finnish",
+            "sample_size_kind": "case_control",
+            "sample_size_scope": "analysis_level",
+            "sample_size": 500186,
+            "n_cases": 90714,
+            "n_controls": 409472,
+            "stored_effect_scale": "log_or",
+            "original_effect_scale": "log_or",
+            "original_sd": null,
+            "original_sd_method": "binary_trait",
+            "maf_threshold": null,
+            "info_score_threshold": null,
+            "license": "FinnGen public data",
+            "publication_doi": null,
+            "publication_pmid": null,
+            "consortium": "FinnGen",
+            "first_author": null,
+            "outcome_type": "binary",
+            "trait_class": "phenotype",
+            "ancestry_category": null,
+            "label_from_source": 0,
+            "release_id": "OGS-00017-completed"
+        }
+    ],
+    "not_found": [
+
+    ],
+    "catalog_version": "2b9d06d6f8b200d2",
+    "retired": [
+
+    ],
+    "opengwas": [
+        {
+            "id": "finn-b-I9_CHD",
+            "batch": "finn-b",
+            "catalog_ids": [
+                "OGS-00017:finngen-r13-I9_CHD"
+            ],
+            "match": "successor"
+        }
+    ]
+}

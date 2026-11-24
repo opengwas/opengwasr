@@ -1,0 +1,41 @@
+{
+    "schema": "ogdb.result.ndjson.v1",
+    "manifest": {
+        "schema": "ogdb.result.ndjson.v1",
+        "schema_version": "ogdb-result-v1",
+        "row_count": 3,
+        "total_rows": 3,
+        "page_count": 1,
+        "page_rows": 1000,
+        "page_row_offsets": [
+            0
+        ],
+        "byte_count": 128,
+        "total_bytes": 128,
+        "sha256": "e53697c6f379a41e3fa2e4be5cb67facf17ff078d46e255d3ce4e6434f8ec1b8",
+        "page_sha256": [
+            "e53697c6f379a41e3fa2e4be5cb67facf17ff078d46e255d3ce4e6434f8ec1b8"
+        ],
+        "retention_expires_at": "2026-11-24T10:08:57.105985+00:00",
+        "page_encoding": "text",
+        "job_id": "82bf05eb",
+        "fingerprint": "sha256:1e974b6fa78dd7725ea1f8c2fe8f622db5933fff3123e6a1657a3f9874362a51",
+        "release_id": "ld:hgdp1kgp-v2-EUR-k10",
+        "releases": [
+            {
+                "store_id": "hgdp1kgp-v2-EUR-k10",
+                "release_id": "hgdp1kgp-v2-EUR-k10"
+            }
+        ],
+        "first_cursor": null
+    },
+    "page_index": 0,
+    "row_offset": 0,
+    "row_count": 3,
+    "byte_count": 128,
+    "sha256": "e53697c6f379a41e3fa2e4be5cb67facf17ff078d46e255d3ce4e6434f8ec1b8",
+    "ndjson": "{\"alid\":\"16:53767042:C:T\",\"present\":true}\n{\"alid\":\"16:53767042:A:C\",\"present\":false}\n{\"alid\":\"16:53767042:A:G\",\"present\":false}\n",
+    "cursor": null,
+    "next_cursor": null,
+    "final": true
+}

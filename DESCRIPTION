@@ -1,0 +1,33 @@
+Package: opengwasr
+Title: Client for OpenGWAS Data
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Gibran", "Hemani", email = "g.hemani@bristol.ac.uk", role = c("aut", "cre")),
+    person("University of Bristol", role = c("cph", "fnd"))
+  )
+Description: Query OpenGWAS Analyses, Associations, top hits and linkage
+    disequilibrium (LD), either through the OpenGWAS API or from Store
+    Releases downloaded to a local machine.
+License: GPL-3
+URL: https://opengwas.github.io/opengwasr/, https://github.com/opengwas/opengwasr
+BugReports: https://github.com/opengwas/opengwasr/issues
+Depends:
+    R (>= 4.1.0)
+Imports:
+    cli,
+    httr2,
+    jsonlite,
+    rlang
+Suggests:
+    httptest2,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    webfakes,
+    withr
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/testthat/parallel: true
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0

@@ -1,0 +1,218 @@
+---
+title: "Large queries and Jobs"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Large queries and Jobs}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+The OpenGWAS API answers every data query as a **Job**: it queues the query fairly between users, runs it, and keeps the answer for you to collect in pages. opengwasr's query functions hide this. They submit, wait and collect, and return a data frame. This vignette is for when you want to know what happens underneath, or to take control of it: big queries, many queries at once, long waits, interruptions, and queries too large for the API.
+
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026. The grey blocks marked `# illustrative` can't be produced on demand, and say why: the interactive progress display, the timeout and interrupt errors, a busy API, an expired result, and a query that is too large. The planned `og_variant_subset()` needs Data API support that doesn't exist yet.
+>
+> *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
+
+```{r recordings, include = FALSE}
+source("recordings.R")
+start_recordings("recordings-large")
+```
+
+```{r setup}
+library(opengwasr)
+src <- og_api()
+```
+
+## Large queries are split automatically {#splitting}
+
+One Job has limits on its shape. When a query is bigger, opengwasr splits it into several Jobs, runs a few at a time, and puts the pieces back together in a stable order. You get the same data frame you would get from one Job.
+
+| Query | One Job holds at most |
+|---|---|
+| `og_tophits()`, clumped | 1 Analysis |
+| `og_associations()` | 100 Analyses × 1,000 variants |
+| `og_range()` | 10 Analyses, and 10 Mb of one chromosome |
+| `og_phewas()` | 10 Store Releases |
+| `og_ld_matrix()` | 500 variants |
+| Any Job's answer | 100,000 Associations |
+
+For example, 1,100 LDL cholesterol top hits looked up in two BMI Analyses:
+
+```{r splitting, warning = FALSE}
+ldl <- og_tophits(src, "OGS-00011:GCST90002412", clump = FALSE, limit = 1100)
+bmi_ids <- c("OGS-00011:GCST90029007", "OGS-00011:GCST90025994")
+outcome <- og_associations(src, ldl$alid, bmi_ids)
+length(og_provenance(outcome)$job_ids)
+```
+
+The 1,100 variants went in two Jobs, of 1,000 and 100 variants, and `og_provenance()` lists both. While it runs, an interactive session shows:
+
+```text
+# illustrative: the progress display appears only in interactive sessions
+ℹ Split into 2 Jobs, at most 4 at a time.
+```
+
+`og_api(max_in_flight = )` sets how many Jobs run at once (default 4, set by the option `opengwasr.max_in_flight`). The API runs at most 10 of your Jobs at a time (the "Jobs running at once" that `og_user()` reports) and holds at most 100 more queued; opengwasr stays well under both.
+
+The pieces come back in a stable order (Analyses as you asked for them, then chromosome, position and ALID), so the data frame doesn't depend on which Job finished first. If you start the query with `og_submit()`, every piece is submitted at once and one handle collects them; a query that splits into more than the 100 Jobs one user may have queued is refused before anything is submitted (`opengwasr_too_many_jobs`), and the synchronous call, which paces itself, is the way to run it.
+
+opengwasr splits a query only to fit these shapes. It never splits one to get round the API's cost limit (see [Too large](#too-large)).
+
+## Waiting: progress, polling and timeouts {#waiting}
+
+While a Job is queued or running, opengwasr shows where it is:
+
+The Job's states can't be caught in a recording, so this is illustrative:
+
+```text
+# illustrative
+⠙ Job a1513652 queued (position 3) | 12s
+⠹ Job a1513652 running | 19s
+✔ Job a1513652 succeeded | 1,000 Associations | 25s
+```
+
+opengwasr asks how the Job is doing only as often as the API suggests, and less often when the API is busy, so waiting never adds to the load. The progress display appears in interactive sessions; set `options(opengwasr.progress = FALSE)` to hide it.
+
+Every call gives up after `og_api(timeout = )` seconds (default 3,600, set by the option `opengwasr.timeout`). Giving up doesn't cancel anything: the Job keeps running. Run the same call again to reattach to it, collect it with `og_job_result(src, e$jobs)` (the error carries the `og_jobs` object), or cancel it with `og_job_cancel()` (see [Running many Jobs yourself](#job-functions)).
+
+```{r waiting}
+src_quick <- og_api(timeout = 60)
+top <- og_tophits(src_quick, "OGS-00011:GCST90029007", clump = FALSE, limit = 5)
+```
+
+The timeout can't be provoked on demand, so this error is illustrative, not recorded:
+
+```text
+# illustrative
+Error in `og_tophits()`:
+! Gave up waiting after 60 s. Job a1513652-85ff-4eac-b4d7-b043b03aaf0a is still queued.
+ℹ Run the same call again: the API recognises the query and reattaches you to this Job.
+ℹ Cancel it with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`; `e$jobs` is the handle `og_job_result()` collects.
+```
+
+The error has class `opengwasr_timeout`, and carries the Job ids in `e$job_ids`. A Job that runs and fails stops with class `opengwasr_job_failed`, with the API's reason as its message. Its `e$retryable` says whether running it again might help.
+
+## When the API is busy {#busy}
+
+> Illustrative: the development Data API can't be made busy on demand, so this section is text, not a recording. opengwasr's tests run it against a fake.
+
+When the API's queue is full, or you have used up your allowance for now, it tells opengwasr how long to wait. opengwasr waits that long (at least a second) and tries again, until the call's timeout:
+
+```text
+# illustrative
+! The API is busy (user_queue_full): retrying in 30 s.
+```
+
+If the timeout runs out first, the error has the API's message, and class `opengwasr_busy` as well as the class of the API's code (such as `opengwasr_user_queue_full`). It carries the API's code in `e$api_error` and its wait in `e$retry_after`.
+
+## Running many Jobs yourself {#job-functions}
+
+To run many queries at once and collect them yourself, submit them without waiting. `og_submit()` takes a query function and its arguments, and returns as soon as the API has accepted its Jobs:
+
+```{r job-functions-submit}
+ids <- c("OGS-00011:GCST90029007", "OGS-00011:GCST003116")
+jobs <- lapply(ids, function(id) og_submit(src, og_tophits, id, clump = FALSE))
+jobs[[2]]
+```
+
+`og_job_status()` checks on them without waiting, and `og_job_result()` waits for them and returns the same data frame, with the same provenance, the query function would have returned (these Analyses have more top hits than the default `limit`, so each call would also warn, as `og_tophits()` does; the warnings are hidden here):
+
+```{r job-functions-collect, warning = FALSE}
+og_job_status(src, jobs[[2]])
+tophits <- lapply(jobs, function(job) og_job_result(src, job))
+vapply(tophits, nrow, 1L)
+```
+
+Any query function works the same way. It does its checks and lookups of Analyses when you submit, and what the answer is shaped from is fixed then, so collecting later gives the same answer. A query bigger than one Job gives one `og_jobs` object holding all its Jobs, and they are collected together.
+
+`og_job_status()` and `og_job_cancel()` take the Source first, then the `og_jobs` object or Job ids as text. `og_job_result()` needs the `og_jobs` object, because a Job id alone doesn't say how its rows are to be shaped: it refuses, and tells you to rerun the same call, which reattaches. `og_job_result(src, id, raw = TRUE)` returns the API's rows exactly as they are.
+
+## Interrupting and reattaching {#interrupting}
+
+Pressing Esc or Ctrl-C while opengwasr waits doesn't cancel the Job. It stops waiting, with an error of class `opengwasr_interrupted` that carries the Job ids (`e$job_ids`) and the `og_jobs` object (`e$jobs`) to collect them with. The interrupt itself can't be shown here (illustrative, not recorded):
+
+```text
+# illustrative
+! Interrupted. Job a1513652-85ff-4eac-b4d7-b043b03aaf0a is still running (or queued).
+ℹ Collect with `og_job_result(src, e$jobs)` in this session, or run the same call again: it reattaches.
+ℹ Cancel with `og_job_cancel(src, "a1513652-85ff-4eac-b4d7-b043b03aaf0a")`.
+```
+
+Running the same call again is always safe. The API recognises an identical query and reattaches you to the Job it already has, so nothing is computed twice. `og_provenance()` says so, and names the same Job:
+
+```{r interrupting, warning = FALSE}
+first <- og_tophits(src, ids[[1]], clump = FALSE, limit = 100)
+again <- og_tophits(src, ids[[1]], clump = FALSE, limit = 100)
+og_provenance(again)$existing
+identical(og_provenance(first)$job_ids, og_provenance(again)$job_ids)
+```
+
+## Cancelling {#cancelling}
+
+Cancel Jobs you no longer want, so they stop using your share of the queue:
+
+```{r cancelling}
+unwanted <- og_submit(src, og_tophits, ids[[1]], clump = FALSE, limit = 7)
+og_job_cancel(src, unwanted)
+```
+
+A Job that has already finished is returned as it is, and the message says so.
+
+## Results expire {#result-expired}
+
+> Illustrative: shown as text, since a result can't be made to expire on demand.
+
+The API keeps a finished Job's result for an hour if nobody reads it, and for five minutes after it has been read in full. opengwasr reads every page in one go, so this only matters when you collect a Job yourself, late. This is illustrative, not recorded:
+
+```text
+# illustrative
+Error in `og_job_result()`:
+! Job result has expired
+```
+
+The message is the API's. The error has class `opengwasr_result_expired`, with the Job in `e$job_id`: run the query again, and the API runs it afresh. (An Analysis that has been retired is a different error, `opengwasr_analysis_retired`.)
+
+## Standard variant subsets, such as HapMap3 {#variant-subsets}
+
+> **Planned.** `og_variant_subset()` needs Data API support that doesn't exist yet.
+
+LD score regression and similar methods need an Analysis's Associations at a standard set of variants, such as the roughly 1.2 million HapMap3 variants, rather than its top hits or one region. A GWAS Store can hold such a set as an **Indexed Variant Subset**: every Analysis's Associations at those variants, stored so that one Analysis's can be read quickly. `og_variant_subset()` will fetch them:
+
+```{r variant-subsets, eval = FALSE}
+hm3 <- og_variant_subset(src, "OGS-00011:GCST90029007", subset = "hm3")
+```
+
+- It returns the same columns as `og_associations()` ([What the columns mean](opengwasr.html#columns)), one per variant of the subset the Analysis holds, and takes `observed_only`, `original_units` and `releases` as the other query functions do.
+- Each Analysis is fetched separately, so several Analyses run as several Jobs, a few at a time.
+- The subset's name is recorded in `og_provenance()`.
+- An Analysis whose GWAS Store holds no such subset is refused, with class `opengwasr_subset_unavailable`, a kind of `opengwasr_refusal`.
+
+It is a function of its own, not `og_associations(src, variants = <the HapMap3 list>, analyses)`, because the API answers it from the GWAS Store's named subset rather than from a list of variants you send. Sent to `og_associations()`, 1.2 million variants would be split into some 1,200 Jobs per Analysis.
+
+Still to be decided: whether one Job may return a whole subset, over the 100,000 Associations it otherwise holds. If not, opengwasr splits the subset into several Jobs and puts it back together, as it does other large queries.
+
+## Too large: download the Store Release {#too-large}
+
+Separately from its shape limits, the API refuses a query it estimates would cost more than one Job may use. opengwasr doesn't split such a query to get round the limit. A query that large belongs on a local copy of the Store Release, not on the shared API. None of the queries in these vignettes comes near the limit. The refusal can't be provoked on the development Data API, so what follows is illustrative, not recorded (opengwasr's tests run it against a fake). If a piece of a split query is refused, the pieces already submitted are cancelled (`e$cancelled` lists them) and the call stops. This is what the refusal looks like, for a hypothetical query over many large Analyses:
+
+```{r too-large, eval = FALSE}
+region <- tryCatch(
+  og_range(src, many_bmi_ids, chromosome = "16", start = 1, end = 90000000),
+  opengwasr_request_too_large = function(e) {
+    message("Too large for the API (estimated ", e$cost_estimate, " of ", e$max_cost, ").")
+    NULL
+  }
+)
+```
+
+```text
+# illustrative
+Error in `og_range()`:
+! The job is estimated at 3479 CPU-seconds, more than the 300 one job may use; narrow it (fewer analyses, a shorter range) or split it
+```
+
+The message is the API's own, as it words it today (the API will recommend downloading the Store Release instead). The error has class `opengwasr_request_too_large`, a kind of `opengwasr_refusal`, and carries the API's `e$cost_estimate` and `e$max_cost`.
+
+```{r end-recordings, include = FALSE}
+end_recordings()
+```

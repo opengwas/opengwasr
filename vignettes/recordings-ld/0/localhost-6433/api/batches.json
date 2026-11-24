@@ -1,0 +1,518 @@
+{
+    "catalog": {
+        "version": "2b9d06d6f8b200d2",
+        "built_at": "2026-11-18T03:40:28.718201+00:00"
+    },
+    "not_served": [
+        {
+            "store_id": "OGS-00001",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00002",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00003",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00004",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00005",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00007",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00008",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00022",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00023",
+            "decision": "excluded",
+            "reason": "Trial Store Release"
+        },
+        {
+            "store_id": "OGS-00032",
+            "decision": "excluded",
+            "reason": "Release Status is candidate, not validated"
+        },
+        {
+            "store_id": "OGS-00033",
+            "decision": "excluded",
+            "reason": "Release Status is candidate, not validated"
+        }
+    ],
+    "opengwas_batches": [
+        {
+            "batch": "ukb-b",
+            "match": "exact",
+            "store_ids": [
+                "OGS-00009"
+            ]
+        },
+        {
+            "batch": "ebi-a",
+            "match": "exact",
+            "store_ids": [
+                "OGS-00006",
+                "OGS-00011",
+                "OGS-00012",
+                "OGS-00013",
+                "OGS-00014",
+                "OGS-00015",
+                "OGS-00016",
+                "OGS-00024",
+                "OGS-00025",
+                "OGS-00026"
+            ]
+        },
+        {
+            "batch": "eqtl-a",
+            "match": "exact",
+            "store_ids": [
+                "OGS-00027"
+            ]
+        },
+        {
+            "batch": "finn-b",
+            "match": "successor",
+            "store_ids": [
+                "OGS-00017"
+            ]
+        }
+    ],
+    "ld_stores": [
+        {
+            "store": "hgdp1kgp-v2-EUR-k10",
+            "ancestry": "EUR",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-EUR",
+            "n": 665,
+            "k": 10,
+            "t_far": 0.0319,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 8586889,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-AFR-k10",
+            "ancestry": "AFR",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-AFR",
+            "n": 608,
+            "k": 10,
+            "t_far": 0.0349,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 14374341,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-EAS-k10",
+            "ancestry": "EAS",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-EAS",
+            "n": 724,
+            "k": 10,
+            "t_far": 0.0292,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 7837854,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-SAS-k10",
+            "ancestry": "SAS",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-SAS",
+            "n": 672,
+            "k": 10,
+            "t_far": 0.0315,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 8879035,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        },
+        {
+            "store": "hgdp1kgp-v2-AMR-k10",
+            "ancestry": "AMR",
+            "ready": true,
+            "panel": "hgdp1kgp-v2-AMR",
+            "n": 341,
+            "k": 10,
+            "t_far": 0.0632,
+            "near_bp": 3000000,
+            "far_bp": 10000000,
+            "n_variants": 7561067,
+            "format_version": "0.1.0",
+            "encoding": {
+                "r_dtype": "int16",
+                "r_scale": 511,
+                "r_reserved_code": -32768,
+                "rounding": "half_to_even"
+            },
+            "ogld_version": "0.1.0"
+        }
+    ],
+    "batches": [
+        {
+            "release_id": "OGS-00006-completed",
+            "store_id": "OGS-00006",
+            "analysis_count": 1400,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00009-completed",
+            "store_id": "OGS-00009",
+            "analysis_count": 2514,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00011-completed",
+            "store_id": "OGS-00011",
+            "analysis_count": 3169,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00012-completed",
+            "store_id": "OGS-00012",
+            "analysis_count": 1669,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00013-completed",
+            "store_id": "OGS-00013",
+            "analysis_count": 1368,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00014-completed",
+            "store_id": "OGS-00014",
+            "analysis_count": 1053,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00015-completed",
+            "store_id": "OGS-00015",
+            "analysis_count": 241,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00016",
+            "store_id": "OGS-00016",
+            "analysis_count": 1691,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00017-completed",
+            "store_id": "OGS-00017",
+            "analysis_count": 2754,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00024",
+            "store_id": "OGS-00024",
+            "analysis_count": 1034,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00025",
+            "store_id": "OGS-00025",
+            "analysis_count": 1038,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00026",
+            "store_id": "OGS-00026",
+            "analysis_count": 971,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        },
+        {
+            "release_id": "OGS-00027",
+            "store_id": "OGS-00027",
+            "analysis_count": 19250,
+            "capabilities": {
+                "gwasinfo": true,
+                "associations": true,
+                "top_hits": true,
+                "variants_rsid": true,
+                "variants_chrpos": true,
+                "phewas": true,
+                "phewas_indexed": true,
+                "phewas_scan": false
+            },
+            "queued_operations": [
+                "/api/associations",
+                "/api/associations/analysis",
+                "/api/associations/range",
+                "/api/variants/rsid",
+                "/api/variants/chrpos",
+                "/api/phewas",
+                "/api/tophits"
+            ]
+        }
+    ]
+}

@@ -117,13 +117,6 @@ split_interval <- function(start, end, limit) {
   d
 }
 
-# The Store Releases a piece reads: those of the GWAS Stores of its Analyses (`analyses`, indices into
-# `store_ids`, the GWAS Store of each Analysis), from the query's `releases`.
-piece_releases <- function(releases, store_ids, analyses) {
-  stores <- unique(store_ids[analyses])
-  Filter(function(r) r$store_id %in% stores, releases)
-}
-
 # The Analyses one top-hits Job may take: at most `limit` hits per Analysis, and a Job's result holds
 # at most `max_rows_per_job` rows, so `limit` x Analyses must fit.
 tophits_analyses_per_job <- function(limit, limits = job_limits()) {

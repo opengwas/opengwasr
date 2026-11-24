@@ -83,18 +83,12 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
                                      observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
                                      kb = NULL, original_units = FALSE, releases = NULL) {
   check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
-  # Clumped by PLINK on this machine, the Jobs fetch the most top hits the API gives (`limit` then
-  # counts index variants, and is applied after clumping), several Analyses to a Job.
-  local <- clump && is_plink_reference(ld)
-  fetched <- if (local) max_tophits_per_analysis else limit
   # `limit` applies to each Analysis, so no split changes it; a Job's rows (`limit` x Analyses) must
-  # fit the row cap. Clumped, each Analysis is one Job, in its own LD Store; `limit` counts its leads.
+  # fit the row cap. Clumping (R/clump.R) sets its own Jobs, fetch size and truncation message.
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
-                    body = list(threshold = threshold, limit = as.integer(fetched)),
-                    analyses_per_job = if (clump && !local) 1L else tophits_analyses_per_job(fetched), order = "api",
-                    truncated = function(ids) {
-                      if (local) local_truncated_message(ids, threshold) else truncated_message(ids, threshold, limit, clump)
-                    },
+                    body = list(threshold = threshold, limit = as.integer(limit)),
+                    analyses_per_job = tophits_analyses_per_job(limit), order = "api",
+                    truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold),
                     spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
 }
 
@@ -105,7 +99,7 @@ check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = 
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
   check_threshold_limit(threshold, limit, call)
   if (limit < 1 || limit > max_tophits_per_analysis) {
-    bad(paste0("`limit` must be one whole number from 1 to ", format(max_tophits_per_analysis, big.mark = ","), "."))
+    bad(paste0("`limit` must be one whole number from 1 to ", big_number(max_tophits_per_analysis), "."))
   }
   if (!is_flag(clump)) bad("`clump` must be `TRUE` or `FALSE`.")
   if (!clump && (!is.null(ld) || !is.null(r2) || !is.null(kb))) {
@@ -125,22 +119,16 @@ check_threshold_limit <- function(threshold, limit, call = rlang::caller_env()) 
   }
 }
 
-# What the `opengwasr_truncated` warning says when `limit` cut an Analysis's top hits off.
-truncated_message <- function(ids, threshold, limit, clump = FALSE) {
-  who <- if (length(ids) == 1) ids else paste0("At least one of the ", length(ids), " Analyses")
-  c(paste0(who, " has more than ", format(limit, big.mark = ","), if (clump) " index variants" else " top hits",
-           " at p <= ", format(threshold), "; only the strongest ", format(limit, big.mark = ","), " were returned."),
-    i = if (limit < max_tophits_per_analysis) {
-      paste0("Raise `limit` (at most ", format(max_tophits_per_analysis, big.mark = ","), ") for more.")
-    })
+# What every `opengwasr_truncated` warning says: `who` has more than `limit` `what` at p <= `threshold`,
+# then `cut` (what was kept) and `advice`.
+truncated_message <- function(who, limit, what, threshold, cut = NULL, advice = raise_limit(limit)) {
+  cut <- cut %||% paste0("; only the strongest ", big_number(limit), " were returned")
+  c(paste0(who, " has more than ", big_number(limit), " ", what, " at p <= ", format(threshold), cut, "."),
+    i = advice)
 }
 
-# What the `opengwasr_truncated` warning says when the API cut top hits off before a PLINK Reference
-# clumped them: clumping saw only the strongest.
-local_truncated_message <- function(ids, threshold) {
-  who <- if (length(ids) == 1) ids else paste0("At least one of the ", length(ids), " Analyses")
-  max <- format(max_tophits_per_analysis, big.mark = ",")
-  c(paste0(who, " has more than ", max, " top hits at p <= ", format(threshold),
-           ", the most the API returns, so clumping saw only the strongest ", max, "."),
-    i = "Raise the threshold's strictness, or clump on the server with an LD Store in `ld`, which clumps every top hit.")
+raise_limit <- function(limit, most = max_tophits_per_analysis) {
+  if (limit < most) paste0("Raise `limit` (at most ", big_number(most), ") for more.")
 }
+
+analyses_who <- function(ids) if (length(ids) == 1) ids else paste0("At least one of the ", length(ids), " Analyses")

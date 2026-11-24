@@ -195,10 +195,10 @@ test_that("provenance leaves out long arguments, counts neutrally, and the warni
   expect_false(grepl("Job", w))
 })
 
-test_that("a lookup's own total and truncated are checked, not overwritten", {
-  src <- fake_source(fake)
-  fake_set(fake, "job", "total_too_big", "normal")
-  expect_error(og_variants_rsid(src, "rs1421085", releases = "OGS-00011"), class = "opengwasr_job_invalid")
+test_that("a lookup returns every match, so its count is its rows", {
+  v <- og_variants_rsid(fake_source(fake), "rs1421085", releases = "OGS-00011")
+  expect_equal(og_provenance(v)$total, nrow(v))
+  expect_false(og_provenance(v)$truncated)
 })
 
 test_api("og_range() checks its own arguments", {

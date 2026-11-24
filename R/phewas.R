@@ -56,13 +56,11 @@ og_phewas.og_api_source <- function(src, variants, threshold = 1e-8, analyses = 
   association_query(src, "api/phewas", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
                     variants = variants, order = "jobs",
-                    truncated = function(ids) phewas_truncated_message(threshold, limit),
+                    truncated = function(ids) {
+                      truncated_message("A PheWAS", limit, "Associations", threshold,
+                                        cut = paste0(" for at least one ALID, or one group of up to ", max_releases_per_job,
+                                                     " GWAS Stores; only ", big_number(limit), " were returned for each"),
+                                        advice = raise_limit(limit, max_phewas_per_variant))
+                    },
                     spec = list(all_analyses = TRUE, one_variant = TRUE))
-}
-
-phewas_truncated_message <- function(threshold, limit) {
-  c(paste0("A PheWAS has more than ", format(limit, big.mark = ","),
-           " Associations at p <= ", format(threshold), " for at least one ALID, or one group of up to 10 GWAS Stores; ",
-           "only ", format(limit, big.mark = ","), " were returned for each."),
-    i = "Raise `limit` (at most 10,000) or lower `threshold` for fewer.")
 }

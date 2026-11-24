@@ -36,7 +36,8 @@ test_that("the splitter packs Analyses by GWAS Store: at most `group_limit` Stor
   }
   # A piece reads only the Store Releases of its own Analyses.
   releases <- lapply(c("A", "B", "C", "D"), function(s) list(store_id = s, release_id = paste0(s, "-r")))
-  got <- piece_releases(releases, c("A", "B", "A", "C"), c(3, 4))
+  info <- data.frame(store_id = c("A", "B", "A", "C"))
+  got <- releases_of_analyses(releases, info[c(3, 4), , drop = FALSE])
   expect_equal(vapply(got, `[[`, "", "store_id"), c("A", "C"))
 })
 

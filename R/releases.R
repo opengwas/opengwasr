@@ -74,9 +74,9 @@ default_releases <- function(src, call) {
   lapply(served, function(b) list(store_id = b$store_id, release_id = b$release_id))
 }
 
-# The Store Releases of the Analyses asked for: a Job reads only those. A query over more than
-# `max_releases_per_job` of them is split by GWAS Store (R/split.R), so there is no limit here.
-# `info` is Analysis metadata with `store_id`.
+# The Store Releases of the Analyses asked for (`info`, Analysis metadata with `store_id`): a query,
+# and each of its Jobs, reads only those. A query over more than `max_releases_per_job` of them is
+# split by GWAS Store (R/split.R), so there is no limit here.
 releases_of_analyses <- function(releases, info) {
   Filter(function(r) r$store_id %in% unique(info$store_id), releases)
 }

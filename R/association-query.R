@@ -63,22 +63,15 @@ association_query <- function(src, path, analyses, observed_only, original_units
     every <- isTRUE(spec$all_analyses) && is.null(analyses)  # no Analyses named: look in all of them
     check_query_arguments(analyses, observed_only, original_units, method, optional = every)
     kinds <- if (!is.null(variants)) classify_variants(variants, call = method)
-    releases <- resolve_releases(src, releases, method)
     limits <- job_limits()
-    scope <- query_scope(src, if (!every) analyses, releases, analyses_per_job %||% limits$analyses,
+    scope <- query_scope(src, if (!every) analyses, resolve_releases(src, releases, method),
                          original_units, limits, method)
     releases <- scope$releases
     info <- scope$info
     # Clumping chooses its LD Stores now, before any Job runs, so a refusal costs none.
     clump <- if (!is.null(spec$clump)) clump_contribution(src, spec$clump, info, method)
-
-    # Preparation: rsIDs name ALIDs only in these Store Releases. The lookup's Jobs are in provenance;
-    # their rows are variants, not Associations, so they count none.
-    jobs <- list()
-    if (!is.null(kinds)) {
-      resolved <- resolve_variants(src, kinds, releases, deadline, method)
-      jobs <- lapply(resolved$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
-    }
+    # Preparation: rsIDs name ALIDs only in these Store Releases.
+    resolved <- if (!is.null(kinds)) resolve_variants(src, kinds, releases, deadline, method)
     # One Job takes a limited number of Analyses from a limited number of GWAS Stores, and of variants
     # and positions: a bigger request is split by those and put back together below. Each field of the
     # request that can be split is one contribution: its split dimension, and what its piece adds to the
@@ -89,6 +82,10 @@ association_query <- function(src, path, analyses, observed_only, original_units
       if (!is.null(spec$interval)) list(interval = interval_contribution(spec$interval)),
       if (!is.null(clump)) list(clump = clump)
     )
+    # A contribution may take fewer Analyses a Job, and say what a truncation warning says.
+    per_job <- min(c(analyses_per_job %||% limits$analyses, unlist(lapply(contributions, `[[`, "analyses_per_job"))))
+    contributions$scope$dim <- scope$split(per_job)
+    for (contribution in contributions) truncated <- contribution$truncated %||% truncated
     # A contribution that follows another's dimension (`along`) has none of its own.
     dims <- Filter(Negate(is.null), lapply(contributions, `[[`, "dim"))
     pieces <- if (is.null(kinds) || length(resolved$alids) > 0) split_pieces(dims) else list()
@@ -103,36 +100,30 @@ association_query <- function(src, path, analyses, observed_only, original_units
     # the same plan later, however long after, and gets the same answer.
     list(requests = requests, releases = releases, finish = function(results) {
       results[submitted] <- results
-      for (i in seq_along(results)) {
-        n <- nrow(results[[i]]$rows)
-        if (is.null(truncated)) {
-          results[[i]]$job <- utils::modifyList(results[[i]]$job, list(total = n, truncated = FALSE))
-        } else {
-          check_job_metadata(results[[i]]$job, n)
-        }
-      }
-      all_jobs <- c(jobs, lapply(results, `[[`, "job"))
+      jobs <- job_counts(results, !is.null(truncated), method)
       rows <- result_rows(results)
       # With no Analyses named, the rows say which there are: one lookup, of those only.
       if (is.null(info)) info <- result_analyses(src, rows, releases, method)
       # Warnings name the user's call while it runs (not when og_job_result() collects it later).
-      if (any(vapply(all_jobs, function(j) j$truncated, NA))) {
+      if (any(vapply(jobs, function(j) j$truncated, NA))) {
         og_warn(truncated(info$id), class = "opengwasr_truncated", n_analyses = nrow(info), call = method)
       }
       if (!is.null(kinds) && length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved, method)
       shaped <- shape_associations(rows, info, original_units, method)
       shaped <- switch(order, api = order_by_analysis(shaped, info$id), jobs = shaped,
                        order_associations(shaped, info$id))
-      # A contribution may finish what it started: columns, provenance fields, warnings.
+      # A contribution may finish what it started: columns, provenance fields, warnings, and which
+      # Jobs it cut rows off (`truncated`, one flag per Job, in piece order).
       provenance <- list()
       for (contribution in contributions) {
         if (is.null(contribution$finish)) next
         done <- contribution$finish(shaped, results, pieces, method)
         shaped <- done$value
-        if (isTRUE(done$truncated) && length(all_jobs) > 0) all_jobs[[length(all_jobs)]]$truncated <- TRUE
+        for (i in which(done$truncated %||% logical())) jobs[[i]]$truncated <- TRUE
         provenance <- c(provenance, done$provenance)
       }
-      list(value = shaped, jobs = all_jobs, provenance = provenance)
+      # The rsID lookup's Jobs are in provenance too.
+      list(value = shaped, jobs = c(lookup_jobs(resolved$jobs), jobs), provenance = provenance)
     })
   })
 }
@@ -145,18 +136,18 @@ association_query <- function(src, path, analyses, observed_only, original_units
 # `clump_contribution()`, R/clump.R). The Analyses are the scope: named ones
 # (grouped by GWAS Store, narrowing the Store Releases) or, with `analyses = NULL`, every Analysis of
 # the Store Releases (split by Store Release; the metadata comes with the result, `info` is NULL).
-query_scope <- function(src, analyses, releases, per_job, original_units, limits, call) {
+query_scope <- function(src, analyses, releases, original_units, limits, call) {
   if (is.null(analyses)) {
-    return(list(dim = split_dim(length(releases), limits$releases), info = NULL, releases = releases,
-                body = function(chunk) list(releases = releases[chunk])))
+    return(list(split = function(per_job) split_dim(length(releases), limits$releases), info = NULL,
+                releases = releases, body = function(chunk) list(releases = releases[chunk])))
   }
   info <- analyses_lookup(src, analyses, releases, call)
   if (original_units) check_original_units(info, call)  # refuse before a Job runs, not after
   releases <- releases_of_analyses(releases, info)
-  list(dim = split_dim(nrow(info), per_job, group = info$store_id, group_limit = limits$releases),
+  list(split = function(per_job) split_dim(nrow(info), per_job, group = info$store_id, group_limit = limits$releases),
        info = info, releases = releases,
        body = function(chunk) list(analyses = as.list(info$id[chunk]),
-                                   releases = piece_releases(releases, info$store_id, chunk)))
+                                   releases = releases_of_analyses(releases, info[chunk, , drop = FALSE])))
 }
 
 # The ALIDs to query: `variants` in each Job, or, for a query of one variant, `variant`.
@@ -193,6 +184,11 @@ request_body <- function(contributions, piece, body, observed_only) {
   fields <- unlist(lapply(names(contributions), function(n) {
     contributions[[n]]$body(piece[[contributions[[n]]$along %||% n]])
   }), recursive = FALSE)
+  # A contributed field of the endpoint's own replaces it, in its place (clumping by PLINK fetches
+  # more top hits than `limit`).
+  own <- intersect(names(body), names(fields))
+  body[own] <- fields[own]
+  fields <- fields[setdiff(names(fields), own)]
   first <- c("variants", "variant", "analyses")
   last <- c("observed_only", "releases")
   c(fields[intersect(first, names(fields))], body,
@@ -237,6 +233,17 @@ query_record <- function(given, releases) {
   args <- Filter(Negate(is.null), args)
   shown <- args[setdiff(names(args), c("analyses", "variants", "data", "releases", "rsids", "positions"))]
   list(query = provenance_query(given$generic, shown), args = args)
+}
+
+# Each Job's `total` and `truncated`. An endpoint that cuts rows off at a limit (`cuts_off`) says
+# them, and they are checked against the rows; any other's are its rows, none cut off.
+job_counts <- function(results, cuts_off, call) {
+  lapply(results, function(r) {
+    n <- nrow(r$rows)
+    if (!cuts_off) return(utils::modifyList(r$job, list(total = n, truncated = FALSE)))
+    check_job_metadata(r$job, n, call)
+    r$job
+  })
 }
 
 # An endpoint that cuts rows off at a limit says how many it returned and whether it cut any off. An

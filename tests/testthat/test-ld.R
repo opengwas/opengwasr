@@ -388,8 +388,9 @@ test_that("og_tophits() clumps each Analysis in the LD Store of its Assigned Anc
   expect_match(format(prov), "Clumped: OGS-00011:GCST003116 in hgdp1kgp-v2-EUR-k10 (matched)", fixed = TRUE, all = FALSE)
   # `limit` counts the leads (the API's), and says so when it cuts them off; og_submit() collects the
   # very same answer, and says nothing with progress off.
-  expect_match(getFromNamespace("truncated_message", "opengwasr")(cad, 5e-8, 1, clump = TRUE)[[1]], "1 index variants")
   withr::local_options(opengwasr.progress = FALSE)
+  w <- expect_warning(og_tophits(src, cad, limit = 1, releases = rel), class = "opengwasr_truncated")
+  expect_match(conditionMessage(w), "more than 1 index variants", fixed = TRUE)
   expect_silent(handle <- og_submit(src, og_tophits, c(cad, afr_analysis, bmi), releases = rel))
   expect_equal(suppressWarnings(og_job_result(src, handle)), top, ignore_attr = TRUE)
 })

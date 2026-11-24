@@ -47,10 +47,10 @@ engine_query <- function(src, method, fn, prepare) {
   run_query(src, plan, deadline, method)
 }
 
-# The rows of the Jobs that returned any, bound into one data frame (none: an empty one).
-result_rows <- function(results) {
+# The rows of the Jobs that returned any, bound into one data frame (none: `empty`).
+result_rows <- function(results, empty = data.frame()) {
   found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
-  if (length(found) == 0) data.frame() else bind_frames(found)
+  if (length(found) == 0) empty else bind_frames(found)
 }
 
 # The state of the user's call that is running, one scoped place: when its deadline is (on the

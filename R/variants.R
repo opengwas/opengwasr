@@ -79,7 +79,7 @@ resolve_variants <- function(src, variants, releases, deadline = job_now() + src
     # runs with the same bounded concurrency inside the call's deadline.
     out <- run_window(src, lookup_requests("api/variants/rsid", "rsids", kinds$rsids, releases, "rsids"),
                       deadline, call)
-    lookup <- lookup_rows(out)
+    lookup <- result_rows(out, empty_lookup())
     jobs <- lapply(out, `[[`, "job")
   }
   map <- unique(lookup[c("rsid", "alid")])
@@ -102,16 +102,20 @@ lookup_requests <- function(path, field, values, releases, limit) {
   })
 }
 
-# The rows of a lookup's Jobs (one `list(rows, job)` each), in request order.
-lookup_rows <- function(results) {
-  found <- Filter(function(r) nrow(r) > 0, lapply(results, `[[`, "rows"))
-  if (length(found) == 0) empty_lookup() else bind_frames(found)
-}
+# A lookup's Jobs (rsIDs, positions) as a query's provenance counts them: they read Store Releases,
+# but their rows are variants, not the query's answer, so they count none.
+lookup_jobs <- function(jobs) lapply(jobs, utils::modifyList, list(total = 0, truncated = FALSE))
 
 empty_lookup <- function() {
   data.frame(alid = character(), chromosome = character(), position = integer(),
              effect_allele = character(), other_allele = character(), rsid = character(),
              store_id = character(), release_id = character(), stringsAsFactors = FALSE)
+}
+
+# The API sends rsid "." for a variant with none: NA in R.
+rsid_or_na <- function(x) {
+  x[x %in% "."] <- NA_character_
+  x
 }
 
 warn_unresolved <- function(ids, call = rlang::caller_env()) {

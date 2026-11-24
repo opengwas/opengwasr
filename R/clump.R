@@ -173,6 +173,8 @@ clump_contribution <- function(src, clump, info, call) {
   }
   list(
     along = "scope",
+    analyses_per_job = 1L,  # each Analysis in its own LD Store, so `limit` counts its index variants
+    truncated = function(ids) truncated_message(analyses_who(ids), clump$limit, "index variants", clump$threshold),
     group = function(chunk) per$ld[[chunk[[1]]]],
     body = function(chunk) {
       if (length(chunk) != 1) {

@@ -43,8 +43,6 @@ ld_query <- function(src, path, variants, ld, spec) {
       own <- if (is.function(spec$body)) spec$body(alids[idx], prep$store) else spec$body
       list(path = path, body = c(list(store = prep$store$ld_store, alids = as.list(alids[idx])), own))
     })
-    # The rsID lookup's Jobs read GWAS Store Releases and count no rows; the LD Store is `ld`, not a Store Release.
-    lookup_jobs <- lapply(prep$jobs, utils::modifyList, list(total = 0, truncated = FALSE))
     store <- prep$store
     list(requests = requests, releases = NULL, finish = function(results) {
       # The LD Store says which of the variants it doesn't hold, in each Job; a variant it doesn't
@@ -57,7 +55,8 @@ ld_query <- function(src, path, variants, ld, spec) {
                   variants = variants, rsid_map = prep$rsid_map, unresolved = prep$unresolved)
       value <- spec$assemble(results, ctx)
       ld_jobs <- lapply(results, function(r) { r$job$releases <- character(); r$job })
-      list(value = value, jobs = c(lookup_jobs, ld_jobs),
+      # The LD Store is `ld`, not a Store Release.
+      list(value = value, jobs = c(lookup_jobs(prep$jobs), ld_jobs),
            provenance = c(list(ld = store$ld_store, ld_choice = prep$choice, absent = left_out),
                           if (!is.null(spec$provenance)) spec$provenance(results, ctx)))
     })

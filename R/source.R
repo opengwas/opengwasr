@@ -20,8 +20,8 @@
 #' }
 #' @export
 og_api <- function(url = getOption("opengwasr.url"),
-                   timeout = getOption("opengwasr.timeout", 3600),
-                   max_in_flight = getOption("opengwasr.max_in_flight", 4)) {
+                   timeout = default_timeout(),
+                   max_in_flight = default_max_in_flight()) {
   creds <- api_credentials(url)
   if (!is.numeric(timeout) || length(timeout) != 1 || is.na(timeout) || !is.finite(timeout) ||
       timeout <= 0) {
@@ -65,3 +65,61 @@ print.og_api_source <- function(x, ...) {
   cat(format(x), sep = "\n")
   invisible(x)
 }
+
+# The defaults of og_api()'s `timeout` and `max_in_flight`: read here, once, for the Source and for
+# no_source() alike.
+default_timeout <- function() getOption("opengwasr.timeout", 3600)
+default_max_in_flight <- function() getOption("opengwasr.max_in_flight", 4)
+
+# What a query runs on when the user gave `src = NULL`: a PLINK Reference needs no API when nothing
+# is looked up (ALID -> rsID is the one lookup it can need). It has the Source's timeout and
+# concurrency, and no URL or credentials; the first request any code path makes (api_response() is
+# where every request goes) stops with `opengwasr_source_required`, so nothing is looked up without
+# a Source.
+no_source <- function() {
+  structure(list(url = NULL, timeout = default_timeout(), max_in_flight = as.integer(default_max_in_flight())),
+            class = "og_no_source")
+}
+
+# `what`: what needed the API, when the caller knows ("3 ALIDs have no rsID: ...").
+source_required <- function(call, what = NULL) {
+  og_abort(c("This needs the OpenGWAS API, but no Source was given (`src = NULL`).",
+             if (!is.null(what)) c(x = what),
+             i = "Pass a Source from `og_api()`.",
+             i = paste0("`src = NULL` is for a PLINK Reference when nothing is looked up: ",
+                        "variants given as rsIDs, or as a data frame with an `rsid` column.")),
+           class = "opengwasr_source_required", call = call)
+}
+
+#' Every query function takes a Source. `src = NULL` (and anything else that isn't one) gets a
+#' classed error instead of R's "no applicable method"; `og_clump()` and `og_ld_matrix()` have their
+#' own `NULL` methods, for a PLINK Reference.
+#'
+#' @param src Whatever the caller passed.
+#' @param ... Ignored.
+#' @exportS3Method og_analyses default
+#' @exportS3Method og_associations default
+#' @exportS3Method og_phewas default
+#' @exportS3Method og_range default
+#' @exportS3Method og_tophits default
+#' @exportS3Method og_variants_rsid default
+#' @exportS3Method og_variants_chrpos default
+#' @exportS3Method og_ld_stores default
+#' @exportS3Method og_ld_proxies default
+#' @exportS3Method og_ld_reflookup default
+#' @exportS3Method og_clump default
+#' @exportS3Method og_ld_matrix default
+#' @exportS3Method og_status default
+#' @exportS3Method og_user default
+#' @noRd
+source_not_given <- function(src, ...) {
+  call <- sys.call(sys.parent())
+  if (is.null(src)) source_required(call)
+  og_abort(c(paste0("`src` must be a Source from `og_api()`, not ", class(src)[[1]], "."),
+             i = "Create one with `og_api()`."),
+           class = "opengwasr_argument", call = call)
+}
+og_analyses.default <- og_associations.default <- og_phewas.default <- og_range.default <-
+  og_tophits.default <- og_variants_rsid.default <- og_variants_chrpos.default <- og_ld_stores.default <-
+  og_ld_proxies.default <- og_ld_reflookup.default <- og_clump.default <- og_ld_matrix.default <-
+  og_status.default <- og_user.default <- source_not_given

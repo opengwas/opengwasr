@@ -69,6 +69,9 @@ choose_ld_store <- function(src, ld, ancestries = NULL, call = rlang::caller_env
   if (!is.null(ld) && (!is.character(ld) || length(ld) != 1 || is.na(ld) || !nzchar(ld))) {
     og_abort("`ld` must be one LD Store name or ancestry code, or `NULL`.", class = "opengwasr_argument", call = call)
   }
+  if (inherits(src, "og_no_source")) {
+    source_required(call, "An LD Store is named, or chosen by ancestry, from the API's list of LD Stores.")
+  }
   stores <- ld_stores(src, call)
   choices <- function() paste0("\"", unique(stores$ancestry), "\"", collapse = ", ")
   refuse <- function(what, ...) {

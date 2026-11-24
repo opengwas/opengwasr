@@ -7,7 +7,9 @@
 og_clump(src, data, ld = NULL, r2 = NULL, kb = NULL)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}}. \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
+looked up: \code{data} has an \code{rsid} column, so no ALID needs its rsID from the API. A lookup that
+is needed without a Source stops, with class \code{opengwasr_source_required}.}
 
 \item{data}{A data frame of Associations, with \code{alid} and \code{z}, and \code{id} for the LD Store to be
 matched by the Analyses' Assigned Ancestry.}

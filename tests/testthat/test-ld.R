@@ -289,7 +289,7 @@ test_that("the LD queries stay thin: each is a spec over the LD engine", {
   ns <- asNamespace("opengwasr")
   users <- Filter(function(n) is.function(ns[[n]]) && "ld_query" %in% all.names(body(ns[[n]])),
                   ls(ns, all.names = TRUE))
-  expect_setequal(users, c("og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source", "og_clump.og_api_source",
+  expect_setequal(users, c("og_ld_matrix.NULL", "og_clump.NULL", "og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source", "og_clump.og_api_source",
                          "og_ld_reflookup.og_api_source"))
   # Neither runs a Job, or looks anything up, on its own.
   for (m in users) {

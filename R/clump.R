@@ -30,7 +30,9 @@
 #' a message (class `opengwasr_plink_unmatched`, `count`). Provenance's `clump` names the reference's
 #' path as `ld`, and `clump_ld` is the same path.
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()]. `NULL` works with a PLINK Reference as `ld` when nothing is
+#'   looked up: `data` has an `rsid` column, so no ALID needs its rsID from the API. A lookup that
+#'   is needed without a Source stops, with class `opengwasr_source_required`.
 #' @param data A data frame of Associations, with `alid` and `z`, and `id` for the LD Store to be
 #'   matched by the Analyses' Assigned Ancestry.
 #' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
@@ -87,10 +89,13 @@ og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
     }))
 }
 
+#' @export
+og_clump.NULL <- og_clump.og_api_source
+
 # `og_clump()` over a PLINK Reference: each variant matched by rsID, scored by its largest |z|, clumped
 # by PLINK; the rows of `data` of each index variant, as for an LD Store, with the same columns.
 local_clump <- function(data, ctx, r2, kb) {
-  rsid <- ctx$map$rsid[match(data$alid, ctx$map$alid)]  # NA: not matched, so not clumped
+  rsid <- ctx$matched$rsid[match(data$alid, ctx$matched$alid)]  # NA: not matched, so not clumped
   at <- which(!is.na(rsid))
   rsids <- unique(rsid[at])
   score <- as.numeric(tapply(abs(data$z[at]), factor(rsid[at], levels = rsids), max))

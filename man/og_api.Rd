@@ -6,8 +6,8 @@
 \usage{
 og_api(
   url = getOption("opengwasr.url"),
-  timeout = getOption("opengwasr.timeout", 3600),
-  max_in_flight = getOption("opengwasr.max_in_flight", 4)
+  timeout = default_timeout(),
+  max_in_flight = default_max_in_flight()
 )
 }
 \arguments{

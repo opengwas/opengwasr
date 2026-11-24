@@ -276,6 +276,14 @@ m_local <- og_ld_matrix(src, cad_local, ld = ref)
 - `og_ld_proxies()` reads LD Stores only.
 - Provenance works as before: `clump_ld` is the PLINK Reference's path, and `clump_ld_choice` is `"user"`.
 
+### Without an API {#plink-no-source}
+
+With data that already carries rsIDs, `og_clump()` and `og_ld_matrix()` with a PLINK Reference need no API at all: pass `src = NULL`, with no credentials set. If an ALID's rsID would have to be looked up (no `rsid` column, and no rsIDs given), they stop with class `opengwasr_source_required`, which says how many ALIDs need it; pass a Source then.
+
+```{r plink-no-source, eval = FALSE}
+og_clump(NULL, cad_local, ld = ref, r2 = 0.001, kb = 10000)  # cad_local has an `rsid` column
+```
+
 ```{r end-recordings, include = FALSE}
 end_recordings()
 ```

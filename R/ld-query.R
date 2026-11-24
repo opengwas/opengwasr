@@ -31,6 +31,7 @@
 #'   `absent`); under [og_submit()], the `og_jobs` handle whose collection returns the same.
 #' @noRd
 ld_query <- function(src, path, variants, ld, spec) {
+  src <- src %||% no_source()  # NULL: a PLINK Reference that looks nothing up (R/source.R)
   method <- parent.frame()
   fn <- sys.function(sys.parent())
   engine_query(src, method, fn, function(deadline) {

@@ -217,3 +217,60 @@ test_api("top hits clumped by a PLINK Reference, and an LD matrix of Association
     expect_equal(nrow(m), 4)
   }
 })
+
+# #28: a PLINK Reference needs no API when nothing is looked up. No OPENGWAS_* set, `og_api()`
+# not mocked: `src = NULL` is the only Source there is.
+test_that("og_ld_matrix() and og_clump() with a PLINK Reference need no Source when nothing is looked up", {
+  ref <- local_plink_reference()
+  withr::local_envvar(OPENGWAS_URL = NA, OPENGWAS_DEV_KEY = NA, OPENGWAS_DEV_USER = NA)
+  withr::local_options(opengwasr.url = NULL, opengwasr.progress = FALSE)
+  expect_error(og_api(), class = "opengwasr_auth")
+  rsids <- c("rs1333049", "rs4977574", "rs2891168")
+  m <- og_ld_matrix(NULL, rsids, ld = ref)
+  expect_equal(dim(m), c(3, 3))
+  expect_equal(unname(m), unname(og_ld_matrix(src, rsids, ld = ref)))
+  expect_equal(og_provenance(m)$ld, ref$path)
+  data <- data.frame(alid = c("9:22098574:A:G", "9:22103183:A:C", "9:22125503:C:G"), rsid = rsids,
+                     z = c(9, 6, 8), id = "x")
+  m2 <- og_ld_matrix(NULL, data, ld = ref)
+  expect_equal(unclass(unname(m2)), unclass(unname(m)), ignore_attr = TRUE)
+  out <- og_clump(NULL, data, ld = ref, r2 = 0.2, kb = 100)
+  expect_equal(out, og_clump(src, data, ld = ref, r2 = 0.2, kb = 100), ignore_attr = TRUE)
+  expect_equal(og_provenance(out)$clump$ld, ref$path)
+})
+
+test_that("a lookup that is needed without a Source says what is missing", {
+  ref <- local_plink_reference()
+  withr::local_envvar(OPENGWAS_URL = NA, OPENGWAS_DEV_KEY = NA, OPENGWAS_DEV_USER = NA)
+  withr::local_options(opengwasr.url = NULL, opengwasr.progress = FALSE)
+  alid <- "9:22098574:A:G"
+  e <- expect_error(og_ld_matrix(NULL, alid, ld = ref), class = "opengwasr_source_required")
+  expect_s3_class(e, "opengwasr_error")
+  expect_match(conditionMessage(e), "no Source was given")
+  expect_match(conditionMessage(e), "1 ALID has no rsID", fixed = TRUE)
+  expect_match(conditionMessage(e), alid, fixed = TRUE)
+  data <- data.frame(alid = alid, z = 5, id = "x")  # no rsid column: the ALID's rsID is looked up
+  expect_error(og_clump(NULL, data, ld = ref, r2 = 0.2, kb = 100), class = "opengwasr_source_required")
+  # An LD Store needs the API for everything.
+  expect_error(og_ld_matrix(NULL, "rs4977574", ld = "EUR"), class = "opengwasr_source_required")
+  expect_error(og_clump(NULL, data.frame(alid = alid, z = 5, id = "x", rsid = "rs1"), ld = "EUR"),
+               class = "opengwasr_source_required")
+})
+
+test_that("every query function says what is wrong with a missing or foreign Source", {
+  for (f in list(og_ld_proxies, og_ld_reflookup, og_ld_stores, og_tophits, og_associations, og_analyses,
+                 og_phewas, og_range, og_status, og_user, og_variants_rsid, og_variants_chrpos)) {
+    args <- if (identical(f, og_ld_stores) || identical(f, og_status) || identical(f, og_user)) list(NULL) else list(NULL, "rs1")
+    expect_error(do.call(f, args), class = "opengwasr_source_required")
+  }
+  expect_error(og_ld_proxies("not a source", "rs1", ld = "EUR"), class = "opengwasr_argument")
+  expect_error(og_clump("x", data.frame()), class = "opengwasr_argument")
+})
+
+test_that("no_source() has the defaults of og_api()", {
+  withr::local_envvar(OPENGWAS_URL = "http://example.test", OPENGWAS_DEV_KEY = "k", OPENGWAS_DEV_USER = NA)
+  withr::local_options(opengwasr.timeout = 77, opengwasr.max_in_flight = 9)
+  ns <- no_source()
+  api <- og_api()
+  expect_equal(c(ns$timeout, ns$max_in_flight), c(api$timeout, api$max_in_flight))
+})

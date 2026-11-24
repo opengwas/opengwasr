@@ -12,6 +12,7 @@
 #' 1,000 variants; more are split.
 #'
 #' @inheritParams og_ld_matrix
+#' @param src A Source, from [og_api()].
 #' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match the Assigned
 #'   Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.
 #' @param r2 The smallest r² of a proxy.

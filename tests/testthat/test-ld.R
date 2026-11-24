@@ -289,7 +289,8 @@ test_that("the LD queries stay thin: each is a spec over the LD engine", {
   ns <- asNamespace("opengwasr")
   users <- Filter(function(n) is.function(ns[[n]]) && "ld_query" %in% all.names(body(ns[[n]])),
                   ls(ns, all.names = TRUE))
-  expect_setequal(users, c("og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source", "og_clump.og_api_source"))
+  expect_setequal(users, c("og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source", "og_clump.og_api_source",
+                         "og_ld_reflookup.og_api_source"))
   # Neither runs a Job, or looks anything up, on its own.
   for (m in users) {
     called <- all.names(body(ns[[m]]))
@@ -474,3 +475,47 @@ test_api("an explicit r2 equal to an LD Store's t_far is sent at or above it, in
     expect_gte(sent[[length(sent)]]$r2, t_far)
   }
 }, live = FALSE)
+
+test_api("og_ld_reflookup() says which variants the LD Store holds, without a warning for the absent", {
+  absent <- if (backend == "fake") "1:2999:A:G" else "1:100:A:G"
+  expect_no_warning(r <- og_ld_reflookup(src, c(snv, absent, "rs1421085"), ld = "EUR"))
+  expect_equal(names(r), c("alid", "rsid", "present"))
+  expect_equal(r$alid[1:2], c(snv, absent))
+  expect_equal(r$present[1:2], c(TRUE, FALSE))
+  expect_equal(r$rsid[1:2], c(NA_character_, NA_character_))
+  expect_true("rs1421085" %in% r$rsid)
+  expect_true(any(r$present[r$rsid %in% "rs1421085"]))  # an rsID can name an ALID the LD Store lacks
+  prov <- og_provenance(r)
+  expect_equal(prov$ld, eur)
+  expect_true(absent %in% prov$absent)
+  # An rsID no GWAS Store holds is a row, not a gap.
+  none <- og_ld_reflookup(src, "rs1", ld = "EUR")
+  expect_equal(none$rsid, "rs1")
+  expect_true(is.na(none$alid))
+  expect_false(none$present)
+})
+
+test_that("og_ld_reflookup() refuses a PLINK Reference, takes the rsid column of Associations, and splits", {
+  src <- fake_source(fake)
+  ref <- structure(list(path = "/nowhere/ref", plink_bin = "plink"), class = "og_plink_reference")
+  expect_error(og_ld_reflookup(src, snv, ld = ref), class = "opengwasr_argument")
+  data <- data.frame(id = cad, alid = c(snv, "5:100000:C:T"), rsid = c("rs6567160", "rs9"))
+  r <- og_ld_reflookup(src, data, ld = "EUR")
+  expect_equal(r$rsid, c("rs6567160", "rs9"))
+  expect_equal(r$alid, data$alid)
+  expect_equal(job_limits()$ld_reflookup, 10000)
+  withr::local_options(opengwasr.job_limits = list(ld_reflookup = 2))
+  v <- c(snv, "5:100000:C:T", "6:200000:C:T")
+  r3 <- og_ld_reflookup(src, v, ld = "EUR")
+  expect_equal(r3$alid, v)
+  expect_equal(length(ld_bodies("/api/ld/reflookup")) >= 2, TRUE)
+})
+
+test_that("og_ld_reflookup() gives one row per variant asked, in the order asked, duplicates kept", {
+  src <- fake_source(fake)
+  v <- c("6:200000:C:T", snv, "6:200000:C:T")
+  r <- og_ld_reflookup(src, v, ld = "EUR")
+  expect_equal(r$alid, v)
+  expect_equal(nrow(r), 3)
+  expect_identical(r$present[[1]], r$present[[3]])
+})

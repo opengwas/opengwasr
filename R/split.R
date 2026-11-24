@@ -25,7 +25,8 @@ job_limits <- function() {
                  analyses = max_analyses_per_job, rsids = max_rsids_per_job,
                  positions = max_positions_per_job, range_analyses = max_range_analyses_per_job,
                  range_window = max_range_positions_per_job,
-                 ld_matrix = max_ld_matrix_per_job, ld_proxies = max_ld_proxies_per_job)
+                 ld_matrix = max_ld_matrix_per_job, ld_proxies = max_ld_proxies_per_job,
+                 ld_reflookup = max_ld_reflookup_per_job)
   utils::modifyList(limits, as.list(getOption("opengwasr.job_limits", list())))
 }
 

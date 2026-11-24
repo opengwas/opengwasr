@@ -238,14 +238,17 @@ plink_rsids_of <- function(src, alids, deadline, call) {
        jobs = lapply(lapply(out, `[[`, "job"), utils::modifyList, list(total = 0, truncated = FALSE)))
 }
 
+# A query that reads LD Stores only, given a PLINK Reference.
+refuse_plink <- function(method) {
+  og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
+             i = "Pass an LD Store's name or an ancestry code in `ld`."),
+           class = "opengwasr_argument", call = method)
+}
+
 # The plan of a query over a PLINK Reference: no requests. PLINK runs when the plan is finished,
 # with what was pinned now (the variants matched).
 ld_query_plink <- function(prep, spec, method) {
-  if (is.null(spec$local)) {
-    og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
-               i = "Pass an LD Store's name or an ancestry code in `ld`."),
-             class = "opengwasr_argument", call = method)
-  }
+  if (is.null(spec$local)) refuse_plink(method)
   plink <- prep$plink
   left_out <- with(plink$map, ifelse(is.na(alid), rsid, alid))[!plink$present]
   ctx <- list(alids = prep$alids, absent = left_out, store = prep$store, choice = prep$choice,

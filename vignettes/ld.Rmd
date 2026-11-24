@@ -7,7 +7,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-Linkage disequilibrium (LD) is how strongly two variants are inherited together, measured by their correlation r. opengwasr reads LD from **LD Stores** on the OpenGWAS API, or from your own PLINK Reference. This vignette covers each LD operation: choosing the LD, LD matrices, LD proxies and clumping.
+Linkage disequilibrium (LD) is how strongly two variants are inherited together, measured by their correlation r. opengwasr reads LD from **LD Stores** on the OpenGWAS API, or from your own PLINK Reference. This vignette covers each LD operation: choosing the LD, LD matrices, LD proxies, reflookup and clumping.
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
@@ -153,6 +153,18 @@ head(px, 5)
 - `r2` and `kb` follow the same rule as clumping: below `t_far`, `kb` can be at most 3,000 ([Your own r² and window](#refusals)). Otherwise the API refuses (`opengwasr_ld_refusal`, with `reason`, `t_far`, `near_bp` and `far_bp`).
 
 This is an LD lookup, for questions about LD itself: which variants tag a signal, or which variants to look for in data from outside OpenGWAS. It is not the LD-proxy substitution ieugwasr made when an outcome lacked a variant. opengwasr never swaps another variant's Association in for a missing one; Reference-Completed Store Releases hold Imputed Associations instead (see [Imputed Associations](opengwasr.html#imputed-associations)).
+
+## Is a variant in the LD Store? {#ld-reflookup}
+
+`og_ld_reflookup()` says whether the LD Store holds each variant, so you can check instruments before clumping or building an LD matrix. It returns one row per variant asked, with `alid`, `rsid` (when known) and `present`:
+
+```{r ld-reflookup}
+og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085", "16:53767042:A:C"), ld = "EUR")
+```
+
+- An rsID stands for every ALID it names, one row each: `rs1421085` names two ALIDs here, and the LD Store holds one of them. An rsID no GWAS Store holds has one row with `alid` `NA` and `present` `FALSE`.
+- A variant the LD Store doesn't hold is a row, not a warning; `og_provenance()` lists them as `absent`.
+- `ld` is chosen as for the other LD functions, and only an LD Store can answer: a PLINK Reference is refused.
 
 ## Clumping {#clumping}
 

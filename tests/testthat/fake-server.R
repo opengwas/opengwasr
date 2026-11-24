@@ -719,6 +719,13 @@ fake_api <- function(world = fake_world()) {
       list(rows = rows, metadata = list(r2 = body$r2, window_bp = body$kb * 1000, variants = length(held)))
     })
   })
+  # Whether the LD Store holds each ALID asked: one row each, in the order asked.
+  app$post("/api/ld/reflookup", function(req, res) {
+    ld_job(req, res, "/api/ld/reflookup", function(held, store, body) {
+      list(rows = lapply(unlist(body$alids), function(a) list(alid = a, present = a %in% held)),
+           metadata = list(variants = length(held)))
+    })
+  })
   # One variant across Analyses (`variant` is an ALID: opengwasr resolves rsIDs itself). The rows are
   # the variant's Associations in the Analyses of the Store Releases asked for (or of `analyses`) at
   # p <= `threshold`, strongest first, at most `limit`; `total` counts those that pass.

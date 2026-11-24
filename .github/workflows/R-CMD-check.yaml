@@ -43,6 +43,17 @@ jobs:
           extra-packages: any::rcmdcheck, github::MRCIEU/genetics.binaRies
           needs: check
 
+      # R CMD check --as-cran runs the tests on a library of the declared dependencies only, and
+      # genetics.binaRies isn't one (it isn't on CRAN), so the tests can't call it: put its PLINK on
+      # the PATH instead, where find_plink() looks next. It downloads the binary on first use.
+      - name: Put PLINK on the PATH
+        shell: Rscript {0}
+        run: |
+          plink <- genetics.binaRies::get_plink_binary()
+          Sys.chmod(plink, "755")
+          stopifnot(file.access(plink, 1) == 0)
+          cat(normalizePath(dirname(plink)), "\n", sep = "", file = Sys.getenv("GITHUB_PATH"), append = TRUE)
+
       - uses: r-lib/actions/check-r-package@v2
         with:
           args: 'c("--no-manual", "--as-cran")'

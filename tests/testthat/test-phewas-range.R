@@ -51,8 +51,11 @@ test_api("og_phewas() with `analyses = NULL` searches every Analysis of the Stor
   all <- og_phewas(src, snv, releases = rel)
   expect_true(bmi %in% all$id)
   expect_true(all(all$pval <= 1e-8))
-  expect_false(anyNA(all$effect_scale))   # metadata came with the Analyses in the result
-  expect_false(anyNA(all$n))
+  # Metadata came with the Analyses in the result, except those the catalogue doesn't list (yet):
+  # the live API's PheWAS index can run ahead of it, and those rows come back with it NA.
+  listed <- all$id %in% og_analyses(src, unique(all$id[!is.na(all$effect_scale)]))$id
+  expect_true(all(listed | is.na(all$n)))
+  if (backend == "fake") expect_false(anyNA(all$effect_scale))
   if (backend == "fake") {
     expect_equal(all$id, bmi)
     expect_equal(unlist(tail(raw_api(fake$url(), fake_key, "_fake/gwasinfo"), 1)[[1]]$id), bmi)  # only that one
@@ -293,4 +296,34 @@ test_that("og_submit() works for og_phewas(), og_range() and the lookups", {
   # An every-Analysis PheWAS looks its metadata up after the rows, when collected.
   job <- og_submit(src, og_phewas, snv, releases = rel)
   expect_equal(og_job_result(src, job)$id, bmi)
+})
+
+# ---- Analyses the catalogue doesn't list (yet) ----
+
+# The dev API's PheWAS index can run ahead of its catalogue: what can be queried is the API's say, so
+# opengwasr returns those rows as sent, with no metadata, and refuses only what needs the metadata.
+unlisted_fake <- function() {
+  world <- server_env$fake_world(n_synthetic = 1)
+  world$analyses <- Filter(function(a) !identical(a$id, bmi), world$analyses)
+  fake_in_process(server_env$fake_api(world), parent.frame())
+}
+
+test_that("og_phewas() of every Analysis returns rows of one the catalogue doesn't list, metadata NA", {
+  src <- fake_source(unlisted_fake())
+  all <- og_phewas(src, snv, releases = rel)
+  expect_equal(all$id, bmi)
+  expect_equal(all$pval, 10^-300)
+  expect_true(all(is.na(all[c("effect_scale", "n", "sample_size_kind", "ncase", "ncontrol")])))
+  expect_equal(names(all)[seq_along(association_columns)], association_columns)
+})
+
+test_that("an unlisted Analysis keeps the others' metadata, and `original_units` is still refused for it", {
+  src <- fake_source(unlisted_fake())
+  # Both are in the result (CAD at the loose threshold); only BMI is unlisted.
+  ph <- og_phewas(src, snv, threshold = 1, releases = rel)
+  expect_setequal(ph$id, c(cad, bmi))
+  expect_false(anyNA(ph$effect_scale[ph$id == cad]))
+  expect_true(is.na(ph$effect_scale[ph$id == bmi]))
+  expect_error(og_phewas(src, snv, threshold = 1, releases = rel, original_units = TRUE),
+               class = "opengwasr_original_units_unavailable")
 })

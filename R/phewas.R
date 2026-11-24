@@ -12,7 +12,9 @@
 #'
 #' With `analyses = NULL` (the default) every Analysis of the Store Releases is searched. The
 #' Analyses' metadata (`beta`'s effect scale, `n`, `ncase`) is then looked up once, after the rows, for
-#' the Analyses that appear in them. `original_units = TRUE` can then only be refused (class
+#' the Analyses that appear in them. What can be queried is the API's say: an Analysis in the result
+#' that the catalogue doesn't list yet is returned as the API sent it, with its metadata columns
+#' (`effect_scale`, `n`, `sample_size_kind`, `ncase`, `ncontrol`) `NA`, and no warning. `original_units = TRUE` can then only be refused (class
 #' `opengwasr_original_units_unavailable`) after the search, naming the Analyses in the result; name
 #' `analyses` and it is refused before any query runs.
 #'

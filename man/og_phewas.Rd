@@ -52,7 +52,9 @@ the order the API gave them). An rsID no Store Release holds gives a warning of 
 
 With \code{analyses = NULL} (the default) every Analysis of the Store Releases is searched. The
 Analyses' metadata (\code{beta}'s effect scale, \code{n}, \code{ncase}) is then looked up once, after the rows, for
-the Analyses that appear in them. \code{original_units = TRUE} can then only be refused (class
+the Analyses that appear in them. What can be queried is the API's say: an Analysis in the result
+that the catalogue doesn't list yet is returned as the API sent it, with its metadata columns
+(\code{effect_scale}, \code{n}, \code{sample_size_kind}, \code{ncase}, \code{ncontrol}) \code{NA}, and no warning. \code{original_units = TRUE} can then only be refused (class
 \code{opengwasr_original_units_unavailable}) after the search, naming the Analyses in the result; name
 \code{analyses} and it is refused before any query runs.
 

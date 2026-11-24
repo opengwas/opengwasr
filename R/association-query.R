@@ -64,8 +64,9 @@ association_query <- function(src, path, analyses, observed_only, original_units
       }
       if (!is.null(kinds) && length(resolved$unresolved) > 0) warn_unresolved(resolved$unresolved, method)
       shaped <- shape_associations(rows, info, original_units, method)
-      shaped <- switch(order, api = order_by_analysis(shaped, info$id), jobs = shaped,
-                       order_associations(shaped, info$id))
+      ids <- union(info$id, shaped$id)  # Analyses the catalogue doesn't list come after, as they appear
+      shaped <- switch(order, api = order_by_analysis(shaped, ids), jobs = shaped,
+                       order_associations(shaped, ids))
       # A contribution may finish what it started: columns, provenance fields, warnings, and which
       # Jobs it cut rows off (`truncated`, one flag per Job, in piece order).
       provenance <- list()
@@ -148,10 +149,19 @@ request_body <- function(contributions, piece, body, observed_only) {
 
 # The metadata of the Analyses a result's rows are in, in order of first appearance (with every
 # Analysis searched there is no list asked for). Kept: the API's rows carry no sample size or effect
-# scale, so shaping needs the Analyses' own metadata, and only these may be looked up, never the catalogue.
-# `original_units` is refused for them when the rows are shaped (shape_associations()).
+# scale, so shaping needs the Analyses' own metadata. What can be queried is the API's say, not
+# opengwasr's: an Analysis the catalogue doesn't list (yet) is left out here, and its rows are
+# shaped with that metadata NA (shape_associations()). `original_units` is refused for it there.
 result_analyses <- function(src, rows, releases, call) {
-  analyses_lookup(src, unique(canonical_ids(rows)), releases, call)
+  ids <- unique(canonical_ids(rows))
+  tryCatch(
+    analyses_lookup(src, ids, releases, call),
+    opengwasr_analysis_not_found = function(e) {
+      known <- setdiff(ids, e$ids)
+      if (length(known) == length(ids)) stop(e)  # not about the result's own Analyses
+      analyses_lookup(src, known, releases, call)
+    }
+  )
 }
 
 # The query method's generic and arguments, in order (so an argument a method gains is recorded

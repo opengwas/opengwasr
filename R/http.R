@@ -19,14 +19,31 @@ api_request <- function(src, path, query = NULL, body = NULL, timeout = NULL, me
   req <- api_authorise(src, req)
   if (length(query) > 0) req <- httr2::req_url_query(req, !!!query)
   if (!is.null(body)) {
-    # An `r2` is a threshold an LD Store compares with its `t_far`: it must not round below it.
-    if (is.list(body) && is.numeric(body$r2)) body$r2 <- round_up_15(body$r2)
+    body <- round_up_r2(body)
     # 15 significant digits (`digits = NA`), not httr2's 22. R on Apple Silicon parses a literal such
     # as 1e-50 one ulp low, and 22 digits would send that ulp; 15 sends the same bytes everywhere,
     # which the vignette recordings (matched by body) rely on.
     req <- httr2::req_body_json(req, body, auto_unbox = TRUE, null = "null", digits = NA)
   }
   req
+}
+
+# An `r2` is a threshold an LD Store compares with its `t_far`, so wherever it sits in a body (`r2`
+# of the LD functions, `clump$r2` of top hits) it is rounded up to the 15 digits sent, never down.
+round_up_r2 <- function(x) {
+  if (!is.list(x)) return(x)
+  is_r2 <- if (is.null(names(x))) rep(FALSE, length(x)) else names(x) == "r2"
+  for (i in which(is_r2 | vapply(x, is.list, NA))) {
+    x[i] <- list(if (is_r2[[i]] && is.numeric(x[[i]])) round_up_15(x[[i]]) else round_up_r2(x[[i]]))
+  }
+  x
+}
+
+round_up_15 <- function(x) {
+  if (length(x) != 1 || is.na(x) || x == 0) return(x)
+  y <- signif(x, 15)
+  if (y < x) y <- y + 10^(floor(log10(abs(x))) - 14)
+  signif(y, 15)
 }
 
 #' Perform one request, map an error response to its classed condition, and return the response

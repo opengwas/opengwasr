@@ -39,6 +39,8 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   if (original_units) check_original_units(analyses, call)
   if (nrow(rows) == 0) rows <- empty_associations()
   rows$id <- canonical_ids(rows)
+  # An Analysis of the rows with no metadata (the catalogue doesn't list it yet) can't be rescaled.
+  if (original_units) check_original_units_known(unique(rows$id), analyses, call)
   if (!is.null(rows$rsid)) rows$rsid <- rsid_or_na(rows$rsid)
   if (is.null(rows$beta)) rows$beta <- rows$z * rows$se
   if (is.null(rows$pval)) rows$pval <- 10^rows$log10_p
@@ -49,7 +51,7 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
     if (is.null(x)) x <- rep(NA, nrow(analyses))
     as(x)[at]
   }
-  rows$effect_scale <- as.character(analyses$stored_effect_scale[at])
+  rows$effect_scale <- field("stored_effect_scale", as.character)
   rows$n <- if (is.null(rows$n)) field("sample_size", as.numeric) else ifelse(is.na(rows$n), field("sample_size", as.numeric), rows$n)
   rows$sample_size_kind <- field("sample_size_kind", as.character)
   rows$ncase <- field("n_cases", as.numeric)
@@ -106,6 +108,21 @@ check_original_units <- function(analyses, call = rlang::caller_env()) {
       i = "Use `original_units = FALSE` (the default) for per-SD effects."),
     class = "opengwasr_original_units_unavailable", refusal = TRUE, ids = ids, reason = unname(reason),
     call = call
+  )
+}
+
+# `original_units` for Analyses with no metadata: refused, as opengwasr can't rescale without `original_sd`.
+check_original_units_known <- function(ids, analyses, call = rlang::caller_env()) {
+  ids <- setdiff(ids, analyses$id)
+  if (length(ids) == 0) return(invisible())
+  og_abort(
+    c(paste0("Can't give ", if (length(ids) == 1) "this Analysis" else paste(length(ids), "Analyses"),
+             " in original units."),
+      stats::setNames(paste0("`", ids, "`: the catalogue doesn't list it, so it has no recorded phenotype SD."),
+                      rep("x", length(ids))),
+      i = "Use `original_units = FALSE` (the default) for per-SD effects."),
+    class = "opengwasr_original_units_unavailable", refusal = TRUE, ids = ids,
+    reason = rep("no_metadata", length(ids)), call = call
   )
 }
 

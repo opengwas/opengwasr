@@ -36,6 +36,7 @@ max_range_analyses_per_job <- 10L        # Analyses in POST /api/associations/ra
 max_range_positions_per_job <- 10000000L # positions (inclusive) in one range
 max_rows_per_job <- 100000L    # rows one Job's result may hold (errors guide: `request` failure beyond)
 max_tophits_per_analysis <- 10000L  # `limit` in POST /api/tophits
+max_phewas_per_variant <- 10000L    # `limit` in POST /api/phewas
 max_queued_jobs_per_user <- 100L  # Jobs one user may have queued (429 user_queue_full)
 
 # An answer the client can't trust: an unknown status, a result with no rows, pages that don't add up.

@@ -39,7 +39,7 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   if (original_units) check_original_units(analyses, call)
   if (nrow(rows) == 0) rows <- empty_associations()
   rows$id <- canonical_ids(rows)
-  if (!is.null(rows$rsid)) rows$rsid[rows$rsid %in% "."] <- NA_character_  # the API sends "." for none
+  if (!is.null(rows$rsid)) rows$rsid <- rsid_or_na(rows$rsid)
   if (is.null(rows$beta)) rows$beta <- rows$z * rows$se
   if (is.null(rows$pval)) rows$pval <- 10^rows$log10_p
   rows$log10_p <- NULL

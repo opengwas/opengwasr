@@ -24,3 +24,13 @@ test_api <- function(desc, code, live = TRUE) {
   if (live && live_available()) run("live")
   invisible()
 }
+
+# What observed_only does, as a live run can assert it whatever the dev Data API holds today: the
+# observed rows are exactly the unfiltered rows whose status is "observed" (same Analysis and ALID).
+# The data itself (which rows are Imputed) is the fake's to assert.
+expect_observed_subset <- function(observed, all) {
+  testthat::expect_true(all(observed$association_status == "observed"))
+  keys <- function(x) paste(x$id, x$alid)
+  testthat::expect_setequal(keys(observed), keys(all[all$association_status == "observed", , drop = FALSE]))
+  testthat::expect_equal(nrow(observed), sum(all$association_status == "observed"))
+}

@@ -164,7 +164,11 @@ test_that("og_tophits() with a PLINK Reference fetches unclumped hits, clumps th
 })
 
 test_that("the warning for top hits the API cut off says clumping saw only the strongest", {
-  msg <- local_truncated_message(c("A", "B"), 5e-8)
+  ref <- structure(list(path = "ref", plink_bin = "plink"), class = "og_plink_reference")
+  contribution <- plink_clump_contribution(list(plink = ref, store = list(ld_store = "ref"), choice = "user"),
+                                           list(r2 = 0.2, kb = 100, limit = 10, threshold = 5e-8),
+                                           data.frame(id = c("A", "B")), NULL)
+  msg <- contribution$truncated(c("A", "B"))
   expect_match(msg[[1]], "At least one of the 2 Analyses has more than 10,000 top hits", fixed = TRUE)
   expect_match(msg[[1]], "clumping saw only the strongest 10,000", fixed = TRUE)
 })

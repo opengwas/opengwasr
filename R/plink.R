@@ -63,6 +63,7 @@ print.og_plink_reference <- function(x, ...) {
 }
 
 # The PLINK binary: `plink_bin`, else genetics.binaRies' if it is installed, else the one on PATH.
+# Kept (here and in plink_run()): PLINK runs on this machine; the API isn't involved.
 find_plink <- function(plink_bin, call = rlang::caller_env()) {
   usable <- function(p) is.character(p) && length(p) == 1 && !is.na(p) && nzchar(p) && file.exists(p) &&
     unname(file.access(p, 1)) == 0
@@ -140,30 +141,32 @@ plink_ld_matrix <- function(ref, rsids, call = rlang::caller_env()) {
   m
 }
 
-# Clump `rsids` (unique, all in the reference) scored by `score`, bigger first: PLINK's own greedy
-# rule, each index variant taking every unclumped variant within `kb` whose r² with it is above
-# `r2`. PLINK ranks by p-value, so it is given each variant's rank / (n + 1) (the strongest the
-# smallest, ties in input order): in (0, 1), so `--clump-p1 1 --clump-p2 1` keep every variant, and
-# unlike a p-value from |z| it never underflows. Returns the index variants and the size of each
-# clump (itself included), strongest first.
-plink_clump <- function(ref, rsids, score, r2, kb, call = rlang::caller_env()) {
+# Clump rows by PLINK: each row's `rsid` (all in the reference) and `z`, an rsID on several rows
+# scored by its largest |z|. PLINK's own greedy rule: each index variant takes every unclumped
+# variant within `kb` whose r² with it is above `r2`. PLINK ranks by p-value, so it is given each
+# variant's rank / (n + 1) (the strongest the smallest, ties in order of first appearance): in (0,
+# 1), so `--clump-p1 1 --clump-p2 1` keep every variant, and unlike a p-value from |z| it never
+# underflows. Returns `leads`, the index variants' rsIDs in order of first appearance, and `size`,
+# for each row, the size of its rsID's clump (itself included) if it leads, else NA.
+plink_clump <- function(ref, rsid, z, r2, kb, call = rlang::caller_env()) {
+  rsids <- unique(rsid)
   n <- length(rsids)
-  if (n <= 1) return(data.frame(lead = rsids, size = rep(1L, n), stringsAsFactors = FALSE))
-  rank <- rank(-score, ties.method = "first", na.last = TRUE)
-  lines <- c("SNP P", sprintf("%s %.15g", rsids, rank / (n + 1)))
-  plink_run(ref, list(scores = lines),
-            function(file) c("--clump", file("scores"), "--clump-p1", 1, "--clump-p2", 1,
-                             "--clump-r2", format(r2, digits = 15), "--clump-kb", format(kb, digits = 15)),
-            function(out) {
-              file <- paste0(out, ".clumped")
-              if (!file.exists(file)) {
-                og_abort("PLINK wrote no clumps. This is a bug in opengwasr.", class = "opengwasr_internal", call = call)
-              }
-              clumped <- utils::read.table(file, header = TRUE, stringsAsFactors = FALSE,
+  if (n <= 1) return(list(leads = rsids, size = rep(1L, length(rsid))))
+  score <- as.numeric(tapply(abs(z), factor(rsid, levels = rsids), max))
+  p <- rank(-score, ties.method = "first", na.last = TRUE) / (n + 1)
+  clumped <- plink_run(ref, list(scores = c("SNP P", sprintf("%s %.15g", rsids, p))),
+                       function(file) c("--clump", file("scores"), "--clump-p1", 1, "--clump-p2", 1,
+                                        "--clump-r2", format(r2, digits = 15), "--clump-kb", format(kb, digits = 15)),
+                       function(out) {
+                         file <- paste0(out, ".clumped")
+                         if (!file.exists(file)) {
+                           og_abort("PLINK wrote no clumps. This is a bug in opengwasr.", class = "opengwasr_internal", call = call)
+                         }
+                         utils::read.table(file, header = TRUE, stringsAsFactors = FALSE,
                                            colClasses = c(SNP = "character", TOTAL = "integer"))
-              # TOTAL counts the others in the clump.
-              data.frame(lead = clumped$SNP, size = clumped$TOTAL + 1L, stringsAsFactors = FALSE)
-            }, call)
+                       }, call)
+  # TOTAL counts the others in the clump.
+  list(leads = rsids[rsids %in% clumped$SNP], size = clumped$TOTAL[match(rsid, clumped$SNP)] + 1L)
 }
 
 # `r2` and `kb` are the user's with a PLINK Reference: it records no defaults to take instead.
@@ -212,16 +215,13 @@ ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
   if (length(lookup_for) > 0) {
     if (inherits(src, "og_no_source")) {
       source_required(call, paste0(big_number(length(lookup_for)), if (length(lookup_for) == 1) " ALID has" else " ALIDs have",
-                                   " no rsID, so its rsID has to be looked up: ",
-                                   paste0(utils::head(lookup_for, 3), collapse = ", "),
-                                   if (length(lookup_for) > 3) ", ..." else ""))
+                                   " no rsID, so its rsID has to be looked up: ", some_ids(lookup_for, 3)))
     }
     found <- plink_rsids_of(src, lookup_for, deadline, call)
     map$rsid[match(lookup_for, map$alid)] <- found$rsid[match(lookup_for, found$alid)]
     jobs <- found$jobs
   }
-  map$rsid <- tolower(map$rsid)
-  map$rsid[map$rsid %in% "."] <- NA_character_
+  map$rsid <- rsid_or_na(tolower(map$rsid))
   present <- !is.na(map$rsid) & map$rsid %in% plink_bim(ref)$rsid
   inform_plink_binary(ref)
   inform_plink_unmatched(nrow(map), sum(!present))
@@ -234,14 +234,14 @@ ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
 # where none holds the ALID or it has no rsID ("." in the API). Also the lookup's Jobs.
 plink_rsids_of <- function(src, alids, deadline, call) {
   releases <- resolve_releases(src, NULL, call)
-  parts <- strsplit(alids, ":", fixed = TRUE)
-  positions <- unique(vapply(parts, function(p) paste0(p[[1]], ":", p[[2]]), ""))
+  at <- alid_parts(alids)
+  positions <- unique(paste0(at$chromosome, ":", at$position))
   out <- run_window(src, lookup_requests("api/variants/chrpos", "positions", positions, releases, "positions"),
                     deadline, call)
-  rows <- lookup_rows(out)
-  rows <- rows[!duplicated(rows$alid) & rows$rsid != ".", , drop = FALSE]
-  list(alid = rows$alid, rsid = rows$rsid,
-       jobs = lapply(lapply(out, `[[`, "job"), utils::modifyList, list(total = 0, truncated = FALSE)))
+  rows <- result_rows(out, empty_lookup())
+  rows$rsid <- rsid_or_na(rows$rsid)
+  rows <- rows[!duplicated(rows$alid) & !is.na(rows$rsid), , drop = FALSE]
+  list(alid = rows$alid, rsid = rows$rsid, jobs = lookup_jobs(lapply(out, `[[`, "job")))
 }
 
 # A query that reads LD Stores only, given a PLINK Reference.
@@ -268,9 +268,9 @@ ld_query_plink <- function(prep, spec, method) {
 }
 
 # The same contribution for a PLINK Reference: the Jobs fetch unclumped top hits (the most the API
-# gives per Analysis), and `finish` clumps each Analysis's on this machine, then applies the user's
-# `limit` to its index variants (strongest first). The Jobs add nothing to the body, so they follow
-# the Analyses as any top hits query does.
+# gives per Analysis, several Analyses to a Job), and `finish` clumps each Analysis's on this
+# machine, then applies the user's `limit` to its index variants (strongest first), flagging the
+# Jobs whose Analyses it cut.
 plink_clump_contribution <- function(chosen, clump, info, call) {
   ref <- chosen$plink
   inform_plink_binary(ref)
@@ -280,9 +280,16 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
                                clump_setting_text(clump$r2, clump$kb), ".")),
                   class = "opengwasr_clumping")
   }
+  most <- max_tophits_per_analysis
   list(
     along = "scope",
-    body = function(chunk) list(),
+    analyses_per_job = tophits_analyses_per_job(most),
+    body = function(chunk) list(limit = most),
+    truncated = function(ids) {
+      truncated_message(analyses_who(ids), most, "top hits", clump$threshold,
+                        cut = paste0(", the most the API returns, so clumping saw only the strongest ", big_number(most)),
+                        advice = "Raise the threshold's strictness, or clump on the server with an LD Store in `ld`, which clumps every top hit.")
+    },
     finish = function(rows, results, pieces, call) {
       in_ref <- !is.na(rows$rsid) & tolower(rows$rsid) %in% plink_bim(ref)$rsid
       keep <- rep(FALSE, nrow(rows))
@@ -296,28 +303,27 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
         summary$absent[[i]] <- sum(mine) - length(at)
         if (length(at) == 0) next
         rsid <- tolower(rows$rsid[at])
-        rsids <- unique(rsid)  # in the API's order: strongest first
-        score <- as.numeric(tapply(abs(rows$z[at]), factor(rsid, levels = rsids), max))
-        clumped <- plink_clump(ref, rsids, score, clump$r2, clump$kb, call)
-        leads <- rsids[rsids %in% clumped$lead]
+        clumped <- plink_clump(ref, rsid, rows$z[at], clump$r2, clump$kb, call)
+        leads <- clumped$leads  # in the API's order: strongest first
         summary$leads[[i]] <- length(leads)
         if (length(leads) > clump$limit) {
           too_many <- c(too_many, info$id[[i]])
           leads <- leads[seq_len(clump$limit)]
         }
         keep[at[rsid %in% leads]] <- TRUE
-        size[at] <- clumped$size[match(rsid, clumped$lead)]
+        size[at] <- clumped$size
       }
       inform_plink_unmatched(sum(summary$hits), sum(summary$absent), "top hits")
       if (length(too_many) > 0) {
-        og_warn(truncated_message(too_many, clump$threshold, clump$limit, clump = TRUE),
+        og_warn(truncated_message(analyses_who(too_many), clump$limit, "index variants", clump$threshold),
                 class = "opengwasr_truncated", n_analyses = length(too_many), call = call)
       }
       out <- rows[keep, , drop = FALSE]
       rownames(out) <- NULL
       list(value = clump_columns(out, chosen$store$ld_store, chosen$choice, clump$r2, clump$kb, size[keep]),
            provenance = list(clump = summary, plink_bin = ref$plink_bin),
-           truncated = length(too_many) > 0)  # `limit` cut index variants off: provenance says so
+           # `limit` cut index variants off: provenance says so, on the Jobs of those Analyses.
+           truncated = vapply(pieces, function(p) any(info$id[p$scope] %in% too_many), NA))
     }
   )
 }

@@ -97,17 +97,15 @@ og_clump.NULL <- og_clump.og_api_source
 local_clump <- function(data, ctx, r2, kb) {
   rsid <- ctx$matched$rsid[match(data$alid, ctx$matched$alid)]  # NA: not matched, so not clumped
   at <- which(!is.na(rsid))
-  rsids <- unique(rsid[at])
-  score <- as.numeric(tapply(abs(data$z[at]), factor(rsid[at], levels = rsids), max))
-  clumped <- plink_clump(ctx$plink, rsids, score, r2, kb)
-  keep <- at[rsid[at] %in% clumped$lead]
-  out <- data[keep, , drop = FALSE]
+  clumped <- plink_clump(ctx$plink, rsid[at], data$z[at], r2, kb)
+  lead <- rsid[at] %in% clumped$leads
+  out <- data[at[lead], , drop = FALSE]
   attr(out, "og_provenance") <- NULL
   rownames(out) <- NULL
-  out <- clump_columns(out, ctx$store$ld_store, ctx$choice, r2, kb, clumped$size[match(rsid[keep], clumped$lead)])
+  out <- clump_columns(out, ctx$store$ld_store, ctx$choice, r2, kb, clumped$size[lead])
   list(value = out,
        provenance = list(clump = clump_summary(NA_character_, ctx$store$ld_store, ctx$choice, r2, kb,
-                                               length(ctx$alids), length(ctx$absent), nrow(clumped))))
+                                               length(ctx$alids), length(ctx$absent), length(clumped$leads))))
 }
 
 # Kept: R argument types. Which `r2` and `kb` an LD Store can answer is the API's to say.
@@ -119,16 +117,7 @@ check_clump_settings <- function(r2, kb, call = rlang::caller_env()) {
 
 # The r² and window sent: the user's, else the LD Store's own `t_far` and far window.
 clump_settings <- function(store, r2, kb) {
-  list(r2 = r2 %||% round_up_15(store$t_far), kb = kb %||% (store$far_bp / 1000))
-}
-
-# Request bodies carry 15 significant digits (R/http.R). The LD Store's own `t_far` must not round
-# down in transit, or the API would refuse it as below `t_far`: send it rounded up to 15 digits.
-round_up_15 <- function(x) {
-  if (!is.numeric(x) || length(x) != 1 || is.na(x) || x == 0) return(x)
-  y <- signif(x, 15)
-  if (y < x) y <- y + 10^(floor(log10(abs(x))) - 14)
-  signif(y, 15)
+  list(r2 = r2 %||% store$t_far, kb = kb %||% (store$far_bp / 1000))
 }
 
 # The clumping provenance columns, after the Association columns (vignette: Clumping provenance).
@@ -149,12 +138,10 @@ clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads) {
              absent = as.numeric(absent), leads = as.numeric(leads), stringsAsFactors = FALSE)
 }
 
-# The engine contribution that clumps each Analysis's top hits on the server (`og_tophits()`), made
-# before any Job runs, so a refusal costs none. One LD Store per Analysis: `ld` for all of them, or
-# the one matching its Assigned Ancestry (an Unassigned one is refused first). It has no split
-# dimension of its own: it follows the Analyses (`along = "scope"`, one per Job), adding `clump`
-# to each Job's body; its Jobs are submitted grouped by LD Store (`group`); its `finish` adds the clumping columns and provenance and warns about
-# top hits the LD Store doesn't hold.
+# The contribution (CONTRIBUTING.md) that clumps each Analysis's top hits on the server, one Job and
+# one LD Store per Analysis: `ld` for all, or the one matching its Assigned Ancestry (an Unassigned
+# one is refused first, before any Job runs). Its `finish` adds the clumping columns and provenance
+# and warns about top hits the LD Store doesn't hold.
 clump_contribution <- function(src, clump, info, call) {
   if (is_plink_reference(clump$ld)) {
     return(plink_clump_contribution(choose_ld_store(src, clump$ld, call = call), clump, info, call))
@@ -182,6 +169,8 @@ clump_contribution <- function(src, clump, info, call) {
   }
   list(
     along = "scope",
+    analyses_per_job = 1L,  # each Analysis in its own LD Store, so `limit` counts its index variants
+    truncated = function(ids) truncated_message(analyses_who(ids), clump$limit, "index variants", clump$threshold),
     group = function(chunk) per$ld[[chunk[[1]]]],
     body = function(chunk) {
       if (length(chunk) != 1) {
@@ -209,8 +198,7 @@ clump_contribution <- function(src, clump, info, call) {
 # (`opengwasr.progress`), so scripts stay quiet.
 inform_clumping <- function(ids, chosen, ancestry, settings) {
   if (!progress_enabled()) return(invisible())
-  who <- if (length(ids) == 1) ids else paste0(length(ids), " Analyses (", paste(utils::head(ids, 3), collapse = ", "),
-                                               if (length(ids) > 3) ", ...", ")")
+  who <- if (length(ids) == 1) ids else paste0(length(ids), " Analyses (", some_ids(ids, 3), ")")
   their <- if (length(ids) == 1) "its" else "their"
   how <- switch(chosen$choice,
                 matched = paste0("matched to ", their, " Assigned Ancestry (", ancestry, ")"),
@@ -229,8 +217,6 @@ inform_clumping <- function(ids, chosen, ancestry, settings) {
 clump_setting_text <- function(r2, kb) {
   paste0("r\u00b2 ", signif(r2, 3), " within ", big_number(kb), " kb")
 }
-
-big_number <- function(x) prettyNum(x, big.mark = ",", scientific = FALSE)
 
 # Top hits the LD Store doesn't hold can't be clumped: the API leaves them out, and counts them.
 warn_clump_absent <- function(summary, call) {

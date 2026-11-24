@@ -96,10 +96,12 @@ provenance_fingerprint <- function(x) {
   rlang::hash(list(nrow(x), x$id, x$alid))
 }
 
-# "og_tophits(threshold = 5e-08, limit = 3)" from a function name and named arguments.
-provenance_query <- function(name, args) {
-  shown <- vapply(args, function(a) paste(deparse(a, width.cutoff = 500), collapse = ""), "")
-  paste0(name, "(", if (length(args) > 0) paste0(names(args), " = ", shown, collapse = ", "), ")")
+# "og_tophits(threshold = 5e-08, limit = 3)" from a function name and arguments (named or not),
+# each deparsed to at most `nlines` lines (-1: all) of `width`.
+call_text <- function(name, args, width = 500L, nlines = -1L) {
+  shown <- vapply(args, function(a) paste(deparse(a, width.cutoff = width, nlines = nlines), collapse = ""), "")
+  names <- names(args) %||% rep("", length(args))
+  paste0(name, "(", paste0(ifelse(nzchar(names), paste0(names, " = "), ""), shown, collapse = ", "), ")")
 }
 
 #' @export
@@ -107,8 +109,8 @@ format.og_provenance <- function(x, ...) {
   retrieved <- format(x$retrieved, "%Y-%m-%d %H:%M:%S UTC", tz = "UTC")
   # `total`: what matched; `returned`: the rows you got (fewer when `limit` cut the answer off).
   counts <- if (is.na(x$total)) NULL else paste0(
-    "\u2022 Rows: ", format(x$returned %||% x$total, big.mark = ","), " returned",
-    if (!identical(x$returned %||% x$total, x$total)) paste0(" of ", format(x$total, big.mark = ","), " matching"),
+    "\u2022 Rows: ", big_number(x$returned %||% x$total), " returned",
+    if (!identical(x$returned %||% x$total, x$total)) paste0(" of ", big_number(x$total), " matching"),
     if (isTRUE(x$truncated)) " (truncated)"
   )
   c(

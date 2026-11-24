@@ -116,13 +116,11 @@ choose_ld_store <- function(src, ld, ancestries = NULL, call = rlang::caller_env
   unassigned <- is.na(ancestries)
   if (any(unassigned)) {
     who <- names(ancestries)[unassigned]
-    refuse(paste0("Can't choose an LD Store for ", paste(utils::head(who, 5), collapse = ", "),
-                  if (length(who) > 5) ", ...", ": its ancestry is Unassigned."),
+    refuse(paste0("Can't choose an LD Store for ", some_ids(who, 5), ": its ancestry is Unassigned."),
            i = "Its allele frequencies match no single ancestry confidently.")
   }
   if (length(unique(ancestries)) > 1) {
-    by <- vapply(split(names(ancestries), ancestries),
-                 function(ids) paste(utils::head(ids, 3), collapse = ", "), "")
+    by <- vapply(split(names(ancestries), ancestries), some_ids, "", n = 3)
     refuse("Can't choose one LD Store for these Analyses: their Assigned Ancestries differ.",
            stats::setNames(paste0(names(by), ": ", by), rep("*", length(by))))
   }

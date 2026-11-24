@@ -27,3 +27,10 @@ og_abort <- function(message, class = NULL, ..., refusal = FALSE, call = rlang::
 og_warn <- function(message, class, ..., call = rlang::caller_env()) {
   rlang::warn(message, class = class, ..., call = call)
 }
+
+# Message text: a number with thousands marks, and the first `n` of some ids, then "..." if there are more.
+big_number <- function(x) prettyNum(x, big.mark = ",", scientific = FALSE)
+
+some_ids <- function(ids, n, quote = "") {
+  paste0(paste0(quote, utils::head(ids, n), quote, collapse = ", "), if (length(ids) > n) ", ...")
+}

@@ -1,12 +1,6 @@
 # The exported Job functions. They work for every query function through query plans
 # (see R/query-plan.R), so a new query function needs nothing to be submitted and collected this way.
 
-check_source <- function(src, call = rlang::caller_env()) {
-  if (!inherits(src, "og_api_source")) {
-    og_abort("`src` must be a Source, from `og_api()`.", class = "opengwasr_argument", call = call)
-  }
-}
-
 #' Run queries as Jobs without waiting
 #'
 #' `og_submit()` starts a query and returns as soon as the API has accepted its Jobs, so you can
@@ -49,6 +43,7 @@ check_source <- function(src, call = rlang::caller_env()) {
 #' }
 #' @export
 og_submit <- function(src, fn, ...) {
+  # Kept: og_submit()'s contract with the query function it runs, which the API never sees.
   check_source(src)
   if (!is.function(fn)) {
     og_abort("`fn` must be a query function, such as `og_tophits`.", class = "opengwasr_argument")
@@ -66,16 +61,9 @@ og_submit <- function(src, fn, ...) {
                i = "`og_submit()` takes a function that returns a query's result, such as `og_tophits`; do the rest after `og_job_result()`."),
              class = "opengwasr_argument")
   }
-  handle$query <- job_query_text(substitute(fn), args)
+  # `og_tophits("OGS-00011:GCST003116", clump = FALSE)`, for printing: each argument's first line.
+  handle$query <- call_text(paste(deparse(substitute(fn)), collapse = ""), args, width = 60L, nlines = 1L)
   handle
-}
-
-# `og_tophits("OGS-00011:GCST003116", clump = FALSE)`, for printing.
-job_query_text <- function(fn, args) {
-  shown <- vapply(args, function(a) paste(deparse(a, width.cutoff = 60L)[[1]]), "")
-  names <- names(args) %||% rep("", length(args))
-  paste0(paste(deparse(fn), collapse = ""), "(",
-         paste0(ifelse(nzchar(names), paste0(names, " = "), ""), shown, collapse = ", "), ")")
 }
 
 #' @export
@@ -86,7 +74,7 @@ print.og_jobs <- function(x, ...) {
   invisible(x)
 }
 
-# The Job ids of an og_jobs object or text.
+# The Job ids of an og_jobs object or text. Kept: an R argument's type.
 job_ids <- function(job, call = rlang::caller_env()) {
   ids <- if (inherits(job, "og_jobs")) job$job_ids else job
   if (!is.character(ids) || length(ids) == 0 || anyNA(ids) || any(!nzchar(ids))) {
@@ -123,6 +111,7 @@ job_frame <- function(ids, statuses) {
 #' @export
 og_job_result <- function(src, job, raw = FALSE) {
   check_source(src)
+  # Kept: only a handle says how its rows are shaped, and whether it is whole; the API can't say.
   if (!inherits(job, "og_jobs")) {
     ids <- job_ids(job)
     if (!isTRUE(raw)) {

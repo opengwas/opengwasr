@@ -388,8 +388,9 @@ test_that("og_tophits() clumps each Analysis in the LD Store of its Assigned Anc
   expect_match(format(prov), "Clumped: OGS-00011:GCST003116 in hgdp1kgp-v2-EUR-k10 (matched)", fixed = TRUE, all = FALSE)
   # `limit` counts the leads (the API's), and says so when it cuts them off; og_submit() collects the
   # very same answer, and says nothing with progress off.
-  expect_match(getFromNamespace("truncated_message", "opengwasr")(cad, 5e-8, 1, clump = TRUE)[[1]], "1 index variants")
   withr::local_options(opengwasr.progress = FALSE)
+  w <- expect_warning(og_tophits(src, cad, limit = 1, releases = rel), class = "opengwasr_truncated")
+  expect_match(conditionMessage(w), "more than 1 index variants", fixed = TRUE)
   expect_silent(handle <- og_submit(src, og_tophits, c(cad, afr_analysis, bmi), releases = rel))
   expect_equal(suppressWarnings(og_job_result(src, handle)), top, ignore_attr = TRUE)
 })
@@ -458,22 +459,29 @@ test_that("og_clump(): Associations of mixed or Unassigned ancestry are refused 
   expect_true(all(twice$id[twice$alid %in% kept$alid] %in% kept$id))
 })
 
-test_that("the default clumping r2 never rounds below the LD Store's t_far in a request body", {
-  t_far <- 0.03490787269681742
-  r2 <- clump_settings(list(t_far = t_far, far_bp = 1e7), NULL, NULL)$r2
-  expect_gte(r2, t_far)
-  expect_identical(signif(r2, 15), r2)
+test_that("every r2 in a request body, at any depth, is sent rounded up to 15 digits, never down", {
+  t_far <- 0.03490787269681742  # the dev Data API's AFR t_far: 17 digits, which 15 would round down
+  body <- list(r2 = t_far, clump = list(store = eur, r2 = t_far, kb = 10000), scores = list(t_far))
+  # As api_request() sends it: 15 significant digits.
+  sent <- jsonlite::fromJSON(jsonlite::toJSON(round_up_r2(body), auto_unbox = TRUE, digits = NA))
+  expect_gte(sent$r2, t_far)
+  expect_gte(sent$clump$r2, t_far)
+  expect_identical(signif(sent$clump$r2, 15), sent$clump$r2)
+  expect_equal(sent$scores, signif(t_far, 15))  # only an `r2` is rounded up
 })
 
-test_api("an explicit r2 equal to an LD Store's t_far is sent at or above it, in clumping and in proxies", {
-  t_far <- 0.03490787269681742  # the dev Data API's AFR t_far: 17 digits, which 15 would round down
+test_api("an explicit r2 equal to an LD Store's t_far is sent at or above it, in top hits, clumping and proxies", {
+  t_far <- 0.03490787269681742
   hits <- data.frame(id = cad, alid = pair, z = c(5, 4))
   og_clump(src, hits, ld = eur, r2 = t_far, kb = 10000)
   og_ld_proxies(src, snv, ld = eur, r2 = t_far, kb = 10000)
+  suppressWarnings(og_tophits(src, cad, ld = eur, r2 = t_far, kb = 10000, limit = 2, releases = rel))
   for (endpoint in c("/api/ld/clump", "/api/ld/proxies")) {
     sent <- ld_bodies(endpoint)
     expect_gte(sent[[length(sent)]]$r2, t_far)
   }
+  sent <- ld_bodies("/api/tophits")
+  expect_gte(sent[[length(sent)]]$clump$r2, t_far)
 }, live = FALSE)
 
 test_api("og_ld_reflookup() says which variants the LD Store holds, without a warning for the absent", {

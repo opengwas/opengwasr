@@ -40,9 +40,11 @@ test_api("og_phewas() of an ALID: columns match og_associations(), threshold and
   expect_equal(unique(ph$alid), snv)
   expect_equal(unique(ph$effect_scale[ph$id == bmi]), "sd")
   expect_equal(og_provenance(ph)$truncated, FALSE)
-  # Imputed Associations: the insertion is imputed in both Analyses.
-  expect_equal(nrow(og_phewas(src, "5:75701728:A:AAAAT", threshold = 1, analyses = both,
-                              observed_only = TRUE, releases = rel)), 0)
+  # observed_only leaves out the Imputed ones (on the fake, the insertion is Imputed in both Analyses).
+  insertion <- "5:75701728:A:AAAAT"
+  observed <- og_phewas(src, insertion, threshold = 1, analyses = both, observed_only = TRUE, releases = rel)
+  expect_observed_subset(observed, og_phewas(src, insertion, threshold = 1, analyses = both, releases = rel))
+  if (backend == "fake") expect_equal(nrow(observed), 0)
 })
 
 test_api("og_phewas() with `analyses = NULL` searches every Analysis of the Store Releases", {
@@ -140,9 +142,9 @@ test_api("og_range() returns the window's Associations, columns as og_associatio
   expect_equal(rg$position, sort(rg$position))
   expect_gt(nrow(rg), 0)
   observed <- og_range(src, cad, "9", 22090000, 22130000, observed_only = TRUE, releases = rel)
-  expect_equal(nrow(observed), sum(rg$association_status == "observed"))
-  expect_lt(nrow(observed), nrow(rg))
+  expect_observed_subset(observed, rg)
   if (backend == "fake") expect_equal(nrow(rg), 5)
+  if (backend == "fake") expect_lt(nrow(observed), nrow(rg))
   if (backend == "fake") {
     sent <- tail(fake_bodies("/api/associations/range"), 3)[[1]]$body
     expect_identical(sent$start, 22090000L)
@@ -193,10 +195,10 @@ test_that("provenance leaves out long arguments, counts neutrally, and the warni
   expect_false(grepl("Job", w))
 })
 
-test_that("a lookup's own total and truncated are checked, not overwritten", {
-  src <- fake_source(fake)
-  fake_set(fake, "job", "total_too_big", "normal")
-  expect_error(og_variants_rsid(src, "rs1421085", releases = "OGS-00011"), class = "opengwasr_job_invalid")
+test_that("a lookup returns every match, so its count is its rows", {
+  v <- og_variants_rsid(fake_source(fake), "rs1421085", releases = "OGS-00011")
+  expect_equal(og_provenance(v)$total, nrow(v))
+  expect_false(og_provenance(v)$truncated)
 })
 
 test_api("og_range() checks its own arguments", {
@@ -239,16 +241,25 @@ test_api("og_variants_rsid() returns every ALID an rsID names, one row each", {
   v <- og_variants_rsid(src, c("rs34159589", "RS1421085", "rs6567160", "rs0000001"), releases = "OGS-00011")
   expect_setequal(names(v), c("alid", "chromosome", "position", "effect_allele", "other_allele", "rsid",
                               "store_id", "release_id"))
-  expect_setequal(v$alid, c("5:75701728:A:AAAAT", "5:75701728:AAAAT:AAAATAAAT", other_snv, snv, "18:60161902:C:T"))
-  expect_equal(nrow(v), 5)
-  expect_setequal(v$rsid, c("rs34159589", "rs1421085", "rs6567160"))
+  expect_true(all(c(other_snv, snv, "18:60161902:C:T") %in% v$alid))
+  expect_true(all(c("rs1421085", "rs6567160") %in% v$rsid))
+  expect_false("rs0000001" %in% v$rsid)
+  if (backend == "fake") {
+    expect_setequal(v$alid, c("5:75701728:A:AAAAT", "5:75701728:AAAAT:AAAATAAAT", other_snv, snv, "18:60161902:C:T"))
+    expect_equal(nrow(v), 5)
+    expect_setequal(v$rsid, c("rs34159589", "rs1421085", "rs6567160"))
+  }
   expect_s3_class(og_provenance(v), "og_provenance")
 })
 
 test_api("og_variants_chrpos() returns every ALID at a position", {
   v <- og_variants_chrpos(src, c("16:53767042", "chr5:75701728", "1:1"), releases = "OGS-00011")
-  expect_equal(nrow(v), 4)
-  expect_setequal(v$alid, c("5:75701728:A:AAAAT", "5:75701728:AAAAT:AAAATAAAT", other_snv, snv))
+  expect_true(all(c("5:75701728:A:AAAAT", other_snv, snv) %in% v$alid))
+  expect_true(all(paste0(v$chromosome, ":", v$position) %in% c("16:53767042", "5:75701728")))
+  if (backend == "fake") {
+    expect_equal(nrow(v), 4)
+    expect_setequal(v$alid, c("5:75701728:A:AAAAT", "5:75701728:AAAAT:AAAATAAAT", other_snv, snv))
+  }
   expect_equal(unique(v$store_id), "OGS-00011")
   expect_error(og_variants_chrpos(src, 5), class = "opengwasr_argument")
   expect_error(og_variants_rsid(src, character()), class = "opengwasr_argument")

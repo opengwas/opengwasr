@@ -59,19 +59,9 @@ lookup_query <- function(src, path, field, values, releases, limit) {
   engine_query(src, method, fn, function(deadline) {
     releases <- resolve_releases(src, releases, method)
     list(requests = lookup_requests(path, field, values, releases, limit), releases = releases,
+         # The lookup endpoints return every match: a Job's count is its rows.
          finish = function(results) {
-           # A lookup that reports `total` and `truncated` is checked against its rows; one that
-           # doesn't (the endpoints don't cut off) counts its rows.
-           jobs <- lapply(results, function(r) {
-             n <- nrow(r$rows)
-             if (is.null(r$job$total) && is.null(r$job$truncated)) {
-               utils::modifyList(r$job, list(total = n, truncated = FALSE))
-             } else {
-               check_job_metadata(r$job, n, method)
-               r$job
-             }
-           })
-           list(value = lookup_rows(results), jobs = jobs)
+           list(value = result_rows(results, empty_lookup()), jobs = job_counts(results, FALSE, method))
          })
   })
 }

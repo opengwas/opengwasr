@@ -111,10 +111,9 @@ ld_r_matrix <- function(r, n) {
 # Kept on the client: the API's `fill` treats every null alike, and these are the ones the LD Store
 # knows are below its Far Threshold: within `far_bp` on one chromosome.
 ld_fill_below_t_far <- function(m, far_bp) {
-  parts <- strsplit(colnames(m), ":", fixed = TRUE)
-  chromosome <- vapply(parts, `[[`, "", 1)
-  position <- as.numeric(vapply(parts, `[[`, "", 2))
-  within <- outer(chromosome, chromosome, "==") & abs(outer(position, position, "-")) <= far_bp
+  at <- alid_parts(colnames(m))
+  position <- as.numeric(at$position)
+  within <- outer(at$chromosome, at$chromosome, "==") & abs(outer(position, position, "-")) <= far_bp
   m[is.na(m) & within] <- 0
   m
 }

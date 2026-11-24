@@ -18,6 +18,10 @@
 # whole groups while it holds at most `group_limit` groups and `limit` items, and a group larger
 # than `limit` is cut into several pieces.
 
+# Kept: the splitter's guards catch engine misuse, never a user's argument (a query checks those
+# first, as og_range() checks `start` and `end`), so they are internal errors.
+split_misuse <- function(what) og_abort(c(what, i = "This is a bug in opengwasr."), class = "opengwasr_internal")
+
 # What one Job takes (R/jobs.R), unless the option `opengwasr.job_limits` lowers them: a named list
 # such as `list(analyses = 2, variants = 3)`, for tests that would otherwise need 1,001 variants.
 job_limits <- function() {
@@ -34,8 +38,7 @@ split_dim <- function(n, limit, group = NULL, group_limit = NULL) {
   ok <- function(x) is.numeric(x) && length(x) == 1 && !is.na(x) && x >= 1
   if (!is.numeric(n) || length(n) != 1 || is.na(n) || n < 0 || !ok(limit) ||
       (!is.null(group) && (!ok(group_limit) || length(group) != n))) {
-    og_abort("A dimension to split needs a count, a limit of at least 1 (and a group as long as its items).",
-             class = "opengwasr_argument")
+    split_misuse("A dimension to split needs a count, a limit of at least 1 (and a group as long as its items).")
   }
   structure(list(n = n, limit = limit, group = group, group_limit = group_limit), class = "og_dim")
 }
@@ -90,7 +93,7 @@ split_pieces <- function(dims) {
 # pair inside a chunk.
 split_pairs <- function(n, limit) {
   if (!is.numeric(limit) || length(limit) != 1 || is.na(limit) || limit < 2) {
-    og_abort("Pairs need a limit of at least 2 items per piece.", class = "opengwasr_argument")
+    split_misuse("Pairs need a limit of at least 2 items per piece.")
   }
   if (n <= limit) return(list(list(a = seq_len(n), b = seq_len(n))))
   chunks <- unname(split(seq_len(n), (seq_len(n) - 1) %/% (limit %/% 2)))
@@ -107,18 +110,11 @@ split_pairs <- function(n, limit) {
 split_interval <- function(start, end, limit) {
   if (!is.numeric(start) || !is.numeric(end) || length(start) != 1 || length(end) != 1 ||
       is.na(start) || is.na(end) || start > end) {
-    og_abort("An interval needs a `start` that is not after its `end`.", class = "opengwasr_argument")
+    split_misuse("An interval needs a `start` that is not after its `end`.")
   }
   d <- split_dim(end - start + 1, limit)
   d$start <- start
   d
-}
-
-# The Store Releases a piece reads: those of the GWAS Stores of its Analyses (`analyses`, indices into
-# `store_ids`, the GWAS Store of each Analysis), from the query's `releases`.
-piece_releases <- function(releases, store_ids, analyses) {
-  stores <- unique(store_ids[analyses])
-  Filter(function(r) r$store_id %in% stores, releases)
 }
 
 # The Analyses one top-hits Job may take: at most `limit` hits per Analysis, and a Job's result holds

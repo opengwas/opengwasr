@@ -21,6 +21,7 @@ Store Release and others) are defined in the
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://opengwas.github.io/opengwasr/}
   \item \url{https://github.com/opengwas/opengwasr}
   \item Report bugs at \url{https://github.com/opengwas/opengwasr/issues}
 }

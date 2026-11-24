@@ -1,0 +1,67 @@
+{
+    "job_id": "52475784",
+    "query_hash": "sha256:57a7ed83d731b9b175adfa630bf730b175ef116f237dca92a69e12fbae2a23bc",
+    "status": "succeeded",
+    "endpoint": "/api/variants/rsid",
+    "release_id": "OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+    "created_at": "2026-11-24T09:08:53.779940+00:00",
+    "started_at": "2026-11-24T09:08:53.845516+00:00",
+    "completed_at": "2026-11-24T09:08:54.611388+00:00",
+    "expires_at": "2026-11-24T10:08:54.610004+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 1,
+            "total_rows": 1,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 171,
+            "total_bytes": 171,
+            "sha256": "6c63d1fb2b39e55c9dee55d175711ac6ca01a40fa1dec32ffa91196a4ffe05ad",
+            "page_sha256": [
+                "6c63d1fb2b39e55c9dee55d175711ac6ca01a40fa1dec32ffa91196a4ffe05ad"
+            ],
+            "retention_expires_at": "2026-11-24T10:08:54.610004+00:00",
+            "page_encoding": "text",
+            "job_id": "52475784",
+            "fingerprint": "sha256:57a7ed83d731b9b175adfa630bf730b175ef116f237dca92a69e12fbae2a23bc",
+            "release_id": "OGS-00025/OGS-00025,OGS-00026/OGS-00026,OGS-00027/OGS-00027",
+            "releases": [
+                {
+                    "store_id": "OGS-00025",
+                    "release_id": "OGS-00025"
+                },
+                {
+                    "store_id": "OGS-00026",
+                    "release_id": "OGS-00026"
+                },
+                {
+                    "store_id": "OGS-00027",
+                    "release_id": "OGS-00027"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/52475784/result"
+    },
+    "compute": {
+        "cpu_seconds": 0.7641,
+        "run_seconds": 0.7614,
+        "queue_seconds": 0.0656,
+        "attempts": 1,
+        "rows": 1,
+        "bytes": 171
+    },
+    "status_url": "/api/jobs/52475784",
+    "poll_after_seconds": 0
+}

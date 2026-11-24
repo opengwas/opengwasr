@@ -30,6 +30,7 @@ max_analyses_per_job <- 100L   # Analyses in POST /api/associations
 max_rsids_per_job <- 1000L     # rsIDs in POST /api/variants/rsid
 max_ld_matrix_per_job <- 500L  # variants in POST /api/ld/matrix
 max_ld_proxies_per_job <- 1000L  # variants in POST /api/ld/proxies
+max_ld_reflookup_per_job <- 10000L  # variants in POST /api/ld/reflookup
 max_positions_per_job <- 1000L # positions in POST /api/variants/chrpos
 max_range_analyses_per_job <- 10L        # Analyses in POST /api/associations/range
 max_range_positions_per_job <- 10000000L # positions (inclusive) in one range

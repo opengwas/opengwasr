@@ -6,8 +6,9 @@
 \usage{
 og_api(
   url = getOption("opengwasr.url"),
-  timeout = getOption("opengwasr.timeout", 3600),
-  max_in_flight = getOption("opengwasr.max_in_flight", 4)
+  timeout = default_timeout(),
+  max_in_flight = default_max_in_flight(),
+  caller = NULL
 )
 }
 \arguments{
@@ -18,6 +19,12 @@ og_api(
 
 \item{max_in_flight}{How many Jobs one call may run at once. Defaults to the
 \code{opengwasr.max_in_flight} option, then 4; at most 100, the Jobs one user may have queued.}
+
+\item{caller}{A package or tool calling opengwasr on its users' behalf, to name itself in the
+user agent of every request this Source makes, so the API's logs can tell which tool made it:
+\code{og_api(caller = "TwoSampleMR/0.8.0")} sends \verb{opengwasr/<version> TwoSampleMR/0.8.0}. One
+short string of printable characters (at most 100), \code{name/version} by convention; \code{NULL}
+(the default) adds nothing.}
 }
 \value{
 An \code{og_api_source}.

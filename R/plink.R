@@ -210,6 +210,12 @@ ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
     lookup_for <- kinds$alids
   }
   if (length(lookup_for) > 0) {
+    if (inherits(src, "og_no_source")) {
+      source_required(call, paste0(big_number(length(lookup_for)), if (length(lookup_for) == 1) " ALID has" else " ALIDs have",
+                                   " no rsID, so its rsID has to be looked up: ",
+                                   paste0(utils::head(lookup_for, 3), collapse = ", "),
+                                   if (length(lookup_for) > 3) ", ..." else ""))
+    }
     found <- plink_rsids_of(src, lookup_for, deadline, call)
     map$rsid[match(lookup_for, map$alid)] <- found$rsid[match(lookup_for, found$alid)]
     jobs <- found$jobs
@@ -238,18 +244,20 @@ plink_rsids_of <- function(src, alids, deadline, call) {
        jobs = lapply(lapply(out, `[[`, "job"), utils::modifyList, list(total = 0, truncated = FALSE)))
 }
 
+# A query that reads LD Stores only, given a PLINK Reference.
+refuse_plink <- function(method) {
+  og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
+             i = "Pass an LD Store's name or an ancestry code in `ld`."),
+           class = "opengwasr_argument", call = method)
+}
+
 # The plan of a query over a PLINK Reference: no requests. PLINK runs when the plan is finished,
 # with what was pinned now (the variants matched).
 ld_query_plink <- function(prep, spec, method) {
-  if (is.null(spec$local)) {
-    og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
-               i = "Pass an LD Store's name or an ancestry code in `ld`."),
-             class = "opengwasr_argument", call = method)
-  }
   plink <- prep$plink
   left_out <- with(plink$map, ifelse(is.na(alid), rsid, alid))[!plink$present]
   ctx <- list(alids = prep$alids, absent = left_out, store = prep$store, choice = prep$choice,
-              map = plink$map[plink$present, , drop = FALSE], plink = plink$ref)
+              matched = plink$map[plink$present, , drop = FALSE], plink = plink$ref)
   jobs <- prep$jobs
   list(requests = list(), releases = NULL, finish = function(results) {
     done <- spec$local(ctx)

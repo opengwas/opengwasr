@@ -3,14 +3,16 @@
 
 # The user agent, looked up once per session (`packageVersion()` reads the DESCRIPTION file each time).
 http_state <- new.env()
-user_agent_string <- function() {
+user_agent_string <- function(caller = NULL) {
   http_state$user_agent <- http_state$user_agent %||% paste0("opengwasr/", utils::packageVersion("opengwasr"))
+  # A package calling opengwasr names itself (`og_api(caller =)`), so the API's logs can tell the tools apart.
+  if (is.null(caller)) http_state$user_agent else paste(http_state$user_agent, caller)
 }
 
 api_request <- function(src, path, query = NULL, body = NULL, timeout = NULL, method = NULL) {
   req <- httr2::request(src$url) |>
     httr2::req_url_path_append(path) |>
-    httr2::req_user_agent(user_agent_string()) |>
+    httr2::req_user_agent(user_agent_string(src$caller)) |>
     httr2::req_timeout(min(src$timeout, timeout %||% Inf)) |>
     httr2::req_error(is_error = function(resp) FALSE)
   if (!is.null(method)) req <- httr2::req_method(req, method)
@@ -45,6 +47,7 @@ api_request <- function(src, path, query = NULL, body = NULL, timeout = NULL, me
 api_response <- function(src, path, query = NULL, body = NULL, call = rlang::caller_env(),
                          timeout = NULL, method = NULL, deadline = NULL) {
   force(call)
+  if (inherits(src, "og_no_source")) source_required(call)
   deadline <- deadline %||% call_deadline() %||% (job_now() + src$timeout)
   repeat {
     budget <- deadline - job_now()

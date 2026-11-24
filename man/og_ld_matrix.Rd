@@ -7,7 +7,9 @@
 og_ld_matrix(src, variants, ld = NULL, fill_below_t_far = FALSE)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}}. \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
+looked up: \code{variants} are rsIDs, or a data frame with an \code{rsid} column. A lookup that is needed
+without a Source stops, with class \code{opengwasr_source_required}.}
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
 

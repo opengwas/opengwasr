@@ -321,3 +321,21 @@ test_that("JSON bodies are the same text whatever the last ulp of a number", {
   expect_match(body_text(1e-50), "1e-50", fixed = TRUE)
   expect_identical(body_text(0.001 * (1 + 2^-52)), body_text(0.001))
 })
+
+test_that("a Source's caller is added to the user agent of every request it builds", {
+  withr::local_envvar(OPENGWAS_URL = "http://example.test", OPENGWAS_DEV_KEY = "k", OPENGWAS_DEV_USER = NA)
+  agent <- function(src, ...) api_request(src, "api/x", ...)$options$useragent
+  plain <- og_api()
+  base <- paste0("opengwasr/", utils::packageVersion("opengwasr"))
+  expect_identical(agent(plain), base)
+  named <- og_api(caller = "TwoSampleMR/0.8.0")
+  expect_identical(agent(named), paste(base, "TwoSampleMR/0.8.0"))
+  # Every kind of request goes through the one builder: a query, a body, and a method.
+  expect_identical(agent(named, query = list(a = 1)), paste(base, "TwoSampleMR/0.8.0"))
+  expect_identical(agent(named, body = list(a = 1), method = "POST"), paste(base, "TwoSampleMR/0.8.0"))
+  expect_match(shown_source(named), "Caller: TwoSampleMR/0.8.0", fixed = TRUE)
+  expect_false(grepl("Caller", shown_source(plain)))
+  for (bad in list(1, c("a", "b"), NA_character_, "", "two\nlines", strrep("x", 101), "caf\u00e9/1.0")) {
+    expect_error(og_api(caller = bad), class = "opengwasr_argument")
+  }
+})

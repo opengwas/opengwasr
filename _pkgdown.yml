@@ -22,11 +22,12 @@ reference:
   - og_job_result
   - og_job_cancel
 - title: LD
-  desc: LD Stores, LD matrices and proxies, and clumping.
+  desc: LD Stores, LD matrices, proxies and reflookup, and clumping.
   contents:
   - og_ld_stores
   - og_ld_matrix
   - og_ld_proxies
+  - og_ld_reflookup
   - og_clump
   - og_plink_reference
 - title: Your own data

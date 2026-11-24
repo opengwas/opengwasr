@@ -30,7 +30,9 @@
 #' `t_far`, `near_bp` and `far_bp`); a choice of LD Store that can't be made without guessing is
 #' refused by opengwasr (`opengwasr_ld_unmatched`, with the LD Stores in `ld_stores`).
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()]. `NULL` works with a PLINK Reference as `ld` when nothing is
+#'   looked up: `variants` are rsIDs, or a data frame with an `rsid` column. A lookup that is needed
+#'   without a Source stops, with class `opengwasr_source_required`.
 #' @param variants ALIDs and rsIDs, or a data frame of Associations.
 #' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
 #'   [og_plink_reference()], or `NULL` to match the Assigned Ancestry of the Associations' Analyses
@@ -59,10 +61,13 @@ og_ld_matrix.og_api_source <- function(src, variants, ld = NULL, fill_below_t_fa
     assemble = function(results, ctx) ld_matrix_assemble(results, ctx, fill_below_t_far),
     # A PLINK Reference holds every pair, so `fill_below_t_far` has nothing to fill.
     local = function(ctx) {
-      m <- plink_ld_matrix(ctx$plink, unique(ctx$map$rsid))
+      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid))
       list(value = structure(m, class = c("og_ld_matrix", "matrix", "array")), provenance = NULL)
     }))
 }
+
+#' @export
+og_ld_matrix.NULL <- og_ld_matrix.og_api_source
 
 # The one matrix of every present variant, from the Jobs' rows. A row is `alid` and `r`, its r with
 # each of the rows' variants in the same order (null, where the LD Store holds no r, is NA).

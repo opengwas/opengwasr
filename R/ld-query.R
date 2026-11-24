@@ -20,20 +20,22 @@
 #'   in every Job (default none), or `function(alids, store)` giving them for a piece's ALIDs and the
 #'   LD Store's row (clumping's scores and default `r2`); `assemble`, `function(results, ctx)`: the
 #'   query's value from the Jobs' `list(rows, job)` (in piece order) and `ctx`, `list(alids, absent,
-#'   store, choice)`: the ALIDs asked for, those the LD Store doesn't hold, its row of
+#'   store, choice, variants, rsid_map, unresolved)`: the ALIDs asked for, those the LD Store doesn't hold, its row of
 #'   [og_ld_stores()] and how it was chosen; optionally `provenance`, `function(results, ctx)`:
-#'   further provenance fields (clumping's `clump`); and `local`, `function(ctx)`, for a query that can
+#'   further provenance fields (clumping's `clump`); `absence_is_answer`, `TRUE` for a query that asks
+#'   which variants the LD Store holds, so absences are rows, not a warning; and `local`, `function(ctx)`, for a query that can
 #'   read a PLINK Reference (R/plink.R): its `list(value, provenance)`, with `ctx` as above, but
-#'   `ctx$map` (`alid` and `rsid`, one row per variant matched) and `ctx$plink`; a query without it
+#'   `ctx$matched` (`alid` and `rsid`, one row per variant matched) and `ctx$plink`; a query without it
 #'   refuses a PLINK Reference.
 #' @return The value `assemble()` returns with [og_provenance()] attached (`ld`, `ld_choice`,
 #'   `absent`); under [og_submit()], the `og_jobs` handle whose collection returns the same.
 #' @noRd
 ld_query <- function(src, path, variants, ld, spec) {
+  src <- src %||% no_source()  # NULL: a PLINK Reference that looks nothing up (R/source.R)
   method <- parent.frame()
   fn <- sys.function(sys.parent())
   engine_query(src, method, fn, function(deadline) {
-    prep <- ld_prepare(src, variants, ld, deadline, method)
+    prep <- ld_prepare(src, variants, ld, deadline, method, spec)
     alids <- prep$alids
     # A PLINK Reference is read on this machine: no Job to run, the same preparation and provenance.
     if (!is.null(prep$plink)) return(ld_query_plink(prep, spec, method))
@@ -49,8 +51,10 @@ ld_query <- function(src, path, variants, ld, spec) {
       # hold is absent whichever Job asked.
       absent <- unique(unlist(lapply(results, function(r) r$job$metadata$absent)))
       left_out <- c(absent, prep$unresolved)
-      if (length(left_out) > 0) warn_ld_absent(left_out, store$ld_store, method)
-      ctx <- list(alids = alids, absent = absent, store = store, choice = prep$choice)
+      # A lookup of what the LD Store holds answers with its absences, so it has nothing to warn of.
+      if (length(left_out) > 0 && !isTRUE(spec$absence_is_answer)) warn_ld_absent(left_out, store$ld_store, method)
+      ctx <- list(alids = alids, absent = absent, store = store, choice = prep$choice,
+                  variants = variants, rsid_map = prep$rsid_map, unresolved = prep$unresolved)
       value <- spec$assemble(results, ctx)
       ld_jobs <- lapply(results, function(r) { r$job$releases <- character(); r$job })
       list(value = value, jobs = c(lookup_jobs, ld_jobs),
@@ -62,7 +66,7 @@ ld_query <- function(src, path, variants, ld, spec) {
 
 # The ALIDs to ask the LD Store about, and the LD Store: `list(alids, store, choice, unresolved,
 # jobs)`. The LD Store is chosen before any Job runs, so a refusal costs none.
-ld_prepare <- function(src, variants, ld, deadline, call) {
+ld_prepare <- function(src, variants, ld, deadline, call, spec) {
   if (is.data.frame(variants)) {
     if (!is.character(variants$alid)) {
       og_abort("A data frame of `variants` needs an `alid` column.", class = "opengwasr_argument", call = call)
@@ -75,11 +79,15 @@ ld_prepare <- function(src, variants, ld, deadline, call) {
   }
   chosen <- choose_ld_store(src, ld, ancestries, call)
   # A PLINK Reference is matched by rsID and read locally (R/plink.R).
-  if (!is.null(chosen$plink)) return(ld_prepare_plink(src, variants, kinds, chosen, deadline, call))
+  if (!is.null(chosen$plink)) {
+    # Refused before anything is matched or looked up.
+    if (is.null(spec$local)) refuse_plink(call)
+    return(ld_prepare_plink(src, variants, kinds, chosen, deadline, call))
+  }
   resolved <- resolve_variants(src, kinds, if (length(kinds$rsids) > 0) resolve_releases(src, NULL, call),
                                deadline, call)
   list(alids = resolved$alids, store = chosen$store, choice = chosen$choice,
-       unresolved = resolved$unresolved, jobs = resolved$jobs)
+       unresolved = resolved$unresolved, jobs = resolved$jobs, rsid_map = resolved$map)
 }
 
 # Kept: the API lists only the ALIDs the LD Store doesn't hold; an rsID that names none is as absent.

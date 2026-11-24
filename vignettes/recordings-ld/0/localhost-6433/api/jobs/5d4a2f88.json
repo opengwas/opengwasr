@@ -1,0 +1,95 @@
+{
+    "job_id": "5d4a2f88",
+    "query_hash": "sha256:b3a08496129e4e2c9cdd913fa7f887db3b474c7e7f642f42fe35e80bd907ac4a",
+    "status": "succeeded",
+    "endpoint": "/api/variants/rsid",
+    "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024",
+    "created_at": "2026-11-24T09:08:53.719313+00:00",
+    "started_at": "2026-11-24T09:08:53.743757+00:00",
+    "completed_at": "2026-11-24T09:08:56.211552+00:00",
+    "expires_at": "2026-11-24T10:08:56.209015+00:00",
+    "retrieved_at": null,
+    "retry_at": null,
+    "attempts": 1,
+    "error": null,
+    "error_kind": null,
+    "result": {
+        "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024",
+        "manifest": {
+            "schema": "ogdb.result.ndjson.v1",
+            "schema_version": "ogdb-result-v1",
+            "row_count": 11,
+            "total_rows": 11,
+            "page_count": 1,
+            "page_rows": 1000,
+            "page_row_offsets": [
+                0
+            ],
+            "byte_count": 1971,
+            "total_bytes": 1971,
+            "sha256": "a940e364bd7cf4013772b93c237c83094c816ccda8d5b082f40a9035448998df",
+            "page_sha256": [
+                "a940e364bd7cf4013772b93c237c83094c816ccda8d5b082f40a9035448998df"
+            ],
+            "retention_expires_at": "2026-11-24T10:08:56.209015+00:00",
+            "page_encoding": "text",
+            "job_id": "5d4a2f88",
+            "fingerprint": "sha256:b3a08496129e4e2c9cdd913fa7f887db3b474c7e7f642f42fe35e80bd907ac4a",
+            "release_id": "OGS-00006/OGS-00006-completed,OGS-00009/OGS-00009-completed,OGS-00011/OGS-00011-completed,OGS-00012/OGS-00012-completed,OGS-00013/OGS-00013-completed,OGS-00014/OGS-00014-completed,OGS-00015/OGS-00015-completed,OGS-00016/OGS-00016,OGS-00017/OGS-00017-completed,OGS-00024/OGS-00024",
+            "releases": [
+                {
+                    "store_id": "OGS-00006",
+                    "release_id": "OGS-00006-completed"
+                },
+                {
+                    "store_id": "OGS-00009",
+                    "release_id": "OGS-00009-completed"
+                },
+                {
+                    "store_id": "OGS-00011",
+                    "release_id": "OGS-00011-completed"
+                },
+                {
+                    "store_id": "OGS-00012",
+                    "release_id": "OGS-00012-completed"
+                },
+                {
+                    "store_id": "OGS-00013",
+                    "release_id": "OGS-00013-completed"
+                },
+                {
+                    "store_id": "OGS-00014",
+                    "release_id": "OGS-00014-completed"
+                },
+                {
+                    "store_id": "OGS-00015",
+                    "release_id": "OGS-00015-completed"
+                },
+                {
+                    "store_id": "OGS-00016",
+                    "release_id": "OGS-00016"
+                },
+                {
+                    "store_id": "OGS-00017",
+                    "release_id": "OGS-00017-completed"
+                },
+                {
+                    "store_id": "OGS-00024",
+                    "release_id": "OGS-00024"
+                }
+            ],
+            "first_cursor": null
+        },
+        "result_url": "/api/jobs/5d4a2f88/result"
+    },
+    "compute": {
+        "cpu_seconds": 2.2568,
+        "run_seconds": 2.4636,
+        "queue_seconds": 0.0244,
+        "attempts": 1,
+        "rows": 11,
+        "bytes": 1971
+    },
+    "status_url": "/api/jobs/5d4a2f88",
+    "poll_after_seconds": 0
+}

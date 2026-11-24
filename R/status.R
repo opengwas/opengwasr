@@ -36,7 +36,7 @@ print.og_status <- function(x, ...) {
   cat("\u2500\u2500 OpenGWAS API \u2500\u2500\n")
   cat(if (isTRUE(x$ready)) "\u2714 Ready\n" else "\u2716 Not ready\n")
   if (!is.null(limits$result_rows)) {
-    cat("\u2022 Most Associations one Job returns: ", format(limits$result_rows, big.mark = ","), "\n", sep = "")
+    cat("\u2022 Most Associations one Job returns: ", big_number(limits$result_rows), "\n", sep = "")
   }
   if (!is.null(limits$result_unread_seconds)) {
     cat("\u2022 Unread Job results kept for: ", format_duration(limits$result_unread_seconds), "\n", sep = "")
@@ -51,7 +51,7 @@ print.og_user <- function(x, ...) {
   cat("\u2500\u2500 Signed in \u2500\u2500\n")
   cat("\u2022 User: ", sub("^user:", "", x$user), "\n", sep = "")
   cat("\u2022 Tier: ", x$tier, "\n", sep = "")
-  cat("\u2022 Allowance: ", format(x$allowance, big.mark = ","), "\n", sep = "")
+  cat("\u2022 Allowance: ", big_number(x$allowance), "\n", sep = "")
   cat("\u2022 Jobs running at once: ", x$concurrency_budget, "\n", sep = "")
   invisible(x)
 }

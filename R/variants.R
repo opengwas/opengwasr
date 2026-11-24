@@ -26,14 +26,13 @@ classify_variants <- function(variants, arg = "variants", call = rlang::caller_e
   if (!is.character(variants) || length(variants) == 0 || anyNA(variants)) {
     bad(paste0("`", arg, "` must be a character vector of rsIDs and ALIDs, with no missing values."))
   }
-  is_rsid <- grepl("^rs[0-9]+$", variants, ignore.case = TRUE)
+  is_rsid <- is_rsid(variants)
   # Kept until opengwas/ogdb-api#183 makes the API refuse non-canonical ALIDs; then it goes.
   is_alid <- !is_rsid & is_canonical_alid(variants)
   if (any(!is_rsid & !is_alid)) {
     wrong <- unique(variants[!is_rsid & !is_alid])
     bad(paste0(length(wrong), " of the `", arg, "` ", if (length(wrong) == 1) "is" else "are",
-               " neither an rsID nor an ALID: ", paste0("\"", utils::head(wrong, 5), "\"", collapse = ", "),
-               if (length(wrong) > 5) ", ...", "."),
+               " neither an rsID nor an ALID: ", some_ids(wrong, 5, quote = "\""), "."),
         i = paste0("An rsID looks like \"rs1421085\"; an ALID like \"16:53767042:C:T\", with the alleles ",
                    "in alphabetical order (or, for an indel, the reference allele first). ",
                    "`og_alid()` makes ALIDs from chromosome, position and alleles."))
@@ -42,6 +41,14 @@ classify_variants <- function(variants, arg = "variants", call = rlang::caller_e
   structure(list(alids = unique(variants[is_alid]), rsids = unique(tolower(variants[is_rsid])),
                  given = unique(ifelse(is_rsid, tolower(variants), variants))),
             class = "og_variant_kinds")
+}
+
+is_rsid <- function(x) grepl("^rs[0-9]+$", x, ignore.case = TRUE)
+
+# The chromosome and position (as text) of each of `alids`, which are canonical.
+alid_parts <- function(alids) {
+  parts <- strsplit(alids, ":", fixed = TRUE)
+  list(chromosome = vapply(parts, `[[`, "", 1), position = vapply(parts, `[[`, "", 2))
 }
 
 # TRUE where `x` is an ALID in canonical form (see `classify_variants()`).
@@ -123,7 +130,7 @@ warn_unresolved <- function(ids, call = rlang::caller_env()) {
   og_warn(
     paste0(n, if (n == 1) " rsID is" else " rsIDs are", " in none of these Analyses' GWAS Stores, so ",
            if (n == 1) "it has" else "they have", " no Associations: ",
-           paste0(utils::head(ids, 10), collapse = ", "), if (n > 10) ", ...", "."),
+           some_ids(ids, 10), "."),
     class = "opengwasr_unresolved_variants", count = n, ids = ids, call = call
   )
 }

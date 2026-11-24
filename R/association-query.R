@@ -232,7 +232,7 @@ query_record <- function(given, releases) {
   })
   args <- Filter(Negate(is.null), args)
   shown <- args[setdiff(names(args), c("analyses", "variants", "data", "releases", "rsids", "positions"))]
-  list(query = provenance_query(given$generic, shown), args = args)
+  list(query = call_text(given$generic, shown), args = args)
 }
 
 # Each Job's `total` and `truncated`. An endpoint that cuts rows off at a limit (`cuts_off`) says

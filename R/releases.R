@@ -12,25 +12,27 @@
 #' @return The list of `list(store_id, release_id)` the API takes in `releases`.
 #' @noRd
 resolve_releases <- function(src, releases, call = rlang::caller_env()) {
-  if (is.null(releases)) return(default_releases(src, call))
   # Kept: an R argument's type.
-  if (!is.character(releases) || length(releases) == 0 || anyNA(releases) || any(!nzchar(releases))) {
+  if (!is.null(releases) &&
+      (!is.character(releases) || length(releases) == 0 || anyNA(releases) || any(!nzchar(releases)))) {
     og_abort(
       c("`releases` must be a character vector of GWAS Store ids or `<store_id>/<release_id>`.",
         i = 'For example `"OGS-00011"` or `"OGS-00011/OGS-00011-completed"`.'),
       class = "opengwasr_argument", call = call
     )
   }
-  releases <- unique(releases)
-  pinned <- grepl("/", releases, fixed = TRUE)
   served <- NULL
+  serves <- function() served %||% (served <<- api_perform(src, "api/batches", call = call)$batches)
+  # Omitted: every GWAS Store the API serves, sent explicitly (the API's own default is every
+  # configured Store Release, which isn't a choice).
+  releases <- unique(releases %||% vapply(serves(), function(b) b$store_id, ""))
+  several <- character()
   out <- lapply(releases, function(item) {
     if (grepl("/", item, fixed = TRUE)) {
       parts <- strsplit(item, "/", fixed = TRUE)[[1]]
       return(list(store_id = parts[[1]], release_id = paste(parts[-1], collapse = "/")))
     }
-    if (is.null(served)) served <<- api_perform(src, "api/batches", call = call)$batches
-    match <- Filter(function(b) identical(b$store_id, item), served)
+    match <- Filter(function(b) identical(b$store_id, item), serves())
     # Kept: the API takes only `<store_id>/<release_id>`, so a bare GWAS Store id is resolved here,
     # from the API's list of what it serves (class of the API's code for an unknown release).
     if (length(match) == 0) {
@@ -38,40 +40,22 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
                class = "opengwasr_release_not_found", api_error = "release_not_found", store_id = item,
                call = call)
     }
-    # Kept: Store Release ambiguity when no release is pinned; the API has no recency field.
-    if (length(match) > 1) {
-      candidates <- vapply(match, function(b) paste0(b$store_id, "/", b$release_id), "")
-      og_abort(
-        c(paste0("`", item, "` has more than one Store Release, and the API doesn't say which is latest."),
-          i = paste0("Pin one: ", paste0("\"", candidates, "\"", collapse = ", "), ".")),
-        class = "opengwasr_release_selection_required", api_error = "release_selection_required",
-        store_id = item, releases = candidates, call = call
-      )
-    }
+    if (length(match) > 1) several <<- c(several, item)
     list(store_id = item, release_id = match[[1]]$release_id)
   })
-  out
-}
-
-# The sole served Store Release of every GWAS Store; refuses if any serves several. Kept client-side:
-# the API's own default with `releases` omitted is every configured Store Release, not a choice.
-default_releases <- function(src, call) {
-  served <- api_perform(src, "api/batches", call = call)$batches
-  store_ids <- vapply(served, function(b) b$store_id, "")
-  many <- unique(store_ids[duplicated(store_ids)])
-  if (length(many) > 0) {
-    candidates <- vapply(Filter(function(b) b$store_id %in% many, served),
+  # Kept: Store Release ambiguity when no release is pinned; the API has no recency field.
+  if (length(several) > 0) {
+    candidates <- vapply(Filter(function(b) b$store_id %in% several, serves()),
                          function(b) paste0(b$store_id, "/", b$release_id), "")
     og_abort(
-      c(paste0("Without `releases`, opengwasr uses each GWAS Store's one Store Release, but ",
-               paste0("`", many, "`", collapse = ", "), " serve",
-               if (length(many) == 1) "s" else "", " several, and the API doesn't say which is latest."),
-        i = paste0("Pin them in `releases`: ", paste0("\"", candidates, "\"", collapse = ", "), ".")),
+      c(paste0(some_ids(several, length(several), quote = "`"), if (length(several) == 1) " serves" else " serve",
+               " more than one Store Release, and the API doesn't say which is latest."),
+        i = paste0("Pin one in `releases`: ", some_ids(candidates, length(candidates), quote = "\""), ".")),
       class = "opengwasr_release_selection_required", api_error = "release_selection_required",
-      store_id = many, releases = candidates, call = call
+      store_id = several, releases = candidates, call = call
     )
   }
-  lapply(served, function(b) list(store_id = b$store_id, release_id = b$release_id))
+  out
 }
 
 # The Store Releases of the Analyses asked for (`info`, Analysis metadata with `store_id`): a query,

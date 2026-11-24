@@ -1,13 +1,6 @@
 # The exported Job functions. They work for every query function through query plans
 # (see R/query-plan.R), so a new query function needs nothing to be submitted and collected this way.
 
-# Kept: an R argument's type; without a Source there is no API to ask.
-check_source <- function(src, call = rlang::caller_env()) {
-  if (!inherits(src, "og_api_source")) {
-    og_abort("`src` must be a Source, from `og_api()`.", class = "opengwasr_argument", call = call)
-  }
-}
-
 #' Run queries as Jobs without waiting
 #'
 #' `og_submit()` starts a query and returns as soon as the API has accepted its Jobs, so you can
@@ -68,16 +61,9 @@ og_submit <- function(src, fn, ...) {
                i = "`og_submit()` takes a function that returns a query's result, such as `og_tophits`; do the rest after `og_job_result()`."),
              class = "opengwasr_argument")
   }
-  handle$query <- job_query_text(substitute(fn), args)
+  # `og_tophits("OGS-00011:GCST003116", clump = FALSE)`, for printing: each argument's first line.
+  handle$query <- call_text(paste(deparse(substitute(fn)), collapse = ""), args, width = 60L, nlines = 1L)
   handle
-}
-
-# `og_tophits("OGS-00011:GCST003116", clump = FALSE)`, for printing.
-job_query_text <- function(fn, args) {
-  shown <- vapply(args, function(a) paste(deparse(a, width.cutoff = 60L)[[1]]), "")
-  names <- names(args) %||% rep("", length(args))
-  paste0(paste(deparse(fn), collapse = ""), "(",
-         paste0(ifelse(nzchar(names), paste0(names, " = "), ""), shown, collapse = ", "), ")")
 }
 
 #' @export

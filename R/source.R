@@ -126,8 +126,12 @@ source_required <- function(call, what = NULL) {
 #' @exportS3Method og_status default
 #' @exportS3Method og_user default
 #' @noRd
-source_not_given <- function(src, ...) {
-  call <- sys.call(sys.parent())
+source_not_given <- function(src, ...) check_source(src, sys.call(sys.parent()))
+
+# Kept: an R argument's type; without a Source there is no API to ask. The one Source check, of
+# every query function (through its default method) and every Job function.
+check_source <- function(src, call = rlang::caller_env()) {
+  if (inherits(src, "og_api_source")) return(invisible())
   if (is.null(src)) source_required(call)
   og_abort(c(paste0("`src` must be a Source from `og_api()`, not ", class(src)[[1]], "."),
              i = "Create one with `og_api()`."),

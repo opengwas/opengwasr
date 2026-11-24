@@ -97,17 +97,15 @@ og_clump.NULL <- og_clump.og_api_source
 local_clump <- function(data, ctx, r2, kb) {
   rsid <- ctx$matched$rsid[match(data$alid, ctx$matched$alid)]  # NA: not matched, so not clumped
   at <- which(!is.na(rsid))
-  rsids <- unique(rsid[at])
-  score <- as.numeric(tapply(abs(data$z[at]), factor(rsid[at], levels = rsids), max))
-  clumped <- plink_clump(ctx$plink, rsids, score, r2, kb)
-  keep <- at[rsid[at] %in% clumped$lead]
-  out <- data[keep, , drop = FALSE]
+  clumped <- plink_clump(ctx$plink, rsid[at], data$z[at], r2, kb)
+  lead <- rsid[at] %in% clumped$leads
+  out <- data[at[lead], , drop = FALSE]
   attr(out, "og_provenance") <- NULL
   rownames(out) <- NULL
-  out <- clump_columns(out, ctx$store$ld_store, ctx$choice, r2, kb, clumped$size[match(rsid[keep], clumped$lead)])
+  out <- clump_columns(out, ctx$store$ld_store, ctx$choice, r2, kb, clumped$size[lead])
   list(value = out,
        provenance = list(clump = clump_summary(NA_character_, ctx$store$ld_store, ctx$choice, r2, kb,
-                                               length(ctx$alids), length(ctx$absent), nrow(clumped))))
+                                               length(ctx$alids), length(ctx$absent), length(clumped$leads))))
 }
 
 # Kept: R argument types. Which `r2` and `kb` an LD Store can answer is the API's to say.
@@ -202,8 +200,7 @@ clump_contribution <- function(src, clump, info, call) {
 # (`opengwasr.progress`), so scripts stay quiet.
 inform_clumping <- function(ids, chosen, ancestry, settings) {
   if (!progress_enabled()) return(invisible())
-  who <- if (length(ids) == 1) ids else paste0(length(ids), " Analyses (", paste(utils::head(ids, 3), collapse = ", "),
-                                               if (length(ids) > 3) ", ...", ")")
+  who <- if (length(ids) == 1) ids else paste0(length(ids), " Analyses (", some_ids(ids, 3), ")")
   their <- if (length(ids) == 1) "its" else "their"
   how <- switch(chosen$choice,
                 matched = paste0("matched to ", their, " Assigned Ancestry (", ancestry, ")"),
@@ -222,8 +219,6 @@ inform_clumping <- function(ids, chosen, ancestry, settings) {
 clump_setting_text <- function(r2, kb) {
   paste0("r\u00b2 ", signif(r2, 3), " within ", big_number(kb), " kb")
 }
-
-big_number <- function(x) prettyNum(x, big.mark = ",", scientific = FALSE)
 
 # Top hits the LD Store doesn't hold can't be clumped: the API leaves them out, and counts them.
 warn_clump_absent <- function(summary, call) {

@@ -95,7 +95,7 @@ warn_ld_absent <- function(ids, ld_store, call) {
   og_warn(
     paste0(n, if (n == 1) " variant is" else " variants are", " not in LD Store ", ld_store,
            ", so ", if (n == 1) "it was" else "they were", " left out: ",
-           paste0(utils::head(ids, 10), collapse = ", "), if (n > 10) ", ...", "."),
+           some_ids(ids, 10), "."),
     class = "opengwasr_ld_absent_variants", count = n, ids = ids, ld_store = ld_store, call = call
   )
 }

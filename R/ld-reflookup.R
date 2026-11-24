@@ -41,13 +41,13 @@ ld_reflookup_assemble <- function(results, ctx) {
     out <- data.frame(alid = alid, rsid = rsid, stringsAsFactors = FALSE)
   } else {
     named <- split(ctx$rsid_map$alid, ctx$rsid_map$rsid)
-    is_rsid <- grepl("^rs[0-9]+$", v, ignore.case = TRUE)
-    v <- ifelse(is_rsid, tolower(v), v)
+    rsid <- is_rsid(v)
+    v <- ifelse(rsid, tolower(v), v)
     alids <- lapply(seq_along(v), function(i) {
-      if (!is_rsid[[i]]) return(v[[i]])
+      if (!rsid[[i]]) return(v[[i]])
       if (is.null(named[[v[[i]]]])) NA_character_ else named[[v[[i]]]]
     })
-    out <- data.frame(alid = unlist(alids), rsid = rep(ifelse(is_rsid, v, NA_character_), lengths(alids)),
+    out <- data.frame(alid = unlist(alids), rsid = rep(ifelse(rsid, v, NA_character_), lengths(alids)),
                       stringsAsFactors = FALSE)
   }
   out$present <- out$alid %in% held

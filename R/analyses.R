@@ -57,8 +57,8 @@ lookup_limit <- 1000L
 
 analyses_lookup <- function(src, ids, releases, call = rlang::caller_env()) {
   if (length(ids) == 0) return(finish_analyses(analyses_frame(NULL), character()))
-  chunks <- split(ids, ceiling(seq_along(ids) / lookup_limit))
-  resolved <- lapply(unname(chunks), function(chunk) {
+  chunks <- lapply(dim_chunks(split_dim(length(ids), lookup_limit)), function(at) ids[at])
+  resolved <- lapply(chunks, function(chunk) {
     body <- c(list(id = as.list(unique(chunk))), if (!is.null(releases)) list(releases = releases))
     resp <- api_perform(src, "api/gwasinfo", body = body, simplify = TRUE, call = call)
     check_analyses_field(resp, call)
@@ -181,7 +181,7 @@ analyses_catalogue <- function(src, releases, call = rlang::caller_env()) {
     check_analyses_field(page, call)
     frame <- analyses_frame(page$analyses)
     total <- page$total %||% total
-    if (is.null(bar) && isTRUE(getOption("opengwasr.progress", interactive())) && !is.null(total)) {
+    if (is.null(bar) && progress_enabled() && !is.null(total)) {
       bar <- cli::cli_progress_bar("Reading the catalogue", total = ceiling(total / lookup_limit))
     }
     if (!is.null(bar)) cli::cli_progress_update(id = bar)

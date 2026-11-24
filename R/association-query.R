@@ -1,55 +1,11 @@
-# The Association-query engine: the one pipeline of every query that returns Associations.
-#
-# A query method checks the arguments only it has, then returns `association_query()` with its
-# endpoint and what is specific to it. Everything else happens here, once, for every such query:
-# the call's deadline and query depth, Store Releases and Analyses, the original-units check, rsID
-# resolution, splitting into Jobs, running them (or submitting them, under og_submit()), combining
-# the pieces, the Jobs' metadata, shaping, ordering and provenance. See CONTRIBUTING.md, "Adding a
-# query", for a worked example.
-#
-# What a query may vary is deliberately small. What a query needs beyond the named arguments comes as
-# one `spec` list (#11's one-variant PheWAS, every-Analysis search and 10 Mb interval; #13's
-# per-Analysis clumping), never as more named arguments.
+# The Association-query engine: the one pipeline of every query that returns Associations. What a
+# query method passes it (`body`, `variants`, `analyses_per_job`, `order`, `truncated`, `spec`) and
+# the contributions it builds from them are described once, in CONTRIBUTING.md, "Adding a query".
 
-#' Run a query that returns Associations.
+#' Run a query that returns Associations (CONTRIBUTING.md, "Adding a query").
 #'
-#' A query method returns its value, and must call it itself, not through a helper: provenance
-#' records the method's arguments, read from its frame (anything else is refused as an internal
-#' error), so a method never reassigns an argument before the call. Request bodies are `variants` (or
-#' `variant`), `analyses`, then `body`'s fields, then any field a spec contributes (`chromosome`,
-#' `start`, `end`), then `observed_only` and `releases`; the API's own defaults are never relied on.
-#'
-#' @param src The Source.
-#' @param path The endpoint, such as `"api/tophits"`.
-#' @param analyses,observed_only,original_units,releases The method's arguments of these names, as
-#'   given. They are checked here.
-#' @param body The endpoint's own fields, the same in every Job, such as `threshold` and `limit`.
-#' @param variants `NULL`, or the method's `variants` (rsIDs and ALIDs, checked here): rsIDs are
-#'   resolved to ALIDs in the Analyses' Store Releases first, and each Job takes some of the ALIDs as
-#'   `variants`. An rsID none of them holds gives `opengwasr_unresolved_variants`.
-#' @param analyses_per_job The most Analyses one Job takes, if fewer than the API's limit.
-#' @param order `"position"`: Analyses in the order asked, then chromosome, position, ALID.
-#'   `"api"`: Analyses in the order asked, each in the order the API returned its rows. `"jobs"`: the
-#'   rows as the Jobs returned them, Jobs in request order (for a query with no Analyses asked for).
-#' @param spec A list of the hooks a query may add; every field is optional:
-#'   * `all_analyses = TRUE`: `analyses` may be `NULL`, meaning every Analysis of the Store Releases
-#'     (sent as no `analyses`; Jobs are split by Store Release). The Analyses' metadata is then looked
-#'     up once, after the rows, for the Analyses the rows are in (one lookup in `finish`, however many
-#'     Jobs; never the catalogue). `original_units` can only be refused after the Jobs ran.
-#'   * `one_variant = TRUE`: with `variants`, each Job takes one ALID, sent as `variant` (so an
-#'     rsID naming several ALIDs runs one Job per ALID).
-#'   * `interval = list(chromosome, start, end, limit)`: the Jobs cover consecutive windows of at most
-#'     `limit` positions, sent as `chromosome`, `start` and `end` (integers).
-#'   * `clump = list(ld, r2, kb, limit, threshold)`: with a PLINK Reference as `ld`, the Jobs fetch
-#'     unclumped top hits and the rows are clumped on this machine (`plink_clump_contribution()`).
-#'     Otherwise each Job (one Analysis: `analyses_per_job = 1`) is clumped on the
-#'     server in its Analysis's LD Store, sent as `clump` (`clump_contribution()`, R/clump.R); the
-#'     rows gain the clumping columns and provenance its `clump`.
-#' @param truncated `NULL` when the endpoint returns every Association it matches (one over the
-#'   row limit fails instead): a Job's `total` is its rows. Otherwise the endpoint cuts rows off at a
-#'   limit and must say so: every Job's `total` and `truncated` are required and checked against its
-#'   rows, and when any Job was cut off the call warns (`opengwasr_truncated`, with `n_analyses`)
-#'   with the message `truncated(ids)` gives for the query's Analysis ids.
+#' A query method calls it directly and never reassigns an argument first: provenance reads the
+#' method's arguments from its frame.
 #' @return The shaped, ordered Associations with [og_provenance()] attached; under [og_submit()],
 #'   the `og_jobs` handle whose collection returns the same.
 #' @noRd
@@ -72,10 +28,8 @@ association_query <- function(src, path, analyses, observed_only, original_units
     clump <- if (!is.null(spec$clump)) clump_contribution(src, spec$clump, info, method)
     # Preparation: rsIDs name ALIDs only in these Store Releases.
     resolved <- if (!is.null(kinds)) resolve_variants(src, kinds, releases, deadline, method)
-    # One Job takes a limited number of Analyses from a limited number of GWAS Stores, and of variants
-    # and positions: a bigger request is split by those and put back together below. Each field of the
-    # request that can be split is one contribution: its split dimension, and what its piece adds to the
-    # Job's body. A new kind of query adds a contribution (and a spec field), never a branch below.
+    # A bigger request than one Job takes is split, one contribution per part of the request, and put
+    # back together below. A new kind of query adds a contribution, never a branch below.
     contributions <- c(
       list(scope = scope),
       if (!is.null(kinds)) list(variants = variants_contribution(resolved, isTRUE(spec$one_variant), limits)),
@@ -128,14 +82,10 @@ association_query <- function(src, path, analyses, observed_only, original_units
   })
 }
 
-# What a request is made of, as contributions: each is `list(dim, body)`, `dim` the split dimension
-# and `body(chunk)` the fields one piece adds to a Job's body. A contribution with `along = "<name>"`
-# instead of a `dim` follows that contribution's dimension (its `body` gets that chunk), and one with
-# `finish(rows, results, pieces, call)` returns `list(value, provenance)` from the shaped rows, and
-# one with `group(chunk)` has its Jobs submitted grouped by that value (clumping, by LD Store:
-# `clump_contribution()`, R/clump.R). The Analyses are the scope: named ones
-# (grouped by GWAS Store, narrowing the Store Releases) or, with `analyses = NULL`, every Analysis of
-# the Store Releases (split by Store Release; the metadata comes with the result, `info` is NULL).
+# The Analyses are the scope contribution (CONTRIBUTING.md): named ones (grouped by GWAS Store,
+# narrowing the Store Releases) or, with `analyses = NULL`, every Analysis of the Store Releases
+# (split by Store Release; the metadata comes with the result, `info` is NULL). Its dimension is
+# made once every contribution has said how many Analyses a Job takes (`split(per_job)`).
 query_scope <- function(src, analyses, releases, original_units, limits, call) {
   if (is.null(analyses)) {
     return(list(split = function(per_job) split_dim(length(releases), limits$releases), info = NULL,

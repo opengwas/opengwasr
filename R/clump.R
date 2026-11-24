@@ -138,12 +138,10 @@ clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads) {
              absent = as.numeric(absent), leads = as.numeric(leads), stringsAsFactors = FALSE)
 }
 
-# The engine contribution that clumps each Analysis's top hits on the server (`og_tophits()`), made
-# before any Job runs, so a refusal costs none. One LD Store per Analysis: `ld` for all of them, or
-# the one matching its Assigned Ancestry (an Unassigned one is refused first). It has no split
-# dimension of its own: it follows the Analyses (`along = "scope"`, one per Job), adding `clump`
-# to each Job's body; its Jobs are submitted grouped by LD Store (`group`); its `finish` adds the clumping columns and provenance and warns about
-# top hits the LD Store doesn't hold.
+# The contribution (CONTRIBUTING.md) that clumps each Analysis's top hits on the server, one Job and
+# one LD Store per Analysis: `ld` for all, or the one matching its Assigned Ancestry (an Unassigned
+# one is refused first, before any Job runs). Its `finish` adds the clumping columns and provenance
+# and warns about top hits the LD Store doesn't hold.
 clump_contribution <- function(src, clump, info, call) {
   if (is_plink_reference(clump$ld)) {
     return(plink_clump_contribution(choose_ld_store(src, clump$ld, call = call), clump, info, call))

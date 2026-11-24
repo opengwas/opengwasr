@@ -1,39 +1,27 @@
 # The query plan: how a query hands its Jobs to the Job client, and the one place that knows how
-# those Jobs are run (waited for, or only submitted).
+# those Jobs are run (waited for, or only submitted). Every query reaches it through engine_query(),
+# which keeps the contract:
 #
-# A query that returns Associations doesn't use this directly: association_query()
-# (R/association-query.R) does all of it. A query of another kind (LD, #12) follows the contract:
-#
-#   1. Its first line is `deadline <- local_query(src)`: it starts the user's call (one deadline for
-#      every request in it, lookups included) and counts query depth, so run_query() knows whether
-#      it belongs to the outermost query, however many wrappers sit between.
-#   2. Prepare synchronously: validate arguments, look up Store Releases and Analyses, resolve rsIDs
-#      (resolve_variants(), whose Jobs run through run_window()). Preparation always runs to
-#      completion, even under og_submit().
-#   3. Build query_plan(requests, finish):
-#        requests  a list of list(path, body): every Job the answer needs (several when split).
-#        finish    function(results): `results` is one list(rows, job) per request, in order (as
-#                  collect_job() returns them); returns the query's value. It must use only what its
-#                  closure pinned at plan time, so collecting later gives the very same answer as the
-#                  synchronous call. The one exception: a query over every Analysis (`analyses =
-#                  NULL`, og_phewas()) looks up the metadata of the result's Analyses, against the
-#                  Store Releases the plan pinned. An error there is the API's.
-#   4. Return run_query(src, plan, deadline).
-#
-# run_query() submits every request, then either waits for all of them and calls finish() (a
-# normal call), or, when og_submit() is running the outermost query, returns the `og_jobs` handle
-# without waiting (og_submit() refuses a function that runs two queries, or that does something
-# with the handle instead of returning it). og_job_result() later waits for the handle's Jobs and
-# calls the same finish().
+#   1. `local_query(src)` first: one deadline for every request of the user's call, lookups included,
+#      and the query depth, so run_query() knows whether it belongs to the outermost query.
+#   2. Preparation runs synchronously and to completion, even under og_submit(): argument checks,
+#      Store Releases and Analyses, rsID resolution (whose Jobs run through run_window()).
+#   3. query_plan(requests, finish): `requests`, a list of list(path, body), every Job the answer
+#      needs; `finish(results)` gets one list(rows, job) per request, in order, and uses only what its
+#      closure pinned, so collecting later gives the very same answer. The one exception: a query
+#      over every Analysis (og_phewas(analyses = NULL)) looks up the result's Analyses, against the
+#      pinned Store Releases; an error there is the API's.
+#   4. run_query(src, plan, deadline) submits every request, then waits for them and calls finish()
+#      (a normal call) or, when og_submit() runs the outermost query, returns the `og_jobs` handle
+#      (og_submit() refuses a function that runs two queries, or does something with the handle).
+#      og_job_result() later waits for the handle's Jobs and calls the same finish().
 
 query_plan <- function(requests, finish) list(requests = requests, finish = finish)
 
-# The scaffold both query engines share (association_query(), ld_query()): the method's arguments
-# (read from its frame, `method`, with `fn` its function), the call's deadline, the record of the
-# call for provenance, a plan whose finish attaches provenance, and run_query(). `prepare(deadline)`
-# is the engine's own preparation: it returns `list(requests, releases, finish)`, `releases` the
-# Store Releases provenance records, and `finish(results)` returns `list(value, jobs, provenance)`:
-# the query's value, every Job behind it, and any further provenance fields.
+# The scaffold of every engine (association_query(), ld_query(), lookup_query()): the method's
+# arguments (read from its frame, `method`; `fn` is its function), the call's deadline, the record
+# of the call, a plan whose finish attaches provenance, and run_query(). `prepare(deadline)` returns
+# `list(requests, releases, finish)`; `finish(results)` returns `list(value, jobs, provenance)`.
 engine_query <- function(src, method, fn, prepare) {
   given <- method_arguments(method, fn)
   deadline <- local_query(src)

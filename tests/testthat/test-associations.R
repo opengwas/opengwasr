@@ -22,31 +22,34 @@ fake_bodies <- function(endpoint = NULL) {
   if (is.null(endpoint)) all else Filter(function(b) identical(b$endpoint, endpoint), all)
 }
 
-# The expectations for CAD's rows below are literal values the dev Data API gave for these variants
-# (z, se, log10_p), with beta = z * se worked by hand. The fake serves the same numbers.
+# Live, these assert what opengwasr does with whatever the dev Data API holds (the dev stores are
+# reloaded); the fake's rows are literal values the dev Data API once gave for these variants (z, se,
+# log10_p), with beta = z * se worked by hand, and the fake asserts them.
 test_api("ALIDs in Analyses: columns, Imputed included by default, observed_only drops them", {
   assoc <- og_associations(src, c(snv, insertion), c(cad, bmi), releases = rel)
   expect_s3_class(assoc, "data.frame")
   expect_equal(names(assoc)[seq_along(expected_columns)], expected_columns)
   expect_false("log10_p" %in% names(assoc))
-  expect_equal(nrow(assoc), 4)
-  expect_setequal(assoc$id, c(cad, bmi))
-  expect_false(anyNA(assoc$rsid))
+  expect_true(all(assoc$id %in% c(cad, bmi)))
   expect_false(anyNA(assoc$alid))
-  expect_setequal(assoc$alid, c(snv, insertion))
+  expect_true(all(assoc$alid %in% c(snv, insertion)))
+  expect_false(any(duplicated(paste(assoc$id, assoc$alid))))
+  expect_equal(assoc$beta, assoc$z * assoc$se)
   expect_equal(unique(assoc$effect_scale[assoc$id == cad]), "log_or")
   expect_equal(unique(assoc$effect_scale[assoc$id == bmi]), "sd")
-  expect_equal(assoc$association_status[assoc$alid == insertion], c("imputed", "imputed"))
-  expect_equal(assoc$association_status[assoc$alid == snv], c("observed", "observed"))
 
-  in_cad <- assoc[assoc$id == cad, ]
-  in_cad <- in_cad[match(c(insertion, snv), in_cad$alid), ]
-  expect_equal(in_cad$rsid, c("rs34159589", "rs1421085"))
-  expect_equal(in_cad$z, c(-0.3066406, 3.0810547), tolerance = 1e-6)
-  expect_equal(in_cad$se, c(0.009841919, 0.009628296), tolerance = 1e-6)
-  expect_equal(in_cad$beta, c(-0.003017932, 0.029665306), tolerance = 1e-6)
-  expect_equal(log10(in_cad$pval), c(-0.1196913, -2.6855665), tolerance = 1e-6)
   if (backend == "fake") {
+    expect_equal(nrow(assoc), 4)
+    expect_false(anyNA(assoc$rsid))
+    expect_equal(assoc$association_status[assoc$alid == insertion], c("imputed", "imputed"))
+    expect_equal(assoc$association_status[assoc$alid == snv], c("observed", "observed"))
+    in_cad <- assoc[assoc$id == cad, ]
+    in_cad <- in_cad[match(c(insertion, snv), in_cad$alid), ]
+    expect_equal(in_cad$rsid, c("rs34159589", "rs1421085"))
+    expect_equal(in_cad$z, c(-0.3066406, 3.0810547), tolerance = 1e-6)
+    expect_equal(in_cad$se, c(0.009841919, 0.009628296), tolerance = 1e-6)
+    expect_equal(in_cad$beta, c(-0.003017932, 0.029665306), tolerance = 1e-6)
+    expect_equal(log10(in_cad$pval), c(-0.1196913, -2.6855665), tolerance = 1e-6)
     in_bmi <- assoc[assoc$id == bmi, ]
     in_bmi <- in_bmi[match(c(insertion, snv), in_bmi$alid), ]
     # z of -12 and 38, se of 0.002: beta = -0.024 and 0.076.
@@ -55,21 +58,20 @@ test_api("ALIDs in Analyses: columns, Imputed included by default, observed_only
   }
 
   observed <- og_associations(src, c(snv, insertion), c(cad, bmi), observed_only = TRUE, releases = rel)
-  expect_equal(nrow(observed), 2)
-  expect_equal(unique(observed$association_status), "observed")
-  expect_equal(unique(observed$alid), snv)
+  expect_observed_subset(observed, assoc)
+  if (backend == "fake") expect_equal(unique(observed$alid), snv)
 
   # ALIDs need no rsID lookup: one Job. Provenance says what was asked.
   prov <- og_provenance(assoc)
   expect_length(prov$job_ids, 1)
-  expect_equal(prov$total, 4)
+  expect_equal(prov$total, nrow(assoc))
   expect_false(prov$truncated)
   expect_match(prov$query, "og_associations(", fixed = TRUE)
   expect_match(prov$query, "observed_only = FALSE", fixed = TRUE)
   expect_equal(prov$query, "og_associations(observed_only = FALSE, original_units = FALSE)")
   expect_equal(names(prov$args), c("variants", "analyses", "observed_only", "original_units", "releases"))
   expect_true(rel %in% prov$store_releases)
-  expect_warning(og_provenance(assoc[1:2, ]), class = "opengwasr_provenance_stale")
+  expect_warning(og_provenance(assoc[-1, ]), class = "opengwasr_provenance_stale")
 })
 
 test_api("rsIDs and ALIDs mix; an rsID's every ALID is asked for; unresolvable rsIDs are reported", {
@@ -77,12 +79,16 @@ test_api("rsIDs and ALIDs mix; an rsID's every ALID is asked for; unresolvable r
     assoc <- og_associations(src, c("rs1421085", snv, "rs34159589", "rs999999999"), cad, releases = rel),
     class = "opengwasr_unresolved_variants"
   )
-  expect_equal(w$count, 1L)
-  expect_equal(w$ids, "rs999999999")
+  expect_true("rs999999999" %in% w$ids)
+  expect_equal(w$count, length(w$ids))
   expect_match(conditionMessage(w), "rs999999999", fixed = TRUE)
   # The ALID given twice (once by its rsID) is one row per Analysis.
-  expect_equal(assoc$alid, c(insertion, snv))
-  expect_equal(assoc$rsid, c("rs34159589", "rs1421085"))
+  expect_false(any(duplicated(assoc$alid)))
+  if (backend == "fake") {
+    expect_equal(w$ids, "rs999999999")
+    expect_equal(assoc$alid, c(insertion, snv))
+    expect_equal(assoc$rsid, c("rs34159589", "rs1421085"))
+  }
   # An rsID lookup and an Associations query: two Jobs, but only the second one's rows are
   # Associations.
   prov <- og_provenance(assoc)
@@ -114,16 +120,22 @@ test_api("rsIDs and ALIDs mix; an rsID's every ALID is asked for; unresolvable r
 
 test_api("an rsID resolves to every ALID it names, with the lookup's rows", {
   src_releases <- list(list(store_id = "OGS-00011", release_id = "OGS-00011-completed"))
-  got <- resolve_variants(src, c("rs1421085", "rs34159589", "rs999999999", snv), src_releases)
-  expect_setequal(got$alids, c(other_snv, snv, insertion, "5:75701728:AAAAT:AAAATAAAT"))
-  expect_equal(got$unresolved, "rs999999999")
+  rsids <- c("rs1421085", "rs34159589", "rs999999999")
+  got <- resolve_variants(src, c(rsids, snv), src_releases)
+  # Every ALID the variant table gives for the rsIDs, and those it doesn't name are unresolved.
+  table <- og_variants_rsid(src, rsids, releases = rel)
+  expect_setequal(got$alids, unique(c(snv, table$alid)))
+  expect_setequal(got$unresolved, setdiff(rsids, table$rsid))
   expect_setequal(got$map$alid[got$map$rsid == "rs1421085"], c(other_snv, snv))
-  expect_setequal(got$map$alid[got$map$rsid == "rs34159589"], c(insertion, "5:75701728:AAAAT:AAAATAAAT"))
+  if (backend == "fake") {
+    expect_equal(got$unresolved, "rs999999999")
+    expect_setequal(got$map$alid[got$map$rsid == "rs34159589"], c(insertion, "5:75701728:AAAAT:AAAATAAAT"))
+    expect_equal(got$lookup$other_allele[got$lookup$alid == "5:75701728:AAAAT:AAAATAAAT"], "AAAATAAAT")
+  }
   # The whole variant rows, for og_variants_rsid().
   expect_true(all(c("alid", "chromosome", "position", "effect_allele", "other_allele", "rsid",
                     "store_id", "release_id") %in% names(got$lookup)))
   expect_equal(got$lookup$position[got$lookup$alid == snv], 53767042)
-  expect_equal(got$lookup$other_allele[got$lookup$alid == "5:75701728:AAAAT:AAAATAAAT"], "AAAATAAAT")
   expect_length(got$jobs, 1)
   # No rsIDs, no Job.
   expect_length(resolve_variants(src, snv, src_releases)$jobs, 0)
@@ -139,10 +151,9 @@ test_api("the vignette workflow: BMI top hits looked up in CAD, Imputed included
   expect_true(all(outcome$alid %in% bmi_top$alid))
   expect_equal(unique(outcome$id), cad)
   expect_true(all(outcome$association_status %in% c("observed", "imputed")))
-  expect_equal(nrow(observed), sum(outcome$association_status == "observed"))
-  expect_true(any(outcome$association_status == "imputed"))
-  expect_lt(nrow(observed), nrow(outcome))
+  expect_observed_subset(observed, outcome)
   if (backend == "fake") {
+    expect_true(any(outcome$association_status == "imputed"))
     # BMI's two hits; CAD holds an Imputed Association for the first and an Observed one for the second.
     expect_equal(table(outcome$association_status)[["imputed"]], 1L)
     expect_equal(observed$alid, "16:53800000:A:G")

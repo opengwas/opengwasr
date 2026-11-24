@@ -83,7 +83,8 @@ test_api("rsIDs over a Job's limit are looked up in several Jobs, and every Job 
   reference <- suppressWarnings(og_associations(src, rsids, cad, releases = rel), classes = "opengwasr_unresolved_variants")
   withr::local_options(opengwasr.job_limits = list(rsids = 1))
   w <- expect_warning(got <- og_associations(src, rsids, cad, releases = rel), class = "opengwasr_unresolved_variants")
-  expect_equal(w$ids, "rs999999999")
+  expect_true("rs999999999" %in% w$ids)
+  if (backend == "fake") expect_equal(w$ids, "rs999999999")
   expect_equal(bare(got), bare(reference))
   # Three lookups of one rsID each, and the Associations Job.
   expect_length(og_provenance(got)$job_ids, 4)

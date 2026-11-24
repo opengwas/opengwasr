@@ -1,0 +1,12 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  large-queries-and-jobs: large-queries-and-jobs.html
+  ld: ld.html
+  migrating-from-ieugwasr: migrating-from-ieugwasr.html
+  opengwasr: opengwasr.html
+last_built: 2026-11-24T14:04Z
+urls:
+  reference: https://opengwas.github.io/opengwasr/reference
+  article: https://opengwas.github.io/opengwasr/articles

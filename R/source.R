@@ -12,6 +12,11 @@
 #'   `opengwasr.timeout` option, then 3600.
 #' @param max_in_flight How many Jobs one call may run at once. Defaults to the
 #'   `opengwasr.max_in_flight` option, then 4; at most 100, the Jobs one user may have queued.
+#' @param caller A package or tool calling opengwasr on its users' behalf, to name itself in the
+#'   user agent of every request this Source makes, so the API's logs can tell which tool made it:
+#'   `og_api(caller = "TwoSampleMR/0.8.0")` sends `opengwasr/<version> TwoSampleMR/0.8.0`. One
+#'   short string of printable characters (at most 100), `name/version` by convention; `NULL`
+#'   (the default) adds nothing.
 #' @return An `og_api_source`.
 #' @examples
 #' \dontrun{
@@ -21,8 +26,15 @@
 #' @export
 og_api <- function(url = getOption("opengwasr.url"),
                    timeout = default_timeout(),
-                   max_in_flight = default_max_in_flight()) {
+                   max_in_flight = default_max_in_flight(),
+                   caller = NULL) {
   creds <- api_credentials(url)
+  # Kept: it goes into a header, so it has to be one printable line.
+  if (!is.null(caller) && (!is.character(caller) || length(caller) != 1 || is.na(caller) ||
+                           !grepl("^[[:print:]]{1,100}$", caller) || grepl("[^ -~]", caller))) {
+    og_abort("`caller` must be one short string of printable characters, such as \"TwoSampleMR/0.8.0\", or `NULL`.",
+             class = "opengwasr_argument")
+  }
   if (!is.numeric(timeout) || length(timeout) != 1 || is.na(timeout) || !is.finite(timeout) ||
       timeout <= 0) {
     og_abort("`timeout` must be one positive number of seconds.", class = "opengwasr_argument")
@@ -37,6 +49,7 @@ og_api <- function(url = getOption("opengwasr.url"),
       url = creds$url,
       timeout = timeout,
       max_in_flight = as.integer(max_in_flight),
+      caller = caller,
       signed_in_with = creds$scheme,
       user = creds$user,
       # A closure, so the key is not a visible field: str(), dput() and print() never show it.
@@ -56,7 +69,8 @@ format.og_api_source <- function(x, ...) {
     paste0("\u2022 URL: ", x$url),
     paste0("\u2022 Signed in with: ", x$signed_in_with, " (as ", x$user, ")"),
     paste0("\u2022 Timeout: ", format(x$timeout), " s"),
-    paste0("\u2022 Jobs in flight: at most ", x$max_in_flight)
+    paste0("\u2022 Jobs in flight: at most ", x$max_in_flight),
+    if (!is.null(x$caller)) paste0("\u2022 Caller: ", x$caller)
   )
 }
 

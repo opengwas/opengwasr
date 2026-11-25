@@ -217,6 +217,14 @@ og_analyses(local, "s:bmi_irn")[, c("requested_id", "id", "stored_effect_scale",
 
 The rows have every column of the API Source's, in its order, read from each Store Release's `analyses.tsv`, and then the columns of `analyses.tsv` the API Source doesn't return. `outcome_type` is derived as the catalogue derives it. The columns the catalogue adds (`status`, `listed`, `trait_class`, `ancestry_category` and `label_from_source`) are `NA` locally, as is any column a Store Release has no value for.
 
+The columns of `analyses.tsv` the API Source doesn't return come with their types, as opengwasdb defines them: the Top-Hit Counts (`n_hits_5e8`, `n_hits_5e6`, `n_hits_5e4`), Reference Completion's counts (`completion_n_imputed_total`, `completion_n_missing_total`), `n_missing_se_out_of_range` and `eaf_orientation_n` are whole numbers; `completion_median_pearson_r`, `eaf_orientation_r` and `original_sd_dispersion` are numbers; `eaf_scope`, `completed_against` and `eaf_orientation` are text. A blank is `NA` of its column's type. A column opengwasr doesn't know is text. A value that isn't of its column's type (a count of `1.5`, say) is refused with `opengwasr_invalid_analyses`, naming the Store Release, the column and the value, never rounded:
+
+```{r local-release-columns}
+str(og_analyses(local, "residual-rag:a")[, c("n_hits_5e8", "completion_n_imputed_total",
+                                            "completion_median_pearson_r", "eaf_orientation",
+                                            "eaf_orientation_r", "eaf_orientation_n")])
+```
+
 ### Store Releases {#local-releases}
 
 Because a Local Source holds one Store Release of each GWAS Store, a name never has to choose between Store Releases. `releases` works as on the API Source, in every query function that takes Analyses: give a GWAS Store id, such as `"OGS-00011"`, or `"<store_id>/<release_id>"`, naming a Store Release the Source holds. One it doesn't hold is refused, as the API Source refuses an unknown Store Release.

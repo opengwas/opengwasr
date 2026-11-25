@@ -31,8 +31,9 @@
 #'     for [og_clump()]'s one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
 #'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants),
 #'     and `clumps`: `"computed"` (clumped on the fly, as every clumping is today) or, once Store
-#'     Releases carry them, `"stored"`.
-#'   * LD results: `ld`, `ld_choice` and `absent` (see [og_ld_matrix()]).
+#'     Releases carry them, `"stored"`. `ld_from` says where the LD came from: `"call"` (`ld`),
+#'     `"source"` (the Source's LD resource) or `"ancestry"` (each Analysis's Assigned Ancestry).
+#'   * LD results: `ld`, `ld_choice`, `ld_from` (as above) and `absent` (see [og_ld_matrix()]).
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class
 #'   `opengwasr_no_provenance`; one whose rows changed after `rbind()` or subsetting keeps a stale

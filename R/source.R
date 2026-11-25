@@ -43,10 +43,11 @@ og_api <- function(url = getOption("opengwasr.url"),
   # The LD resource first: a refusal needs no credentials.
   if (!is.null(geno_store)) {
     ld_resource_unavailable("A Genotype Store on the API isn't available yet: the API doesn't serve Genotype Stores.",
-                            "Give an LD Store as `ld_store`, or leave both out to match each Analysis's Assigned Ancestry.")
+                            c(i = "Give an LD Store as `ld_store`, or leave both out to match each Analysis's Assigned Ancestry."),
+                            resource = "geno_store")
   }
-  # Kept: an R argument's type. Which names and ancestries exist is the API's list to say, when a call needs it.
-  if (!is.null(ld_store) && (!is.character(ld_store) || length(ld_store) != 1 || is.na(ld_store) || !nzchar(ld_store))) {
+  # Which names and ancestries exist is the API's list to say, when a call needs it.
+  if (!is.null(ld_store) && !is_ld_store_value(ld_store)) {
     og_abort(c("`ld_store` must be one LD Store name or ancestry code, such as \"EUR\", or `NULL`.",
                if (is_plink_reference(ld_store)) c(i = "A PLINK Reference is given to one call, as `ld`, or to a Local Source, `og_local(gwas, bfile = )`.")),
              class = "opengwasr_argument")

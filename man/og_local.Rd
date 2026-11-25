@@ -95,13 +95,17 @@ PLINK binary fileset, and \code{plink} the PLINK binary that reads it, as \code{
 takes them (it checks the fileset and finds PLINK when \code{plink} is \code{NULL}). \code{\link[=og_tophits]{og_tophits()}} then
 clumps on the fly with it (\code{r2} and \code{kb} are required), and \code{\link[=og_clump]{og_clump()}} and \code{\link[=og_ld_matrix]{og_ld_matrix()}}
 read it, each without \code{ld}; a call's \code{ld} overrides it. Without an LD resource, anything that
-needs LD is refused (class \code{opengwasr_ld_resource_required}), naming the LD resources and
-\code{clump = FALSE}: a Local Source never reads the API's LD.
+needs LD is refused (class \code{opengwasr_ld_resource_required}), naming the LD resources in
+\code{e$forms} (\code{"bfile"}, \code{"ld_plink_reference"} and \code{"api_two_step"}: the API's LD Stores, by
+clumping on an API Source you name, \code{og_clump(og_api(), og_tophits(src, ids, clump = FALSE))})
+and, when clumping, \code{clump = FALSE} (\code{e$clump_false}): a Local Source never calls the API itself.
+An LD Store named in a call's \code{ld} is refused the same way (\code{opengwasr_local_unsupported}).
 
 \code{ld_store} (a downloaded LD Store) and \code{geno_store} (a Genotype Store) are refused until
 opengwasr can read them (classes \code{opengwasr_ld_resource_unavailable} and
-\code{opengwasr_local_unsupported}). Giving more than one kind of LD resource is refused (class
-\code{opengwasr_ld_resource_mixed}), and so is \code{plink} without \code{bfile}.
+\code{opengwasr_local_unsupported}, with \code{e$resource}). Giving more than one kind of LD resource is
+refused (class \code{opengwasr_ld_resource_mixed}, with \code{e$given}), and so is \code{plink} without \code{bfile}.
+An error about \code{bfile} or \code{plink} names it in \code{e$arg}.
 }
 
 \examples{
@@ -113,8 +117,8 @@ src
 # With a PLINK Reference as its LD resource, where PLINK is installed:
 bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
 if (!is.null(tryCatch(og_plink_reference(bfile), error = function(e) NULL))) {
-  og_local(file.path(stores, "dense"), bfile = bfile)
-  # then, for example, og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
+  src <- og_local(file.path(stores, "dense"), bfile = bfile)
+  og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
 }
 \dontshow{\}) # examplesIf}
 }

@@ -540,6 +540,7 @@ test_that("og_api(ld_store = ) holds the Source's LD resource and prints it; gen
   expect_false(any(grepl("LD resource", format(fake_source(fake)), fixed = TRUE)))
   expect_null(fake_source(fake)$ld)
   e <- expect_error(fake_source(fake, geno_store = "OGL-00001"), class = "opengwasr_ld_resource_unavailable")
+  expect_equal(e$resource, "geno_store")
   expect_s3_class(e, "opengwasr_refusal")
   expect_false(inherits(e, "opengwasr_local_unsupported"))
   expect_error(fake_source(fake, ld_store = c("EUR", "AFR")), class = "opengwasr_argument")
@@ -565,6 +566,8 @@ test_that("og_tophits() clumps in the API Source's LD resource without `ld`, sen
   expect_equal(unique(by_source$clump_ld_choice), "ancestry_default")
   expect_equal(og_provenance(by_source)$clump, og_provenance(by_ld)$clump)
   expect_equal(og_provenance(by_source)$clump$clumps, "computed")
+  expect_equal(c(og_provenance(by_source)$ld_from, og_provenance(by_ld)$ld_from), c("source", "call"))
+  expect_equal(og_provenance(top(src))$ld_from, "ancestry")
   # An Unassigned Analysis, refused on `src`, is clumped in the Source's LD Store; `ld` overrides it.
   expect_error(og_tophits(src, unassigned), class = "opengwasr_ld_unmatched")
   in_eur <- suppressWarnings(og_tophits(src_eur, unassigned, limit = 2))
@@ -580,7 +583,9 @@ test_that("og_tophits() clumps in the API Source's LD resource without `ld`, sen
   # The progress message says the Source's LD resource chose, not `ld`.
   withr::local_options(opengwasr.progress = TRUE)
   m <- expect_message(top(src_eur), class = "opengwasr_clumping")
-  expect_match(conditionMessage(m), "as the Source's LD resource asks", fixed = TRUE)
+  expect_equal(m$ld_from, "source")
+  expect_equal(expect_message(top(src, ld = "EUR"), class = "opengwasr_clumping")$ld_from, "call")
+  expect_equal(suppressWarnings(expect_message(og_tophits(src, cad, limit = 2, releases = rel), class = "opengwasr_clumping"))$ld_from, "ancestry")
 })
 
 test_that("og_ld_matrix(), og_ld_proxies(), og_ld_reflookup() and og_clump() read the API Source's LD resource without `ld`; `ld` overrides it", {
@@ -590,11 +595,14 @@ test_that("og_ld_matrix(), og_ld_proxies(), og_ld_reflookup() and og_clump() rea
   expect_error(og_ld_matrix(src, pair), class = "opengwasr_ld_unmatched")
   m <- og_ld_matrix(src_eur, pair)
   expect_equal(og_provenance(m)$ld, eur)
+  expect_equal(og_provenance(m)$ld_from, "source")
   expect_equal(og_provenance(m)$ld_choice, "ancestry_default")
   expect_equal(unclass(m), unclass(og_ld_matrix(src, pair, ld = "EUR")), ignore_attr = TRUE)
   m_afr <- suppressWarnings(og_ld_matrix(src_eur, pair, ld = "hgdp1kgp-v2-AFR-k10"))
   expect_equal(og_provenance(m_afr)$ld, "hgdp1kgp-v2-AFR-k10")
   expect_equal(og_provenance(m_afr)$ld_choice, "user")
+  expect_equal(og_provenance(m_afr)$ld_from, "call")
+  expect_equal(og_provenance(og_ld_matrix(src, associations_of(cad, pair)))$ld_from, "ancestry")
   # Associations of an Unassigned Analysis: no ancestry is matched when the Source has an LD Store.
   expect_error(og_ld_matrix(src, associations_of(unassigned, pair)), class = "opengwasr_ld_unmatched")
   expect_equal(og_provenance(og_ld_matrix(src_eur, associations_of(unassigned, pair)))$ld, eur)

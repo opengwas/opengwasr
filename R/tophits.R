@@ -120,7 +120,7 @@ check_tophits_arguments <- function(src, threshold, limit, clump, ld, r2, kb, ca
   check_clump_settings(r2, kb, call)
   # The LD clumping uses, the call's or the Source's, is known now: a Local Source without one, and a
   # PLINK Reference without `r2` and `kb`, are refused before anything is read.
-  if (clump) check_plink_settings(ld_resource(src, ld, call, clumping = TRUE), r2, kb, call)
+  if (clump) check_plink_settings(ld_resource(src, ld, call, clumping = TRUE)$ld, r2, kb, call)
 }
 
 # Kept: the R types of `threshold` and `limit` (shared by og_tophits() and og_phewas()); their

@@ -64,7 +64,7 @@ og_clump <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) UseMethod("og_c
 #' @export
 og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
   check_clump_settings(r2, kb)
-  check_plink_settings(ld_resource(src, ld), r2, kb)
+  check_plink_settings(ld_resource(src, ld)$ld, r2, kb)
   # Kept: an R argument's type (the scores sent are |z|).
   if (!is.data.frame(data) || !is.numeric(data$z)) {
     og_abort("`data` must be a data frame of Associations, with `alid` and `z` columns.", class = "opengwasr_argument")
@@ -155,19 +155,20 @@ clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads, clumps = 
 # and warns about top hits the LD Store doesn't hold.
 clump_contribution <- function(src, clump, info, call) {
   # The call's `ld`, else the Source's LD resource; with neither, each Analysis's Assigned Ancestry.
-  ld <- ld_resource(src, clump$ld, call, clumping = TRUE)
-  if (is_plink_reference(ld)) {
-    return(plink_clump_contribution(choose_ld_store(src, ld, call = call), clump, info, call))
+  resource <- ld_resource(src, clump$ld, call, clumping = TRUE)
+  if (is_plink_reference(resource$ld)) {
+    return(plink_clump_contribution(choose_ld_store(src, resource, call = call), clump, info, call))
   }
   ancestry <- stats::setNames(as.character(info$assigned_ancestry), info$id)
-  group <- if (is.null(ld)) ancestry else rep(if (is.null(clump$ld)) "source" else "ld", length(ancestry))
+  # One group per ancestry when matching, else one for all ("call" or "source").
+  group <- if (resource$from == "ancestry") ancestry else rep(resource$from, length(ancestry))
   groups <- unique(group)
   groups <- groups[order(!is.na(groups))]  # Unassigned first: refused before anything else is chosen
   per <- data.frame(id = info$id, ld = NA_character_, ld_choice = NA_character_, r2 = NA_real_, kb = NA_real_,
                     stringsAsFactors = FALSE)
   for (g in groups) {
     members <- which(group %in% g)
-    chosen <- tryCatch(choose_ld_store(src, ld, ancestry[members], call),
+    chosen <- tryCatch(choose_ld_store(src, resource, ancestry[members], call),
                        opengwasr_ld_unmatched = function(e) {
                          advice <- c(i = "Or pass `clump = FALSE` for unclumped top hits.")
                          e$message <- paste0(e$message, "\n", rlang::format_error_bullets(advice))
@@ -202,33 +203,34 @@ clump_contribution <- function(src, clump, info, call) {
       by <- match(rows$id, per$id)
       size <- rows$clump_size %||% integer()
       list(value = clump_columns(rows, per$ld[by], per$ld_choice[by], per$r2[by], per$kb[by], size),
-           provenance = list(clump = summary))
+           provenance = list(clump = summary, ld_from = resource$from))
     }
   )
 }
 
 # What is about to be clumped, where and how: one message per LD Store chosen, with progress on
-# (`opengwasr.progress`), so scripts stay quiet.
-inform_clumping <- function(ids, chosen, ancestry, settings) {
+# (`opengwasr.progress`), so scripts stay quiet. `group` is the Assigned Ancestry matched, or where
+# the LD came from ("call", "source"); the message carries `ld_from`.
+inform_clumping <- function(ids, chosen, group, settings) {
   if (!progress_enabled()) return(invisible())
   who <- if (length(ids) == 1) ids else paste0(length(ids), " Analyses (", some_ids(ids, 3), ")")
   their <- if (length(ids) == 1) "its" else "their"
   how <- switch(chosen$choice,
-                matched = paste0("matched to ", their, " Assigned Ancestry (", ancestry, ")"),
+                matched = paste0("matched to ", their, " Assigned Ancestry (", group, ")"),
                 # `ld` (or the Source's LD resource) named an ancestry, or the Assigned Ancestry has
                 # several LD Stores and one is declared its default.
-                ancestry_default = if (ancestry %in% c("ld", "source")) {
-                  paste0("the default LD Store of ancestry ", chosen$store$ancestry, ", as ", asked_by(ancestry), " asks")
+                ancestry_default = if (chosen$from != "ancestry") {
+                  paste0("the default LD Store of ancestry ", chosen$store$ancestry, ", as ", asked_by(chosen$from), " asks")
                 } else {
-                  paste0("the declared default LD Store of ", their, " Assigned Ancestry (", ancestry, ")")
+                  paste0("the declared default LD Store of ", their, " Assigned Ancestry (", group, ")")
                 },
-                user = paste0("as ", asked_by(ancestry), " names it"))
+                user = paste0("as ", asked_by(chosen$from), " names it"))
   rlang::inform(c(i = paste0("Clumping ", who, " in LD Store ", chosen$store$ld_store, ", ", how, ": ",
                              clump_setting_text(settings$r2, settings$kb), ".")),
-                class = "opengwasr_clumping")
+                class = "opengwasr_clumping", ld_from = chosen$from)
 }
 
-asked_by <- function(group) if (identical(group, "source")) "the Source's LD resource" else "`ld`"
+asked_by <- function(from) if (identical(from, "source")) "the Source's LD resource" else "`ld`"
 
 clump_setting_text <- function(r2, kb) {
   paste0("r\u00b2 ", signif(r2, 3), " within ", big_number(kb), " kb")

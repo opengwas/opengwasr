@@ -17,19 +17,31 @@ test_that("og_local() refuses the LD resources it can't read yet, a mixture of t
   e <- expect_error(og_local(gwas, ld_store = "/data/ld/EUR"), class = "opengwasr_local_unsupported")
   expect_s3_class(e, "opengwasr_ld_resource_unavailable")
   expect_s3_class(e, "opengwasr_refusal")
+  expect_equal(e$resource, "ld_store")
   e <- expect_error(og_local(gwas, geno_store = "/data/geno/EUR"), class = "opengwasr_local_unsupported")
   expect_s3_class(e, "opengwasr_ld_resource_unavailable")
+  expect_equal(e$resource, "geno_store")
   # Two kinds at once, whichever: refused as an argument error, never one chosen over the other.
-  expect_error(og_local(gwas, bfile = plink_fixture(), ld_store = "/data/ld/EUR"), class = "opengwasr_ld_resource_mixed")
-  expect_error(og_local(gwas, plink = "/usr/bin/plink", geno_store = "/g"), class = "opengwasr_ld_resource_mixed")
+  e <- expect_error(og_local(gwas, bfile = plink_fixture(), ld_store = "/data/ld/EUR"), class = "opengwasr_ld_resource_mixed")
+  expect_equal(e$given, c("plink", "ld_store"))
+  e <- expect_error(og_local(gwas, plink = "/usr/bin/plink", geno_store = "/g"), class = "opengwasr_ld_resource_mixed")
+  expect_equal(e$given, c("plink", "geno_store"))
   e <- expect_error(og_local(gwas, ld_store = "/l", geno_store = "/g"), class = "opengwasr_ld_resource_mixed")
   expect_s3_class(e, "opengwasr_argument")
-  expect_error(og_local(gwas, plink = "/usr/bin/plink"), class = "opengwasr_argument")
-  # og_plink_reference() checks the fileset, and names the argument the user gave.
+  expect_equal(e$given, c("ld_store", "geno_store"))
+  e <- expect_error(og_local(gwas, plink = "/usr/bin/plink"), class = "opengwasr_argument")
+  expect_equal(e$arg, "bfile")
+  # og_plink_reference() checks the fileset and PLINK, naming the argument the user gave.
   e <- expect_error(og_local(gwas, bfile = file.path(tempdir(), "nothing")), class = "opengwasr_plink_reference_missing")
-  expect_match(conditionMessage(e), "`bfile`", fixed = TRUE)
-  expect_error(og_local(gwas, bfile = plink_fixture(), plink = file.path(tempdir(), "no-plink")),
-               class = "opengwasr_plink_not_found")
+  expect_equal(e$arg, "bfile")
+  e <- expect_error(og_local(gwas, bfile = c("a", "b")), class = "opengwasr_argument")
+  expect_equal(e$arg, "bfile")
+  e <- expect_error(og_local(gwas, bfile = plink_fixture(), plink = file.path(tempdir(), "no-plink")),
+                    class = "opengwasr_plink_not_found")
+  expect_equal(e$arg, "plink")
+  # og_plink_reference() itself names its own.
+  expect_equal(expect_error(og_plink_reference(file.path(tempdir(), "nothing")), class = "opengwasr_plink_reference_missing")$arg, "path")
+  expect_equal(expect_error(og_plink_reference(plink_fixture(), plink_bin = "/no/plink"), class = "opengwasr_plink_not_found")$arg, "plink_bin")
 })
 
 test_that("og_local(gwas, plink, bfile) holds the PLINK Reference og_plink_reference() builds, and prints it", {
@@ -52,19 +64,23 @@ test_that("a Local Source with no LD resource refuses clumping, naming the LD fo
   local <- dense_bare()
   e <- expect_error(og_tophits(local, bmi), class = "opengwasr_ld_resource_required")
   expect_s3_class(e, "opengwasr_refusal")
-  expect_match(conditionMessage(e), "`clump = FALSE`", fixed = TRUE)
-  expect_match(conditionMessage(e), "bfile", fixed = TRUE)
-  expect_match(conditionMessage(e), "og_plink_reference", fixed = TRUE)
+  # It names the LD forms (the Source's PLINK Reference, one for this call, the API's LD Stores in
+  # two steps) and `clump = FALSE`.
+  expect_equal(e$forms, c("bfile", "ld_plink_reference", "api_two_step"))
+  expect_true(e$clump_false)
   top <- og_tophits(local, bmi, clump = FALSE)
   expect_equal(nrow(top), 8)
   expect_false(any(clump_cols %in% names(top)))
   # The other LD verbs refuse it the same way, without the clumping advice.
   e <- expect_error(og_ld_matrix(local, c("rs5000", "rs1000")), class = "opengwasr_ld_resource_required")
-  expect_no_match(conditionMessage(e), "clump = FALSE", fixed = TRUE)
+  expect_false(e$clump_false)
+  expect_equal(e$forms, c("bfile", "ld_plink_reference", "api_two_step"))
   expect_error(og_clump(local, top, r2 = 0.001, kb = 10000), class = "opengwasr_ld_resource_required")
   # An LD Store named in `ld` would make a local query call the API: refused.
   e <- expect_error(og_tophits(local, bmi, ld = "EUR"), class = "opengwasr_local_unsupported")
   expect_s3_class(e, "opengwasr_ld_resource_unavailable")
+  expect_equal(e$resource, "ld_store")
+  expect_equal(e$forms, c("ld_plink_reference", "bfile", "api_two_step"))
   expect_error(og_ld_matrix(local, "rs5000", ld = "EUR"), class = "opengwasr_local_unsupported")
   expect_error(og_clump(local, top, ld = "EUR"), class = "opengwasr_local_unsupported")
   # LD Stores only: refused on any Local Source.
@@ -106,6 +122,7 @@ test_that("og_tophits() on a Local Source with a PLINK Reference clumps on the f
   expect_equal(prov$clump, data.frame(id = bmi, ld = ref$path, ld_choice = "user", r2 = 0.001, kb = 10000,
                                       hits = 8, absent = 2, leads = 3, clumps = "computed"))
   expect_equal(prov$plink_bin, ref$plink_bin)
+  expect_equal(prov$ld_from, "source")
   expect_equal(prov$store_releases, "s/r")
   expect_match(format(prov), "3 index variants, computed", fixed = TRUE, all = FALSE)
 })
@@ -117,6 +134,8 @@ test_that("the Source's PLINK Reference clumps exactly as the same reference giv
   by_ld <- suppressMessages(og_tophits(dense_bare(), bmi, ld = ref, r2 = 0.001, kb = 10000))
   expect_equal(by_source, by_ld, ignore_attr = TRUE)
   expect_equal(og_provenance(by_source)$clump, og_provenance(by_ld)$clump)
+  # Provenance says where the LD came from.
+  expect_equal(c(og_provenance(by_source)$ld_from, og_provenance(by_ld)$ld_from), c("source", "call"))
   # And as og_clump() with that reference and no Source at all, on the unclumped rows (the path the
   # API Source's `ld = og_plink_reference()` takes): the same index variants, columns and settings.
   hits <- og_tophits(dense_bare(), bmi, clump = FALSE)
@@ -158,6 +177,7 @@ test_that("og_clump() and og_ld_matrix() on a Local Source read its PLINK Refere
   prov <- og_provenance(m)
   expect_equal(prov$ld, ref$path)
   expect_equal(prov$ld_choice, "user")
+  expect_equal(prov$ld_from, "source")
   expect_equal(prov$absent, character())
   # The lookup read the Store Release `s/r`, and ran no Job.
   expect_equal(prov$store_releases, "s/r")
@@ -181,6 +201,7 @@ test_that("`ld` overrides a Local Source's PLINK Reference for one call", {
   src <- dense_plink()
   m <- og_ld_matrix(src, c("rs5000", "rs1000"), ld = other)
   expect_equal(og_provenance(m)$ld, other$path)
+  expect_equal(og_provenance(m)$ld_from, "call")
   expect_equal(og_provenance(og_ld_matrix(src, c("rs5000", "rs1000")))$ld, ref$path)
   top <- suppressMessages(og_tophits(src, bmi, ld = other, r2 = 0.001, kb = 10000))
   expect_equal(unique(top$clump_ld), other$path)

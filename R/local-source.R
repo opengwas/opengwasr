@@ -75,13 +75,17 @@
 #' takes them (it checks the fileset and finds PLINK when `plink` is `NULL`). [og_tophits()] then
 #' clumps on the fly with it (`r2` and `kb` are required), and [og_clump()] and [og_ld_matrix()]
 #' read it, each without `ld`; a call's `ld` overrides it. Without an LD resource, anything that
-#' needs LD is refused (class `opengwasr_ld_resource_required`), naming the LD resources and
-#' `clump = FALSE`: a Local Source never reads the API's LD.
+#' needs LD is refused (class `opengwasr_ld_resource_required`), naming the LD resources in
+#' `e$forms` (`"bfile"`, `"ld_plink_reference"` and `"api_two_step"`: the API's LD Stores, by
+#' clumping on an API Source you name, `og_clump(og_api(), og_tophits(src, ids, clump = FALSE))`)
+#' and, when clumping, `clump = FALSE` (`e$clump_false`): a Local Source never calls the API itself.
+#' An LD Store named in a call's `ld` is refused the same way (`opengwasr_local_unsupported`).
 #'
 #' `ld_store` (a downloaded LD Store) and `geno_store` (a Genotype Store) are refused until
 #' opengwasr can read them (classes `opengwasr_ld_resource_unavailable` and
-#' `opengwasr_local_unsupported`). Giving more than one kind of LD resource is refused (class
-#' `opengwasr_ld_resource_mixed`), and so is `plink` without `bfile`.
+#' `opengwasr_local_unsupported`, with `e$resource`). Giving more than one kind of LD resource is
+#' refused (class `opengwasr_ld_resource_mixed`, with `e$given`), and so is `plink` without `bfile`.
+#' An error about `bfile` or `plink` names it in `e$arg`.
 #'
 #' @param gwas The directory of each GWAS Store, or of each Store Release: a character vector,
 #'   one element per GWAS Store.
@@ -103,8 +107,8 @@
 #' # With a PLINK Reference as its LD resource, where PLINK is installed:
 #' bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
 #' if (!is.null(tryCatch(og_plink_reference(bfile), error = function(e) NULL))) {
-#'   og_local(file.path(stores, "dense"), bfile = bfile)
-#'   # then, for example, og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
+#'   src <- og_local(file.path(stores, "dense"), bfile = bfile)
+#'   og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
 #' }
 #' @export
 og_local <- function(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL) {
@@ -148,8 +152,8 @@ format.og_local_source <- function(x, ...) {
 }
 
 # The LD resource of `og_local()` (ADR 0006): a PLINK Reference from `bfile` (and `plink`), built by
-# og_plink_reference(), which checks both; the kinds that can't be read yet are refused, as is more
-# than one kind.
+# plink_reference(), which checks both and names them; the kinds that can't be read yet are refused,
+# as is more than one kind (`given`: "plink", "ld_store", "geno_store").
 local_ld_resource <- function(plink, bfile, ld_store, geno_store, call = rlang::caller_env()) {
   given <- c(plink = !is.null(plink) || !is.null(bfile), ld_store = !is.null(ld_store), geno_store = !is.null(geno_store))
   if (sum(given) > 1) {
@@ -157,33 +161,26 @@ local_ld_resource <- function(plink, bfile, ld_store, geno_store, call = rlang::
                geno_store = "`geno_store` (a Genotype Store)")[given]
     og_abort(c(paste0("A Local Source carries one LD resource, but ", paste(named, collapse = " and "), " were given."),
                i = "Give one of them; a call's `ld` can use another for that call."),
-             class = c("opengwasr_ld_resource_mixed", "opengwasr_argument"), call = call)
+             class = c("opengwasr_ld_resource_mixed", "opengwasr_argument"), given = names(given)[given], call = call)
   }
+  instead <- c(i = "Give a PLINK Reference instead: `og_local(gwas, bfile = \"<prefix>\")`.")
   if (given[["ld_store"]]) {
-    ld_resource_unavailable("Reading a downloaded LD Store isn't available yet.",
-                            "Give a PLINK Reference instead: `og_local(gwas, bfile = \"<prefix>\")`.",
-                            local = TRUE, call = call)
+    ld_resource_unavailable("Reading a downloaded LD Store isn't available yet.", instead,
+                            resource = "ld_store", local = TRUE, call = call)
   }
   if (given[["geno_store"]]) {
-    ld_resource_unavailable("Reading a downloaded Genotype Store isn't available yet.",
-                            "Give a PLINK Reference instead: `og_local(gwas, bfile = \"<prefix>\")`.",
-                            local = TRUE, call = call)
+    ld_resource_unavailable("Reading a downloaded Genotype Store isn't available yet.", instead,
+                            resource = "geno_store", local = TRUE, call = call)
   }
   if (is.null(bfile)) {
     if (!is.null(plink)) {
       og_abort(c("`plink` is the PLINK binary that reads `bfile`, but no `bfile` was given.",
                  i = "Give the PLINK fileset's prefix as `bfile`."),
-               class = "opengwasr_argument", call = call)
+               class = "opengwasr_argument", arg = "bfile", call = call)
     }
     return(NULL)
   }
-  rlang::try_fetch(og_plink_reference(bfile, plink),
-                   # Its errors name its own arguments: here they are `bfile` and `plink`.
-                   opengwasr_error = function(e) {
-                     e$call <- call
-                     e$message <- gsub("`plink_bin`", "`plink`", gsub("`path`", "`bfile`", e$message, fixed = TRUE), fixed = TRUE)
-                     rlang::cnd_signal(e)
-                   })
+  plink_reference(bfile, plink, args = c(path = "bfile", plink_bin = "plink"), call = call)
 }
 
 # print() for the Local Source's objects: their format(), one line each.

@@ -151,6 +151,7 @@ test_that("og_tophits() with a PLINK Reference fetches unclumped hits, clumps th
   expect_equal(unique(top$clump_ld), ref$path)
   expect_equal(unique(top$clump_ld_choice), "user")
   expect_equal(og_provenance(top)$clump$ld, ref$path)
+  expect_equal(og_provenance(top)$plink_version, ref$plink_version)
   clump <- og_provenance(top)$clump
   expect_equal(c(clump$id, clump$hits, clump$absent, clump$leads), c(cad, "5", "1", "2"))
   expect_equal(c(clump$r2, clump$kb), c(0.2, 100))

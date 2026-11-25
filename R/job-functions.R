@@ -9,6 +9,9 @@
 #' `og_job_result()` waits for them and returns what the query function would have returned, with
 #' the same columns and [og_provenance()]; `og_job_cancel()` cancels them.
 #'
+#' A Local Source answers every query at once, so it has no Jobs: these functions refuse it, with
+#' `opengwasr_local_unsupported`.
+#'
 #' The query function runs as usual up to submitting its Jobs: its argument checks and lookups of
 #' Analyses (and any Job it needs to prepare, such as resolving rsIDs) happen in `og_submit()`, and
 #' finish before it returns. What the result is shaped from is fixed then, so `og_job_result()`
@@ -43,6 +46,7 @@
 #' }
 #' @export
 og_submit <- function(src, fn, ...) {
+  refuse_local_jobs(src)
   # Kept: og_submit()'s contract with the query function it runs, which the API never sees.
   check_source(src)
   if (!is.function(fn)) {
@@ -87,6 +91,7 @@ job_ids <- function(job, call = rlang::caller_env()) {
 #' @rdname og_submit
 #' @export
 og_job_status <- function(src, job) {
+  refuse_local_jobs(src)
   check_source(src)
   ids <- job_ids(job)
   local_query(src, query = FALSE)
@@ -110,6 +115,7 @@ job_frame <- function(ids, statuses) {
 #' @rdname og_submit
 #' @export
 og_job_result <- function(src, job, raw = FALSE) {
+  refuse_local_jobs(src)
   check_source(src)
   # Kept: only a handle says how its rows are shaped, and whether it is whole; the API can't say.
   if (!inherits(job, "og_jobs")) {
@@ -157,6 +163,7 @@ og_job_result <- function(src, job, raw = FALSE) {
 #' @rdname og_submit
 #' @export
 og_job_cancel <- function(src, job) {
+  refuse_local_jobs(src)
   check_source(src)
   ids <- job_ids(job)
   deadline <- local_query(src, query = FALSE)

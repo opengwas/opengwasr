@@ -78,7 +78,9 @@ og_local <- function(path) {
   handles <- new.env(parent = emptyenv())
   for (i in seq_along(found)) assign(rows$path[[i]], found[[i]]$release, envir = handles)
   structure(
-    list(releases = rows[c("store_id", "release_id", "format_version", "path")], handles = handles),
+    list(releases = rows[c("store_id", "release_id", "format_version", "path")], handles = handles,
+         # A local query waits for nothing: the deadline a call sets (local_query()) is never reached.
+         timeout = Inf),
     class = "og_local_source"
   )
 }
@@ -215,6 +217,67 @@ local_release <- function(src, store_id, call = rlang::caller_env()) {
   }
   release
 }
+
+# The query facade over a Store Release this Source holds (ogquery's `StoreRelease.query()`), kept
+# beside its handle: making one reads the release's indexes, so it is made once, and again only
+# when it no longer reaches Python.
+local_facade <- function(src, store_id, call = rlang::caller_env()) {
+  release <- local_release(src, store_id, call)
+  key <- paste0("query:", src$releases$path[src$releases$store_id == store_id])
+  facade <- get0(key, envir = src$handles, inherits = FALSE)
+  if (is.null(facade) || local_is_stale(facade)) {
+    facade <- local_open_facade(release)
+    assign(key, facade, envir = src$handles)
+  }
+  facade
+}
+
+# What a Local Source refuses ---------------------------------------------------------------------
+# The verbs with no local meaning (#32, recorded on the epic): a Local Source has no API to ask, no
+# queue, and no LD Store. Queries a Local Source doesn't answer yet refuse through check_source().
+
+local_unsupported <- function(message, advice, call = rlang::caller_env()) {
+  og_abort(c(message, i = advice), class = "opengwasr_local_unsupported", refusal = TRUE, call = call)
+}
+
+#' @export
+og_status.og_local_source <- function(src) {
+  local_unsupported("A Local Source has no API whose status to report.",
+                    "Check its Python, ogquery and Store Releases with `og_local_check(src)`.")
+}
+
+#' @export
+og_user.og_local_source <- function(src) {
+  local_unsupported("A Local Source has no API to sign in to, so no user or allowance.",
+                    "Check its Python, ogquery and Store Releases with `og_local_check(src)`.")
+}
+
+# A local query is answered at once, so there is no Job to submit, look at, collect or cancel.
+refuse_local_jobs <- function(src, call = rlang::caller_env()) {
+  if (!inherits(src, "og_local_source")) return(invisible())
+  local_unsupported("A Local Source answers a query at once, so it has no Jobs.",
+                    "Call the query function itself, such as `og_tophits(src, ...)`.", call = call)
+}
+
+# Reading downloaded LD Stores is out of scope (epic #2). Clumping (og_clump()) is #34's.
+refuse_local_ld <- function(src, ...) {
+  local_unsupported("A Local Source doesn't read LD Stores.",
+                    paste0("Use the API Source, `og_api()`, as `src` for its LD Stores, ",
+                           "or a PLINK Reference (`og_plink_reference()`) as `ld` with `src = NULL`."),
+                    call = rlang::caller_env())
+}
+
+#' @export
+og_ld_stores.og_local_source <- function(src) refuse_local_ld(src)
+
+#' @export
+og_ld_matrix.og_local_source <- function(src, variants, ld = NULL, fill_below_t_far = FALSE) refuse_local_ld(src)
+
+#' @export
+og_ld_proxies.og_local_source <- function(src, variants, ld = NULL, r2 = 0.8, kb = 10000) refuse_local_ld(src)
+
+#' @export
+og_ld_reflookup.og_local_source <- function(src, variants, ld = NULL) refuse_local_ld(src)
 
 # Paths, before any Python ------------------------------------------------------------------------
 
@@ -575,3 +638,41 @@ local_ogquery_versions <- function(modules) {
 }
 
 local_is_stale <- function(object) reticulate::py_is_null_xptr(object)
+
+local_open_facade <- function(release) release$query()
+
+# A Store Release's Analyses, `analyses_table()`: every column of analyses.tsv, as text ("" for
+# none), one row per Analysis in the file's order, as a data frame of character columns.
+local_read_analyses <- function(facade) {
+  table <- facade$analyses_table()
+  table <- table[order(as.integer(names(table)))]
+  columns <- if (length(table)) names(table[[1]]) else c("analysis_index", "analysis_id")
+  frame <- lapply(stats::setNames(columns, columns), function(name) {
+    vapply(table, function(row) as.character(row[[name]] %||% ""), character(1), USE.NAMES = FALSE)
+  })
+  as.data.frame(frame, stringsAsFactors = FALSE, optional = TRUE)
+}
+
+# Variant rows, as ogquery's facade gives them (a dict keyed by variant index), as a data frame
+# of lookup_fields(), in variant-index order; a missing rsID is NA.
+local_variant_frame <- function(found) {
+  if (!length(found)) return(lookup_fields())
+  found <- found[order(as.integer(names(found)))]
+  text <- function(name) vapply(found, function(row) as.character(row[[name]] %||% NA_character_), "", USE.NAMES = FALSE)
+  data.frame(variant_index = as.integer(names(found)), alid = text("alid"), chromosome = text("chromosome"),
+             position = vapply(found, function(row) as.integer(row$position), 0L, USE.NAMES = FALSE),
+             effect_allele = text("effect_allele"), other_allele = text("other_allele"), rsid = text("rsid"),
+             stringsAsFactors = FALSE)
+}
+
+# The variants rsIDs or ALIDs name in a Store Release (`variants()`): every variant a multiallelic
+# rsID names; an identifier the release lacks has none.
+local_read_variants <- function(facade, identifiers) {
+  local_variant_frame(facade$variants(as.list(identifiers)))
+}
+
+# The variants at `start` to `end` on `chromosome` (`variants_in_range()`). A chromosome no ALID
+# spells raises ogquery's UnsupportedChromosome.
+local_read_variants_in_range <- function(facade, chromosome, start, end = start) {
+  local_variant_frame(facade$variants_in_range(chromosome, as.integer(start), as.integer(end)))
+}

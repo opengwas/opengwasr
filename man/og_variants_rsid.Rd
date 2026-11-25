@@ -10,7 +10,7 @@ og_variants_rsid(src, rsids, releases = NULL)
 og_variants_chrpos(src, positions, releases = NULL)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}}.}
 
 \item{rsids}{rsIDs, such as \code{"rs1421085"}.}
 
@@ -27,7 +27,8 @@ A data frame with \code{alid}, \code{chromosome}, \code{position}, \code{effect_
 \code{og_variants_rsid()} returns the variants the GWAS Stores' own variant tables hold for \code{rsids};
 \code{og_variants_chrpos()} those at \code{positions}. They are how you find ALIDs (see \code{vignette("opengwasr")}).
 Each runs as Jobs on the API, split when it is over a Job's limits (1,000 values, 10 GWAS Stores),
-and waits for them.
+and waits for them. A Local Source (\code{\link[=og_local]{og_local()}}) answers from the Store Releases it holds, with
+the same rows.
 }
 \details{
 You get every match: one row per ALID per Store Release that holds it, so a multiallelic rsID, or a

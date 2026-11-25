@@ -39,6 +39,9 @@ function's arguments after the Source. \code{og_job_status()} looks at Jobs with
 the same columns and \code{\link[=og_provenance]{og_provenance()}}; \code{og_job_cancel()} cancels them.
 }
 \details{
+A Local Source answers every query at once, so it has no Jobs: these functions refuse it, with
+\code{opengwasr_local_unsupported}.
+
 The query function runs as usual up to submitting its Jobs: its argument checks and lookups of
 Analyses (and any Job it needs to prepare, such as resolving rsIDs) happen in \code{og_submit()}, and
 finish before it returns. What the result is shaped from is fixed then, so \code{og_job_result()}

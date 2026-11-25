@@ -21,6 +21,10 @@ A list (class \code{og_status} or \code{og_user}, with a print method). Read its
 \code{og_status()} reports whether the API is up and the limits it applies. \code{og_user()} reports who
 you are signed in as, and your allowance.
 }
+\details{
+A Local Source has no API to ask: both refuse it (\code{opengwasr_local_unsupported}); check its
+setup with \code{\link[=og_local_check]{og_local_check()}}.
+}
 \examples{
 \dontrun{
 src <- og_api()

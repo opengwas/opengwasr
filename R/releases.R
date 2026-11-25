@@ -5,7 +5,10 @@
 # /api/batches). Omitting `releases` means that rule for every GWAS Store the API serves, sent
 # explicitly: the API's own default is "every configured Store Release", which isn't a choice.
 # The API gives no recency field, so when a GWAS Store serves several Store Releases opengwasr
-# refuses to guess which is latest, and lists them; "<store_id>/<release_id>" pins one.
+# refuses to guess which is latest, and lists them; "<store_id>/<release_id>" pins one. A Local
+# Source holds one Store Release of each GWAS Store (ADR 0002, clarification of 25 November 2026):
+# its candidates are those (source_releases()), and a pin it doesn't hold is refused where it is
+# read, as the API refuses one (local_releases_held()).
 
 #' @param releases `NULL` (the sole served Store Release of every GWAS Store), or a character
 #'   vector of GWAS Store ids and `<store_id>/<release_id>` pins.
@@ -22,7 +25,7 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
     )
   }
   served <- NULL
-  serves <- function() served %||% (served <<- api_perform(src, "api/batches", call = call)$batches)
+  serves <- function() served %||% (served <<- source_releases(src, call))
   # Omitted: every GWAS Store the API serves, sent explicitly (the API's own default is every
   # configured Store Release, which isn't a choice).
   releases <- unique(releases %||% vapply(serves(), function(b) b$store_id, ""))
@@ -36,7 +39,8 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
     # Kept: the API takes only `<store_id>/<release_id>`, so a bare GWAS Store id is resolved here,
     # from the API's list of what it serves (class of the API's code for an unknown release).
     if (length(match) == 0) {
-      og_abort(paste0("The API serves no Store Release of `", item, "`."),
+      og_abort(paste0(if (inherits(src, "og_local_source")) "This Local Source holds" else "The API serves",
+                      " no Store Release of `", item, "`."),
                class = "opengwasr_release_not_found", api_error = "release_not_found", store_id = item,
                call = call)
     }
@@ -56,6 +60,17 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
     )
   }
   out
+}
+
+# The Store Releases a Source answers from, each `list(store_id, release_id, ...)`: the API's, those
+# /api/batches says it serves; a Local Source's, those it holds (one of each GWAS Store, so the
+# "several" refusal above never applies to it).
+source_releases <- function(src, call) {
+  if (inherits(src, "og_local_source")) {
+    held <- src$releases
+    return(lapply(seq_len(nrow(held)), function(i) list(store_id = held$store_id[[i]], release_id = held$release_id[[i]])))
+  }
+  api_perform(src, "api/batches", call = call)$batches
 }
 
 # The Store Releases of the Analyses asked for (`info`, Analysis metadata with `store_id`): a query,

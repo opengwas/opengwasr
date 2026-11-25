@@ -134,6 +134,11 @@ guard_jobs <- function(src, st, call, expr) {
 # with; a lookup has none.
 run_window <- function(src, requests, deadline, call = rlang::caller_env(), plan = NULL, wait = TRUE) {
   force(call)
+  # A Local Source answers each request at once, in order (R/local-request.R); it has no Jobs to
+  # submit, so og_submit() refuses it before here.
+  if (inherits(src, "og_local_source")) {
+    return(lapply(requests, function(r) local_request(src, r$path, r$body, call)))
+  }
   n <- length(requests)
   results <- vector("list", n)
   st <- list2env(list(jobs = list(), collected = 0L, n = n, plan = plan %||% list(requests = requests)))

@@ -17,7 +17,7 @@ This vignette follows one journey: set up Python, open your Store Releases, run 
 > - `local-translate` and `local-ld-api`: they call the OpenGWAS API, and this vignette never touches the network.
 > - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever one is found (`plink_ready`: genetics.binaRies, or `plink` on the `PATH`), as in CI; without one their code is shown unevaluated.
 > - `local-stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39).
-> - `local-twosamplemr`: TwoSampleMR on a Local Source comes in a later step (#36), on full-size Store Releases.
+> - `local-twosamplemr`: it needs TwoSampleMR 0.8.0 (#36), which opengwasr doesn't depend on, and full-size Store Releases.
 >
 > The grey output blocks marked `# illustrative` are shaped the way opengwasr returns results, not recorded from a run.
 
@@ -358,18 +358,19 @@ cad <- og_clump(og_api(ld_store = "EUR"), hits)  # or the EUR LD Store
 
 ## TwoSampleMR on a Local Source {#local-twosamplemr}
 
-TwoSampleMR 0.8.0's data functions take an opengwasr Source as `src`, so a pipeline runs on your Store Releases once you give them a Local Source:
-
-<!-- #36 settles how clumping finds LD for a Local Source -->
+TwoSampleMR 0.8.0's data functions take an opengwasr Source as `src`, so a pipeline runs on your Store Releases once you give them a Local Source. `extract_instruments()` clumps by default, so give the Source an LD resource too, here a PLINK Reference:
 
 ```{r local-twosamplemr, eval = FALSE}
 library(TwoSampleMR)
-src <- og_local(c("/data/opengwas/OGS-00009", "/data/opengwas/OGS-00011"))
+src <- og_local(gwas = c("/data/opengwas/OGS-00009", "/data/opengwas/OGS-00011"),
+                bfile = "/data/ld/1kg/EUR")
 
-exposure <- extract_instruments("OGS-00009:ukb-b-19953", src = src)
+exposure <- extract_instruments("OGS-00009:ukb-b-19953", src = src, r2 = 0.001, kb = 10000)
 outcome <- extract_outcome_data(exposure$SNP, "OGS-00011:GCST003116", src = src)
 dat <- harmonise_data(exposure, outcome)
 mr(dat)
 ```
+
+TwoSampleMR clumps with the Source's LD resource. With a PLINK Reference, `r2` and `kb` are required (it has no thresholds of its own), or pass `clump = 0` for unclumped instruments.
 
 Your numbers can differ from ieugwasr's for the reasons in [Migrating from ieugwasr](migrating-from-ieugwasr.html#what-changed).

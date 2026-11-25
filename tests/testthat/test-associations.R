@@ -175,6 +175,15 @@ test_api("eaf and n keep every digit of the API's numbers when a page also holds
   expect_identical(x$n, c(30694.123456789012, 532396))
 }, live = FALSE)
 
+test_that("a result page spaced as json.dumps spaces it reads \".\" in eaf and n as NA, and rsid \".\" as text", {
+  page <- paste('{"eaf": 0.05000000074505806, "n": ".", "rsid": "."}', '{"eaf": ".", "n": 30694.123456789012, "rsid": "rs1"}',
+                sep = "\n")
+  rows <- ndjson_rows(page, "job", NULL)
+  expect_identical(rows$eaf, c(0.05000000074505806, NA))
+  expect_identical(rows$n, c(NA, 30694.123456789012))
+  expect_identical(rows$rsid, c(".", "rs1"))
+})
+
 test_api("an infinite SE gives beta NaN, and pval is the API's own log10_p", {
   x <- og_associations(src, c(snv, "21:2000:A:G"), bmi, releases = rel)
   inf <- x[x$alid == "21:2000:A:G", ]

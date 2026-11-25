@@ -274,30 +274,22 @@ ndjson_rows <- function(ndjson, job_id, call) {
   lines <- strsplit(ndjson, "\n", fixed = TRUE)[[1]]
   lines <- lines[nzchar(trimws(lines))]
   if (length(lines) == 0) return(data.frame())
-  text <- paste0("[", paste(lines, collapse = ","), "]")
+  text <- no_value_as_null(paste0("[", paste(lines, collapse = ","), "]"))
   # The parser's own message quotes the text it choked on, which is the server's, so it is not kept.
   rows <- tryCatch(jsonlite::fromJSON(text, simplifyVector = TRUE), error = function(e) NULL)
   if (!is.data.frame(rows)) job_invalid("A page of its result isn't valid newline-delimited JSON.", job_id, call)
-  exact_numbers(rows, text)
+  rows
 }
 
-# A member holding numbers in some rows and text in others (`eaf` and `n` hold ".", ogquery's marker
-# for none) is made text by jsonlite, each number written with 15 significant digits, which loses
-# the last digits of a double. Such a member (a text column holding ".") is read again from the
-# page parsed as it is: its numbers exactly, and its text as a number, as jsonlite reads "NaN" or
-# "Inf" ("." is NA). A member holding only text, such as `rsid`, is left as it is.
-exact_numbers <- function(rows, text) {
-  mixed <- names(rows)[vapply(rows, function(x) is.character(x) && any(x %in% "."), NA)]
-  if (length(mixed) == 0) return(rows)
-  raw <- jsonlite::fromJSON(text, simplifyVector = FALSE)
-  for (name in mixed) {
-    values <- lapply(raw, `[[`, name)
-    if (!any(vapply(values, is.numeric, NA))) next
-    rows[[name]] <- vapply(values, function(v) {
-      if (is.numeric(v)) as.double(v) else if (is.character(v)) suppressWarnings(as.double(v)) else NA_real_
-    }, 0)
-  }
-  rows
+# The numeric members the API may send as "." (ogquery's marker for none) written as null, before
+# the page is parsed: `eaf` and `n`, the two numbers ogquery's `resolve_rows` spells "."
+# (`_eaf_or_missing`, `_n_or_missing`; rsid and source_alid are text, and keep it). A member holding
+# numbers and "." would otherwise be made text by jsonlite, each number written with 15 significant
+# digits, which loses the last digits of a double. A member name in quotes, then a colon, can't
+# occur inside a JSON string (its quotes would be escaped), so only members match; json.dumps may
+# put a space after the colon.
+no_value_as_null <- function(text) {
+  gsub('"(eaf|n)"\\s*:\\s*"\\."', '"\\1":null', text, perl = TRUE)
 }
 
 # Say so when the API reattached a submission to a Job it already had.

@@ -360,6 +360,6 @@
    ]},
   {"endpoint": "/api/associations/range",
    "body": {"analyses": ["s:bmi_irn"], "chromosome": "27", "start": 1, "end": 1000, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}]},
-   "error": {"status": 400, "body": {"error": "invalid_query", "message": "chromosome '27' is not one of 1-22, X, Y or MT"}}}
+   "error": {"status": 400, "body": {"error": "invalid_request", "message": "Malformed request"}}}
  ]
 }

@@ -15,11 +15,16 @@ resolve.py, schemas.py, jobs.py, main.py), with each step citing the lines it fo
 Store Release through ogquery's public API: the reads ogdb-api moves to under
 opengwas/ogdb-api#192. It never calls opengwasr, so agreement between the two means something.
 
+The requests it answers (each golden query's `requests` in queries.json) were recorded once from
+the requests opengwasr's API Source makes for the query, then reviewed by hand; this answers them
+independently. When opengwasr's requests change, the fake answers the new ones with a 500 naming
+them, and the recording is redone.
+
 Where the bundled releases and the API's code part, this follows the API's code as if the API
 served the bundle's own releases:
   * The bundled copies lack variants.tsv.gz, which ogdb-api's `_capabilities` (releases.py:137-171)
     requires for variant lookups and PheWAS. The bundle's releases have it, so every capability is
-    taken as present.
+    taken as present (a known difference, test-parity.R).
   * Rows carry the fields ogquery's `resolve(..., include_variant_info=True)` gives, less `beta`,
     `pval` and `source_alid`: the API's pinned reader (opengwasdb 42850d8) sends `log10_p` and none
     of those three (opengwasr #33's report, "Rows are ogdb-api's rows").
@@ -73,6 +78,14 @@ class Refusal(Exception):
 def invalid_query(message: str) -> Refusal:
     # main.py:809-811: a ValueError from validate_operation is 400 invalid_query.
     return Refusal(400, "invalid_query", message)
+
+
+def malformed() -> Refusal:
+    """A body its endpoint's model refuses: each operation's own path (main.py:773-784) takes the
+    body as that model, so FastAPI validates it before submit_query, and its RequestValidationError
+    is 400 invalid_request "Malformed request" (errors.py:56-64). The models' field limits and
+    validators (schemas.py) are checked there, never in validate_operation."""
+    return Refusal(400, "invalid_request", "Malformed request")
 
 
 # Opened releases -------------------------------------------------------------------------------
@@ -249,7 +262,8 @@ def associations(body):
 
 
 def associations_range(body):
-    """validate_operation (query_operations.py:57-72, check_chromosome at schemas.py:35-44), then
+    """The body model (schemas.py:161-166: start and end at least 1, and check_chromosome at
+    35-44, refused as malformed()), validate_operation (query_operations.py:57-72), then
     execute_operation (245-264) and keep_analyses (267-283) through the planner."""
     chromosome = str(body["chromosome"])
     text = chromosome.strip()
@@ -257,9 +271,8 @@ def associations_range(body):
         canonical = normalise_chromosome(text) if text else ""
     except VariantNormalisationError:
         canonical = ""
-    if canonical not in CHROMOSOMES:
-        shown = text if len(text) <= 32 else text[:29] + "..."
-        raise invalid_query(f"chromosome {shown!r} is not one of 1-22, X, Y or MT")
+    if canonical not in CHROMOSOMES or body["start"] < 1 or body["end"] < 1:
+        raise malformed()
     analyses = body.get("analyses") or body.get("ids")
     if analyses == ["all"]:
         analyses = None
@@ -289,17 +302,16 @@ def associations_range(body):
 
 
 def tophits(body):
-    """schemas.py:223-227 (threshold in (0, 1), limit 1-10,000), select_operation's tiers
+    """The body model (schemas.py:223-227: threshold in (0, 1), limit 1-10,000, refused as
+    malformed()), select_operation's tiers
     (query_operations.py:94-112, index_tier at top_hits.py:49-60), then `_top_hits` (175-204):
     each Analysis's tier read whole, cut at the threshold (`at_threshold`, top_hits.py:75-84),
     ranked and cut to `limit` (`rank_per_analysis`, top_hits.py:18-37), then all sorted by
     Analysis, |z| descending and genome order."""
     threshold = body["threshold"]
     limit = body["limit"]
-    if not 0 < threshold < 1:
-        raise invalid_query("threshold must be greater than 0 and less than 1")
-    if not 1 <= limit <= MAX_LIMIT:
-        raise invalid_query(f"limit must be from 1 to {MAX_LIMIT}")
+    if not 0 < threshold < 1 or not 1 <= limit <= MAX_LIMIT:
+        raise malformed()
     analyses = body.get("analyses")
     selection = select(body)
     validate_analysis_membership(selection, analyses)
@@ -345,17 +357,16 @@ def tophits(body):
 
 
 def phewas(body):
-    """schemas.py:187-194 (threshold in (0, 1], limit 1-10,000), then `_phewas`
+    """The body model (schemas.py:187-194: threshold in (0, 1], limit 1-10,000, refused as
+    malformed()), then `_phewas`
     (query_operations.py:155-172): each release's Associations of the variant cut at the threshold
     (`significant`, top_hits.py:63-72: threshold 1 keeps everything), to the Analyses named, its
     count added to `total` and its first `limit` kept; all of them sorted by row_key and cut to
     `limit`."""
     threshold = body["threshold"]
     limit = body["limit"]
-    if not 0 < threshold <= 1:
-        raise invalid_query("threshold must be greater than 0 and at most 1")
-    if not 1 <= limit <= MAX_LIMIT:
-        raise invalid_query(f"limit must be from 1 to {MAX_LIMIT}")
+    if not 0 < threshold <= 1 or not 1 <= limit <= MAX_LIMIT:
+        raise malformed()
     selection = select(body)
     total = 0
     rows = []

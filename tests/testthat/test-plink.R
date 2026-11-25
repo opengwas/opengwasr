@@ -269,6 +269,9 @@ test_that("an LD-only Local Source refuses ALIDs it can't look up, naming og_loc
   expect_equal(e$arg, "gwas")
   expect_match(conditionMessage(e), "og_local(gwas = , bfile = )", fixed = TRUE)
   expect_match(conditionMessage(e), "2 ALIDs", fixed = TRUE)
+  # The ways round, as `forms`: Store Releases, an `rsid` column, or the rsIDs looked up on the API.
+  expect_equal(e$forms, c("gwas", "rsid_column", "api_rsids"))
+  expect_match(conditionMessage(e), "og_variants_chrpos(og_api(), positions)", fixed = TRUE)
   data <- data.frame(alid = alids, z = c(5, 4), id = "x")  # no rsid column: the ALIDs' rsIDs would be looked up
   e <- expect_error(og_clump(ld_src, data, r2 = 0.2, kb = 100), class = "opengwasr_gwas_store_required")
   expect_equal(e$alids, alids)

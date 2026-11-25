@@ -50,8 +50,9 @@ On a Local Source, PLINK clumps on your machine with its PLINK Reference (\code{
 it has one, else the Source's Store Releases' variant table; those with no rsID match are left
 out, with a message (class \code{opengwasr_plink_unmatched}, \code{count}). An LD-only Local Source
 (\code{og_local(bfile = )} with no \code{gwas}) has nothing to look an ALID up in, so \code{data} without an
-\code{rsid} column is refused (class \code{opengwasr_gwas_store_required}, with the ALIDs in \code{alids}). A
-Local Source with no LD resource is refused (\code{opengwasr_ld_resource_required}). Provenance's
+\code{rsid} column is refused (class \code{opengwasr_gwas_store_required}, with the ALIDs in \code{alids}, and
+the ways round in \code{forms}: see \code{\link[=og_local]{og_local()}}). A Local Source with no LD resource is refused
+(\code{opengwasr_ld_resource_required}). Provenance's
 \code{clump} names the reference's path as \code{ld}, and \code{clump_ld} is the same path.
 }
 \examples{

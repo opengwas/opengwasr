@@ -29,10 +29,14 @@ isn't a directory), \code{store_id}, \code{release_id},
 \item \code{duplicates}, the GWAS Stores given more than one Store Release;
 \item \code{unavailable}, the \code{opengwasr_local_unavailable} condition \code{\link[=og_local]{og_local()}} would raise, or
 \code{NULL};
-\item \code{problems}, all of that as sentences, for printing.
+\item \code{problems}, all of that as sentences, for printing;
+\item \code{ld}, the Local Source's PLINK Reference (as \code{\link[=og_ld_resource]{og_ld_resource()}} gives it), or \code{NULL} (paths
+given, or none).
 }
 
-Missing values are \code{NA}.
+Missing values are \code{NA}. An LD-only Local Source (\code{og_local(bfile = )}) has no Store Releases,
+so no Python is looked for: \code{releases} has no rows, \code{python}, \code{ogquery} and \code{reads} are \code{NA}, and
+it reports its PLINK Reference (its fileset, and the PLINK binary and version).
 }
 \description{
 Reports the Python a Local Source uses and how it was chosen, the reticulate and ogquery

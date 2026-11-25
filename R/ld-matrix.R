@@ -29,8 +29,9 @@
 #' table); those with no rsID, or not in the reference, are left out, with a message (class
 #' `opengwasr_plink_unmatched`, `count`). An LD-only Local Source (`og_local(bfile = )` with no
 #' `gwas`) has nothing to look an ALID up in, so ALIDs without an `rsid` column are refused (class
-#' `opengwasr_gwas_store_required`, with the ALIDs in `alids`). A Local Source with no LD resource is
-#' refused (`opengwasr_ld_resource_required`). The matrix holds every pair, in the order of `variants`, and is named
+#' `opengwasr_gwas_store_required`, with the ALIDs in `alids`, and the ways round in `forms`: see
+#' [og_local()]). A Local Source with no LD resource is refused (`opengwasr_ld_resource_required`).
+#' The matrix holds every pair, in the order of `variants`, and is named
 #' `<rsid>_<allele>_<allele>` with the reference's alleles: the sign of r refers to the first one.
 #' `fill_below_t_far` doesn't apply. Provenance's `ld` is the reference's path.
 #'

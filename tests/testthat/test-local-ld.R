@@ -233,9 +233,6 @@ test_that("an LD group given to og_local(inherit = ) replaces the inherited one,
   expect_equal(e$resource, "ld_store")
   e <- expect_error(og_local(inherit = src, geno_store = "/data/geno/EUR"), class = "opengwasr_ld_resource_unavailable")
   expect_false(inherits(e, "opengwasr_ld_resource_mixed"))
-  # `plink` alone is a new LD group without `bfile`, refused as for any Local Source.
-  e <- expect_error(og_local(inherit = src, plink = "plink"), class = "opengwasr_argument")
-  expect_equal(e$arg, "bfile")
   # The constructor's checks apply to what is given.
   e <- expect_error(og_local(inherit = src, bfile = file.path(tempdir(), "nothing")), class = "opengwasr_plink_reference_missing")
   expect_equal(e$arg, "bfile")
@@ -302,10 +299,95 @@ test_that("an LD-only Local Source refuses every GWAS verb with one class, and n
     e <- expect_error(verbs[[name]](), class = "opengwasr_gwas_store_required", info = name)
     expect_s3_class(e, "opengwasr_refusal")
     expect_null(e$alids)
+    expect_equal(e$forms, "gwas")
     expect_equal(e$arg, "gwas")
     expect_match(conditionMessage(e), "og_local(gwas = , bfile = )", fixed = TRUE)
   }
   # What a Local Source refuses anyway, it still refuses as before.
   expect_error(og_ld_proxies(ld_only, "rs5000"), class = "opengwasr_local_unsupported")
   expect_error(og_status(ld_only), class = "opengwasr_local_unsupported")
+})
+
+# A Local Source with Store Releases, never opened (no Python), carrying `ref`.
+held_with <- function(ref) {
+  new_local_source(data.frame(store_id = "s", release_id = "r", format_version = "0.3.0", path = "/nowhere",
+                              stringsAsFactors = FALSE), new.env(parent = emptyenv()), ref)
+}
+
+test_that("og_local(inherit = src, gwas = NULL) drops the Store Releases and keeps the LD: an LD-only Local Source", {
+  local_mocked_bindings(find_plink = function(...) list(bin = "/stand-in/plink", version = "1.90b6.21"),
+                        local_ogquery = function(...) stop("Python was asked for"))
+  ref <- og_ld_resource(og_local(bfile = plink_fixture()))
+  src <- held_with(ref)
+  ld_only <- og_local(inherit = src, gwas = NULL)
+  expect_equal(nrow(ld_only$releases), 0)
+  expect_identical(og_ld_resource(ld_only), ref)
+  expect_true("• Store Releases: none (LD only)" %in% format(ld_only))
+  expect_error(og_tophits(ld_only, bmi), class = "opengwasr_gwas_store_required")
+  # Dropping both leaves nothing.
+  expect_error(og_local(inherit = src, gwas = NULL, bfile = NULL), class = "opengwasr_argument")
+})
+
+test_that("og_local(inherit = src, plink = ) keeps src's bfile and changes the PLINK that reads it", {
+  skip_on_os("windows")
+  dir <- withr::local_tempdir()
+  one <- fake_plink(dir, "plink", plink19_banner)
+  two <- fake_plink(dir, "plink2", plink2_banner)
+  src <- held_with(og_ld_resource(og_local(bfile = plink_fixture(), plink = one)))
+  changed <- og_local(inherit = src, plink = two)
+  ref <- og_ld_resource(changed)
+  expect_equal(ref$path, plink_fixture())
+  expect_equal(ref$plink_bin, two)
+  expect_equal(ref$plink_version, "2.0.0-b.1.4")
+  expect_identical(changed$releases, src$releases)
+  expect_equal(og_ld_resource(src)$plink_bin, one)  # unchanged
+  # The binary is checked as for any Local Source, naming `plink`.
+  e <- expect_error(og_local(inherit = src, plink = file.path(dir, "nothing")), class = "opengwasr_plink_not_found")
+  expect_equal(e$arg, "plink")
+  # With `bfile` too, both are the given ones.
+  other <- withr::local_tempdir()
+  file.copy(paste0(plink_fixture(), c(".bed", ".bim", ".fam")), other)
+  both <- og_ld_resource(og_local(inherit = src, plink = two, bfile = file.path(other, "ref")))
+  expect_equal(both$path, file.path(normalise_path(other), "ref"))
+  # Any other LD argument still replaces the LD resource whole.
+  expect_error(og_local(inherit = src, plink = two, ld_store = "/l"), class = "opengwasr_ld_resource_mixed")
+  expect_error(og_local(inherit = src, ld_store = "/l"), class = "opengwasr_ld_resource_unavailable")
+  expect_null(og_ld_resource(og_local(inherit = src, bfile = NULL)))
+  # With no PLINK Reference to keep, `plink` alone is refused as before.
+  bare <- held_with(NULL)
+  e <- expect_error(og_local(inherit = bare, plink = two), class = "opengwasr_argument")
+  expect_equal(e$arg, "bfile")
+})
+
+test_that("og_local_check() on an LD-only Local Source loads no Python, reports its PLINK Reference, and no Store Releases", {
+  local_mocked_bindings(find_plink = function(...) list(bin = "/stand-in/plink", version = "1.90b6.21"),
+                        local_ogquery = function(...) stop("Python was asked for"),
+                        local_py_started = function() stop("Python was asked for"))
+  ld_only <- og_local(bfile = plink_fixture())
+  check <- og_local_check(ld_only)
+  expect_s3_class(check, "og_local_check")
+  expect_identical(check$ld, og_ld_resource(ld_only))
+  expect_equal(nrow(check$releases), 0)
+  expect_true(is.na(check$python))
+  expect_null(check$unavailable)
+  expect_equal(check$problems, character())
+  shown <- format(check)
+  expect_false(any(grepl("Store Releases", shown, fixed = TRUE)))
+  expect_false(any(grepl("^Python", shown)))
+  expect_true(paste0("PLINK Reference: ", plink_fixture()) %in% shown)
+  expect_true("  PLINK 1.90b6.21: /stand-in/plink" %in% shown)
+})
+
+test_that("og_local_check() on a Local Source with Store Releases and a PLINK Reference reports both", {
+  skip_if_no_local()
+  local_mocked_bindings(find_plink = function(...) list(bin = "/stand-in/plink", version = "1.90b6.21"))
+  src <- og_local(example_releases("dense"), bfile = plink_fixture())
+  check <- og_local_check(src)
+  expect_identical(check$ld, og_ld_resource(src))
+  expect_equal(check$releases$store_id, "s")
+  shown <- format(check)
+  expect_true("Store Releases:" %in% shown)
+  expect_true(paste0("PLINK Reference: ", plink_fixture()) %in% shown)
+  # Given paths, there is no LD resource to report.
+  expect_null(og_local_check(example_releases("dense"))$ld)
 })

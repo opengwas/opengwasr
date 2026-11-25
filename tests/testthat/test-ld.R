@@ -554,11 +554,11 @@ test_that("the LD verbs take no `ld`: an `ld =` call fails", {
   data <- data.frame(id = cad, alid = pair, z = c(5, 4))
   # R's own unused-argument error, before anything is sent.
   before <- length(raw_api(fake$url(), fake_key, "_fake/bodies"))
-  expect_error(og_tophits(src, cad, ld = "EUR"))
-  expect_error(og_clump(src, data, ld = "EUR"))
-  expect_error(og_ld_matrix(src, pair, ld = "EUR"))
-  expect_error(og_ld_proxies(src, snv, ld = "EUR"))
-  expect_error(og_ld_reflookup(src, snv, ld = "EUR"))
+  expect_error(og_tophits(src, cad, ld = "EUR"), regexp = "unused argument")
+  expect_error(og_clump(src, data, ld = "EUR"), regexp = "unused argument")
+  expect_error(og_ld_matrix(src, pair, ld = "EUR"), regexp = "unused argument")
+  expect_error(og_ld_proxies(src, snv, ld = "EUR"), regexp = "unused argument")
+  expect_error(og_ld_reflookup(src, snv, ld = "EUR"), regexp = "unused argument")
   expect_length(raw_api(fake$url(), fake_key, "_fake/bodies"), before)
   for (verb in list(og_tophits, og_clump, og_ld_matrix, og_ld_proxies, og_ld_reflookup)) {
     expect_false("ld" %in% names(formals(verb)))
@@ -587,6 +587,11 @@ test_that("og_api(inherit = src, ld_store = ) keeps src's URL, key, timeout, max
   expect_equal(og_ld_resource(same), "EUR")
   expect_equal(c(same$timeout, same$max_in_flight), c(5, 7))
   expect_null(og_ld_resource(og_api(inherit = src, ld_store = NULL)))
+  # An explicit NULL drops the inherited value, as for the LD resource.
+  no_caller <- og_api(inherit = src, caller = NULL)
+  expect_null(no_caller$caller)
+  expect_equal(c(no_caller$timeout, no_caller$max_in_flight), c(99, 7))
+  expect_equal(og_ld_resource(no_caller), "EUR")
   # It answers on the fake with src's key: the AFR LD Store.
   m <- suppressWarnings(og_ld_matrix(afr, pair))
   expect_equal(og_provenance(m)$ld, "hgdp1kgp-v2-AFR-k10")

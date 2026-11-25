@@ -48,8 +48,9 @@ column, if \code{variants} is a data frame that has one, else by the Source's St
 table); those with no rsID, or not in the reference, are left out, with a message (class
 \code{opengwasr_plink_unmatched}, \code{count}). An LD-only Local Source (\code{og_local(bfile = )} with no
 \code{gwas}) has nothing to look an ALID up in, so ALIDs without an \code{rsid} column are refused (class
-\code{opengwasr_gwas_store_required}, with the ALIDs in \code{alids}). A Local Source with no LD resource is
-refused (\code{opengwasr_ld_resource_required}). The matrix holds every pair, in the order of \code{variants}, and is named
+\code{opengwasr_gwas_store_required}, with the ALIDs in \code{alids}, and the ways round in \code{forms}: see
+\code{\link[=og_local]{og_local()}}). A Local Source with no LD resource is refused (\code{opengwasr_ld_resource_required}).
+The matrix holds every pair, in the order of \code{variants}, and is named
 \verb{<rsid>_<allele>_<allele>} with the reference's alleles: the sign of r refers to the first one.
 \code{fill_below_t_far} doesn't apply. Provenance's \code{ld} is the reference's path.
 

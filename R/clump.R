@@ -36,8 +36,9 @@
 #' it has one, else the Source's Store Releases' variant table; those with no rsID match are left
 #' out, with a message (class `opengwasr_plink_unmatched`, `count`). An LD-only Local Source
 #' (`og_local(bfile = )` with no `gwas`) has nothing to look an ALID up in, so `data` without an
-#' `rsid` column is refused (class `opengwasr_gwas_store_required`, with the ALIDs in `alids`). A
-#' Local Source with no LD resource is refused (`opengwasr_ld_resource_required`). Provenance's
+#' `rsid` column is refused (class `opengwasr_gwas_store_required`, with the ALIDs in `alids`, and
+#' the ways round in `forms`: see [og_local()]). A Local Source with no LD resource is refused
+#' (`opengwasr_ld_resource_required`). Provenance's
 #' `clump` names the reference's path as `ld`, and `clump_ld` is the same path.
 #'
 #' @param src A Source, from [og_api()] or [og_local()], which carries the LD resource.

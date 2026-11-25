@@ -141,7 +141,10 @@ found or \code{NA}, \code{supported}, and \code{suggest}, a supported \code{"pli
 needs no Python. It answers \code{\link[=og_clump]{og_clump()}} and \code{\link[=og_ld_matrix]{og_ld_matrix()}} for data you already have, such as
 top hits from the API Source, when PLINK can match the variants by rsID: a data frame with an
 \code{rsid} column, or rsIDs. ALIDs would need a GWAS Store to look up their rsIDs, so they are refused
-(class \code{opengwasr_gwas_store_required}, with the ALIDs in \code{e$alids}), naming \code{og_local(gwas = , bfile = )}. Every verb that reads Associations or Analyses refuses it with the same class.
+(class \code{opengwasr_gwas_store_required}, with the ALIDs in \code{e$alids}), naming the ways round in
+\code{e$forms}: \code{"gwas"} (\code{og_local(gwas = , bfile = )}), \code{"rsid_column"} (a data frame with an \code{rsid}
+column) and \code{"api_rsids"} (their rsIDs looked up first with \code{og_variants_chrpos(og_api(), positions)}). Every verb that reads Associations or Analyses refuses it with the same class, and
+\code{e$forms} \code{"gwas"}.
 
 \code{ld_store} (a downloaded LD Store) and \code{geno_store} (a Genotype Store) are refused until
 opengwasr can read them (classes \code{opengwasr_ld_resource_unavailable} and
@@ -156,7 +159,9 @@ An error about \code{bfile} or \code{plink} names it in \code{e$arg}.
 inherited one, and the rest come from \code{src}. Without \code{gwas}, its Store Releases are \code{src}'s, not
 opened again. Giving any of \code{plink}, \code{bfile}, \code{ld_store} and \code{geno_store} replaces \code{src}'s LD
 resource whole, never mixed with it: \code{og_local(inherit = src, bfile = ref)} gives \code{src}'s Store
-Releases a PLINK Reference, and \code{og_local(inherit = src, bfile = NULL)} drops it. What is given is
+Releases a PLINK Reference, and \code{og_local(inherit = src, bfile = NULL)} drops it. The one exception
+is \code{plink} alone: \code{og_local(inherit = src, plink = "plink2")} keeps \code{src}'s PLINK Reference's
+fileset and changes the PLINK that reads it (\code{plink = NULL} finds one again). \code{og_local(inherit = src, gwas = NULL)} drops the Store Releases and keeps the LD resource: an LD-only Local Source. What is given is
 checked as for any other Local Source. Anything but a Local Source as \code{inherit} is refused (class
 \code{opengwasr_argument}).
 }

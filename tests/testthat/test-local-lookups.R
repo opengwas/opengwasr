@@ -161,6 +161,39 @@ test_that("a value of analyses.tsv the catalogue would refuse is refused, never 
   expect_identical(rows$original_sd, c(1.5, NA))
 })
 
+# `ancestry_prop_<population>` (opengwasdb model/analyses.py ANCESTRY_PROP_PREFIX, spec §7a): one
+# column per reference population, each a proportion.
+test_that("a release's ancestry_prop_<population> columns are proportions, as doubles", {
+  skip_if_no_local()
+  path <- release_with_analyses(function(table) {
+    table$ancestry_prop_eur <- c("0.8", "1")
+    table$ancestry_prop_afr <- c("0.2", "")
+    table
+  }, from = "ragged")
+  x <- og_analyses(og_local(path))
+  expect_equal(x$id, c("residual-rag:a", "residual-rag:b"))
+  expect_identical(x$ancestry_prop_eur, c(0.8, 1))
+  expect_identical(x$ancestry_prop_afr, c(0.2, NA))
+  # Typed whichever Analyses are asked for: a blank one alone is a double NA.
+  expect_identical(og_analyses(og_local(path), "residual-rag:b")$ancestry_prop_afr, NA_real_)
+})
+
+test_that("an ancestry proportion outside [0, 1], or not a number, is refused", {
+  table <- data.frame(analysis_index = c("0", "1"), analysis_id = c("a", "b"),
+                      ancestry_prop_eur = c("0.5", "1.2"), stringsAsFactors = FALSE)
+  e <- expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
+  expect_equal(e$column, "ancestry_prop_eur")
+  expect_equal(e$values, "1.2")
+  for (bad in c("-0.1", "high", "NaN")) {
+    table$ancestry_prop_eur <- c("0.5", bad)
+    e <- expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
+    expect_equal(e$values, bad)
+  }
+  table$ancestry_prop_eur <- c("0", "")
+  rows <- finish_analyses(local_analysis_rows(table, "s", "r"), c("s:a", "s:b"))
+  expect_identical(rows$ancestry_prop_eur, c(0, NA))
+})
+
 test_that("a release-only count, number or column opengwasr doesn't know is parsed by its type", {
   table <- data.frame(analysis_index = c("0", "1"), analysis_id = c("a", "b"), n_hits_5e8 = c("3", "-1"),
                       eaf_orientation_r = c("0.5", ""), completion_n_imputed_total = c("", ""),

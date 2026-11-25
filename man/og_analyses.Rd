@@ -57,7 +57,8 @@ The other columns of \code{analyses.tsv} follow, of the types opengwasdb gives t
 (\code{n_hits_5e8}, \code{n_hits_5e6}, \code{n_hits_5e4}, \code{completion_n_imputed_total},
 \code{completion_n_missing_total}, \code{n_missing_se_out_of_range}, \code{eaf_orientation_n}, \code{n_loci_5e8},
 \code{n_unclumped_5e8}) integer; \code{completion_median_pearson_r}, \code{eaf_orientation_r} and
-\code{original_sd_dispersion} double; \code{eaf_scope}, \code{completed_against} and \code{eaf_orientation} text. A
+\code{original_sd_dispersion} double, as is each \verb{ancestry_prop_<population>} (a proportion, from 0
+to 1); \code{eaf_scope}, \code{completed_against} and \code{eaf_orientation} text. A
 blank is NA of its column's type, and a column opengwasr doesn't know is text. A value of
 \code{analyses.tsv} the catalogue would refuse (a sample size that isn't a whole number, say), or
 that isn't of its column's type (a count of \code{1.5}), raises \code{opengwasr_invalid_analyses}, naming

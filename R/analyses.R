@@ -38,7 +38,8 @@
 #' (`n_hits_5e8`, `n_hits_5e6`, `n_hits_5e4`, `completion_n_imputed_total`,
 #' `completion_n_missing_total`, `n_missing_se_out_of_range`, `eaf_orientation_n`, `n_loci_5e8`,
 #' `n_unclumped_5e8`) integer; `completion_median_pearson_r`, `eaf_orientation_r` and
-#' `original_sd_dispersion` double; `eaf_scope`, `completed_against` and `eaf_orientation` text. A
+#' `original_sd_dispersion` double, as is each `ancestry_prop_<population>` (a proportion, from 0
+#' to 1); `eaf_scope`, `completed_against` and `eaf_orientation` text. A
 #' blank is NA of its column's type, and a column opengwasr doesn't know is text. A value of
 #' `analyses.tsv` the catalogue would refuse (a sample size that isn't a whole number, say), or
 #' that isn't of its column's type (a count of `1.5`), raises `opengwasr_invalid_analyses`, naming
@@ -269,17 +270,19 @@ finish_analyses <- function(analyses, requested) {
   analyses
 }
 
-# Each column of analysis_columns as the catalogue's type, and each of release_analysis_columns as
-# opengwasdb's, whatever the rows hold: the one typing of both Sources' Analysis columns, so a
+# Each column of analysis_columns as the catalogue's type, and each of release_analysis_columns (or
+# release_analysis_prefixes) as opengwasdb's, whatever the rows hold: the one typing of both Sources' Analysis columns, so a
 # column's type never depends on which Analyses were asked for. The API's JSON makes a column null
 # in every row logical, and one of whole numbers integer; a Local Source's rows hold
 # catalogue_value()'s text and numbers, and NA (logical) where bind_frames() filled a column one
 # Store Release lacks. A column in neither table is left as it is: text, from a Local Source.
 type_analyses <- function(analyses) {
-  as_type <- list(text = as.character, integer = as.integer, count = as.integer, real = as.double)
+  as_type <- list(text = as.character, integer = as.integer, count = as.integer, real = as.double,
+                  proportion = as.double)
   types <- c(analysis_columns, release_analysis_columns)
-  for (name in intersect(names(types), names(analyses))) {
-    analyses[[name]] <- as_type[[types[[name]]]](analyses[[name]])
+  for (name in names(analyses)) {
+    type <- if (name %in% names(types)) types[[name]] else release_column_type(name)
+    if (!is.na(type)) analyses[[name]] <- as_type[[type]](analyses[[name]])
   }
   analyses
 }
@@ -398,6 +401,19 @@ release_analysis_columns <- c(
   n_loci_5e8 = "count", n_unclumped_5e8 = "count"
 )
 
+# The release-only columns named by a prefix, and their type: `ancestry_prop_<population>`, one per
+# reference population (analyses.py ANCESTRY_PROP_PREFIX; `Analysis.ancestry_prop`, "{population:
+# proportion}"; spec §7a), each a proportion, a number in [0, 1].
+release_analysis_prefixes <- c(ancestry_prop_ = "proportion")
+
+# A release-only column's type: release_analysis_columns', or its prefix's; NA for a column
+# opengwasr doesn't know, which stays text.
+release_column_type <- function(name) {
+  if (name %in% names(release_analysis_columns)) return(release_analysis_columns[[name]])
+  hit <- startsWith(name, names(release_analysis_prefixes))
+  if (any(hit)) release_analysis_prefixes[[which(hit)[[1]]]] else NA_character_
+}
+
 # The columns the catalogue makes rather than reads from analyses.tsv: NA locally, except
 # `outcome_type`, derived as the catalogue derives it (analysis_outcome_type()).
 catalogue_made <- c("status", "listed", "outcome_type", "trait_class", "ancestry_category", "label_from_source")
@@ -405,7 +421,7 @@ catalogue_made <- c("status", "listed", "outcome_type", "trait_class", "ancestry
 # One Store Release's analyses.tsv (all text, "" for none) as the API Source's rows: `store_id`,
 # `analysis_id`, every column of analysis_columns, typed as the catalogue types it (empty is NA,
 # never 0 or ""), and `release_id`; then the file's other columns (empty as NA), each of
-# release_analysis_columns parsed as its type, any other as text, so two Store Releases' rows always
+# release_analysis_columns or release_analysis_prefixes parsed as its type, any other as text, so two Store Releases' rows always
 # bind. ogquery's `analysis_index` is the file's row number, not metadata.
 local_analysis_rows <- function(table, store_id, release_id, call = rlang::caller_env()) {
   n <- nrow(table)
@@ -419,9 +435,9 @@ local_analysis_rows <- function(table, store_id, release_id, call = rlang::calle
   rows$outcome_type <- analysis_outcome_type(rows$stored_effect_scale, rows$sample_size_kind)
   rows$release_id <- rep(release_id, n)
   for (name in setdiff(names(table), c("analysis_index", names(rows)))) {
-    if (name %in% names(release_analysis_columns)) {
-      rows[[name]] <- catalogue_value(trimws(table[[name]]), name, release_analysis_columns[[name]],
-                                      store_id, release_id, call)
+    type <- release_column_type(name)
+    if (!is.na(type)) {
+      rows[[name]] <- catalogue_value(trimws(table[[name]]), name, type, store_id, release_id, call)
       next
     }
     cell <- as.character(table[[name]])
@@ -436,7 +452,8 @@ local_analysis_rows <- function(table, store_id, release_id, call = rlang::calle
 # cells are numbers. A value the catalogue refuses (a number that isn't finite, an integer that
 # isn't a whole number, or one R can't hold) is refused too: the catalogue would never serve it,
 # and opengwasr never rounds one. A release-only column (release_analysis_columns) is parsed the
-# same way, by opengwasdb's type, a count being a whole number that isn't negative; opengwasdb
+# same way, by opengwasdb's type, a count being a whole number that isn't negative and a proportion
+# a number in [0, 1]; opengwasdb
 # writes a number that isn't finite as blank, so "NaN" there is refused. finish_analyses() types
 # them (type_analyses()).
 catalogue_value <- function(cell, name, type, store_id, release_id, call) {
@@ -446,11 +463,13 @@ catalogue_value <- function(cell, name, type, store_id, release_id, call) {
   whole <- type %in% c("integer", "count")
   bad <- !is.na(cell) & (is.na(number) | !is.finite(number) |
                            (whole & (number != round(number) | abs(number) > .Machine$integer.max)) |
-                           (type == "count" & number < 0))
+                           (type == "count" & number < 0) |
+                           (type == "proportion" & (number < 0 | number > 1)))
   if (any(bad)) {
     catalogue <- name %in% names(analysis_columns)
     og_abort(c(paste0("Store Release ", release_names(store_id, release_id), " has a `", name, "` in its analyses.tsv that isn't ",
-                      switch(type, integer = "a whole number", count = "a count (a whole number, 0 or more)", "a finite number"), ": ",
+                      switch(type, integer = "a whole number", count = "a count (a whole number, 0 or more)",
+                             proportion = "a proportion (a number from 0 to 1)", "a finite number"), ": ",
                       some_ids(unique(cell[bad]), 5, quote = "\""), "."),
                i = paste(if (catalogue) "The catalogue refuses such a value, so the API would never serve it." else
                            "opengwasdb's store format never writes such a value there.",

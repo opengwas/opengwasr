@@ -627,7 +627,8 @@ fake_api <- function(world = fake_world()) {
   }
   # In the parity world (fake_parity_world()), a golden Job's generated answer: its rows and
   # metadata as a Job, or the API's error, with the body the API builds (`detail` repeating it, as
-  # fixtures/errors.json records). TRUE when it answered.
+  # fixtures/errors.json records). TRUE when it answered. Each Job route asks it first, before its
+  # own checks, so a golden query is always answered from answers.json, its refusals included.
   parity_job <- function(req, res, endpoint, body) {
     world <- req$app$locals$world
     if (!isTRUE(world$mode$parity)) return(FALSE)
@@ -650,9 +651,9 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     received(req, "/api/tophits", body)
+    if (parity_job(req, res, "/api/tophits", body)) return()
     problems <- body_problems(req, body, "/api/tophits")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
-    if (parity_job(req, res, "/api/tophits", body)) return()
     threshold <- body$threshold %||% 5e-8
     # Each Store Release's tiers are checked when the Job is submitted (query_operations.py:101-112):
     # none at or above the threshold is refused, naming the first such release's GWAS Store.
@@ -717,9 +718,9 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     received(req, "/api/associations", body)
+    if (parity_job(req, res, "/api/associations", body)) return()
     problems <- body_problems(req, body, "/api/associations")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
-    if (parity_job(req, res, "/api/associations", body)) return()
     # The real API also expands rsIDs. The fake does not, so a client that skips resolving them gets
     # no rows (and the tests that look at the submitted body see ALIDs only).
     alids <- unlist(body$variants)
@@ -739,9 +740,9 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     received(req, "/api/variants/rsid", body)
+    if (parity_job(req, res, "/api/variants/rsid", body)) return()
     problems <- body_problems(req, body, "/api/variants/rsid")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
-    if (parity_job(req, res, "/api/variants/rsid", body)) return()
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     rows <- Filter(function(v) v$rsid %in% unlist(body$rsids) &&
                      paste0(v$store_id, "/", v$release_id) %in% wanted, world$variants)
@@ -872,9 +873,9 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     received(req, "/api/phewas", body)
+    if (parity_job(req, res, "/api/phewas", body)) return()
     problems <- body_problems(req, body, "/api/phewas")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
-    if (parity_job(req, res, "/api/phewas", body)) return()
     threshold <- body$threshold %||% 1e-8
     limit <- body$limit %||% 1000L
     held <- world$associations[unique(unlist(body$analyses)) %||% names(world$associations)]
@@ -907,9 +908,9 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     received(req, "/api/associations/range", body)
+    if (parity_job(req, res, "/api/associations/range", body)) return()
     problems <- body_problems(req, body, "/api/associations/range")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
-    if (parity_job(req, res, "/api/associations/range", body)) return()
     # The chromosome is checked with the body, before anything else: refused as a malformed request.
     if (!fake_primary_chromosome(body$chromosome)) {
       return(fail(req, res, "invalid_request", problems = "chromosome is not one of 1-22, X, Y or MT"))
@@ -931,9 +932,9 @@ fake_api <- function(world = fake_world()) {
     world <- req$app$locals$world
     body <- req$json %||% list()
     received(req, "/api/variants/chrpos", body)
+    if (parity_job(req, res, "/api/variants/chrpos", body)) return()
     problems <- body_problems(req, body, "/api/variants/chrpos")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
-    if (parity_job(req, res, "/api/variants/chrpos", body)) return()
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     positions <- sub("^chr", "", unlist(body$positions))
     rows <- Filter(function(v) paste0(v$chromosome, ":", v$position) %in% positions &&
@@ -986,9 +987,10 @@ fake_api <- function(world = fake_world()) {
     first <- page * job$page_rows
     rows <- job$rows[seq_along(job$rows) > first & seq_along(job$rows) <= first + job$page_rows]
     final <- first + job$page_rows >= length(job$rows)
-    # Every number as the API's json.dumps() writes it: one that reads back exactly (17 significant
-    # digits; `digits = NA` gives only 15), and a whole double with its decimal point (-9.0, which
-    # jsonlite reads as a double, not the integer -9).
+    # Every number so that it reads back as the double the API's json.dumps() sends: 17 significant
+    # digits (`digits = NA` gives only 15, which loses the last digits; json.dumps writes the shortest
+    # form that reads back, 0.1 where this writes 0.10000000000000001, the same double), and a whole
+    # double with its decimal point (-9.0, which jsonlite reads as a double, not the integer -9).
     lines <- vapply(rows, function(r) as.character(jsonlite::toJSON(r, auto_unbox = TRUE, null = "null", digits = I(17),
                                                                     always_decimal = TRUE)), "")
     out <- list(page_index = page, row_count = length(rows), ndjson = paste(lines, collapse = "\n"),

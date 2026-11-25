@@ -19,8 +19,11 @@ A Local Source answers queries from Store Releases downloaded to this machine, t
 ogquery, the Store Reader. Give it the directory of each GWAS Store, one element per GWAS Store.
 A GWAS Store directory holds one Store Release, one level down: the directory there holding a
 \code{manifest.json}. It is searched one level down and never deeper, so the Dense Component inside a
-Hybrid Store Release (\verb{<release>/dense/manifest.json}) is never taken for a Store Release. A
-Store Release's own directory (the one holding its \code{manifest.json}) works too. Each Store
+Hybrid Store Release (\verb{<release>/dense/manifest.json}) is never taken for a Store Release, and
+hidden directories (whose names start with \code{.}), such as a build in progress, are skipped. A
+Store Release's own directory (the one holding its \code{manifest.json}) works too. One that has lost
+its \code{manifest.json} (it still holds \code{data.zarr} or \code{analyses.tsv}) is refused, never searched
+as a GWAS Store directory. Each Store
 Release names itself by its manifest (\code{store_id}, \code{release_id}, \code{format_version}), and a Local
 Source holds at most one Store Release of each GWAS Store, so no query ever chooses between
 Store Releases.

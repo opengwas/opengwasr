@@ -15,8 +15,11 @@
 #' ogquery, the Store Reader. Give it the directory of each GWAS Store, one element per GWAS Store.
 #' A GWAS Store directory holds one Store Release, one level down: the directory there holding a
 #' `manifest.json`. It is searched one level down and never deeper, so the Dense Component inside a
-#' Hybrid Store Release (`<release>/dense/manifest.json`) is never taken for a Store Release. A
-#' Store Release's own directory (the one holding its `manifest.json`) works too. Each Store
+#' Hybrid Store Release (`<release>/dense/manifest.json`) is never taken for a Store Release, and
+#' hidden directories (whose names start with `.`), such as a build in progress, are skipped. A
+#' Store Release's own directory (the one holding its `manifest.json`) works too. One that has lost
+#' its `manifest.json` (it still holds `data.zarr` or `analyses.tsv`) is refused, never searched
+#' as a GWAS Store directory. Each Store
 #' Release names itself by its manifest (`store_id`, `release_id`, `format_version`), and a Local
 #' Source holds at most one Store Release of each GWAS Store, so no query ever chooses between
 #' Store Releases.
@@ -137,7 +140,8 @@ print.og_local_source <- print_formatted
 #'   * `reads`, the format series ogquery reads, such as `"0.3"` (any 0.3.x);
 #'   * `releases`, a data frame with one row per path: `path` (as given), `release_path` (the
 #'     Store Release directory it resolved to: itself for a Store Release directory, the one a GWAS
-#'     Store directory holds, or `NA` when it holds none or several), `store_id`, `release_id`,
+#'     Store directory holds, or `NA` when it holds none or several, or the path doesn't exist or
+#'     isn't a directory), `store_id`, `release_id`,
 #'     `format_version`, `readable`, `problem` (`NA`, `"not_release"`, `"several"`, `"format"` or
 #'     `"unavailable"`) and `reason`;
 #'   * `duplicates`, the GWAS Stores given more than one Store Release;
@@ -160,10 +164,7 @@ og_local_check <- function(path) {
   if (inherits(ogquery, "error")) {
     unavailable <- ogquery
     # Which Store Release each path names needs no Python: only its manifest does.
-    release_path <- vapply(path, function(p) {
-      dirs <- release_dirs(p)
-      if (length(dirs) == 1) dirs else NA_character_
-    }, character(1), USE.NAMES = FALSE)
+    release_path <- vapply(path, function(p) release_dir(p)$release_path, character(1), USE.NAMES = FALSE)
     rows <- data.frame(path = path, release_path = release_path, store_id = NA_character_,
                        release_id = NA_character_, format_version = NA_character_,
                        problem = problem$unavailable,
@@ -359,15 +360,34 @@ on_windows <- function() .Platform$OS.type == "windows"
 # Why a Store Release can't be read, as `problem` holds it (NA when it can).
 problem <- list(not_release = "not_release", several = "several", format = "format", unavailable = "unavailable")
 
-# The Store Release directories a path names: itself, when it holds a manifest.json (a Store Release
-# directory); otherwise (a GWAS Store directory) each directory one level down that holds one, and
-# never deeper, so the Dense Component inside a Hybrid Store Release (<release>/dense/manifest.json)
-# is never taken for a Store Release. A path that doesn't exist names itself, for read_release() to
-# refuse. In C-locale order, so the result is the same on every machine.
-release_dirs <- function(path) {
-  if (!dir.exists(path) || has_manifest(path)) return(path)
+# The one rule for which Store Release directory a path names, used with Python and without:
+# `release_path`, that directory or NA, and `candidates`, the Store Release directories found.
+# * A directory holding a manifest.json is a Store Release directory, and names itself.
+# * A directory that looks like a Store Release (it holds data.zarr or analyses.tsv) but has no
+#   manifest.json names none: its manifest is missing. It is never searched as a GWAS Store
+#   directory, so a Hybrid's Dense Component (<release>/dense/manifest.json) is never found there.
+# * Any other directory is a GWAS Store directory: each directory one level down holding a
+#   manifest.json is a candidate, never deeper, and never a hidden one (its name starts with "."),
+#   such as a build in progress. One candidate is its Store Release; none or several name none.
+# * A path that doesn't exist, or is a file, names none.
+# `reason` says why none is named, except for several, which find_release() describes from their
+# manifests. Candidates are in C-locale order, the same on every machine.
+release_dir <- function(path) {
+  none <- function(reason, candidates = character()) {
+    list(release_path = NA_character_, candidates = candidates, reason = reason)
+  }
+  if (!file.exists(path)) return(none("no such directory"))
+  if (!dir.exists(path)) return(none("not a directory"))
+  if (has_manifest(path)) return(list(release_path = path, candidates = path, reason = NA_character_))
+  if (any(file.exists(file.path(path, c("data.zarr", "analyses.tsv"))))) {
+    return(none("a Store Release without its manifest.json"))
+  }
   inside <- list.dirs(path, full.names = TRUE, recursive = FALSE)
-  normalise_path(sort(inside[has_manifest(inside)], method = "radix"))
+  inside <- inside[!startsWith(basename(inside), ".") & has_manifest(inside)]
+  candidates <- normalise_path(sort(inside, method = "radix"))
+  if (length(candidates) == 1) return(list(release_path = candidates, candidates = candidates, reason = NA_character_))
+  none(if (!length(candidates)) "no Store Release in it or one level down (no manifest.json)" else NA_character_,
+       candidates)
 }
 
 has_manifest <- function(dir) utils::file_test("-f", file.path(dir, "manifest.json"))
@@ -376,18 +396,16 @@ has_manifest <- function(dir) utils::file_test("-f", file.path(dir, "manifest.js
 # at `release_path`; or, for a GWAS Store directory holding none or several, the problem, with each
 # one found in `candidates` (its manifest's identity, read as read_release() reads it, and path).
 find_release <- function(path, ogquery) {
-  dirs <- release_dirs(path)
-  if (length(dirs) == 1) {
-    found <- read_release(dirs, ogquery)
+  named <- release_dir(path)
+  if (!is.na(named$release_path)) {
+    found <- read_release(named$release_path, ogquery)
     found$path <- path
     return(found)
   }
   row <- list(path = path, release_path = NA_character_, store_id = NA_character_, release_id = NA_character_,
               format_version = NA_character_, release = NULL)
-  if (!length(dirs)) {
-    return(c(row, list(problem = problem$not_release,
-                       reason = "no Store Release in it or one level down (no manifest.json)")))
-  }
+  dirs <- named$candidates
+  if (length(dirs) < 2) return(c(row, list(problem = problem$not_release, reason = named$reason)))
   ids <- lapply(dirs, manifest_identity, ogquery = ogquery)
   candidates <- data.frame(store_id = vapply(ids, `[[`, "", "store_id"),
                            release_id = vapply(ids, `[[`, "", "release_id"), path = dirs,

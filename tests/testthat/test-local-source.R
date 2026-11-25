@@ -120,6 +120,60 @@ test_that("a GWAS Store directory laid out as this host's resolves to its one St
   expect_true(check$releases$readable)
 })
 
+test_that("a Store Release directory without its manifest.json is refused, never searched as a GWAS Store", {
+  skip_if_no_local()
+  # A Hybrid's own manifest gone (a partial download): its Dense Component, dense/, one level down,
+  # still has one, and must not be taken for a Store Release.
+  broken <- copy_release("hyb-c", environment())
+  unlink(file.path(broken, "manifest.json"))
+  expect_true(file.exists(file.path(broken, "dense", "manifest.json")))
+  e <- expect_error(og_local(broken), class = "opengwasr_not_store_release")
+  expect_equal(e$paths, local_path(broken))
+  expect_length(e$reasons, 1)
+  check <- og_local_check(broken)
+  expect_true(is.na(check$releases$release_path))
+  expect_equal(check$releases$problem, "not_release")
+})
+
+test_that("a hidden directory, such as a build in progress, is never a GWAS Store directory's Store Release", {
+  skip_if_no_local()
+  store <- withr::local_tempdir()
+  file.copy(example_releases("dense"), store, recursive = TRUE)
+  partial <- file.path(store, ".store.opengwasdb.partial.tmp.2209388.fb7a8d459875")
+  dir.create(partial)
+  file.copy(list.files(example_releases("ragged"), full.names = TRUE), partial, recursive = TRUE)
+  expect_true(file.exists(file.path(partial, "manifest.json")))
+  src <- og_local(store)
+  expect_equal(src$releases$path, local_path(file.path(store, "r")))
+  expect_equal(og_local_check(store)$releases$release_path, local_path(file.path(store, "r")))
+})
+
+test_that("a GWAS Store directory whose Store Release is format 0.2.x is refused by format", {
+  skip_if_no_local()
+  old <- release_with_format("0.2.3")
+  e <- expect_error(og_local(dirname(old)), class = "opengwasr_format_unsupported")
+  expect_equal(e$paths, local_path(old))
+  expect_equal(e$format_version, "0.2.3")
+})
+
+test_that("release_path is NA for a path that doesn't exist or is a file, with Python or without", {
+  missing <- file.path(withr::local_tempdir(), "no-such-store")
+  file <- withr::local_tempfile()
+  writeLines("x", file)
+  offline <- local({
+    local_fresh_python()
+    local_mocked_bindings(local_reticulate_installed = function() FALSE,
+                          local_install_reticulate = function() stop("not interactive"))
+    og_local_check(c(missing, file))
+  })
+  expect_equal(offline$releases$release_path, c(NA_character_, NA_character_))
+
+  skip_if_no_local()
+  check <- og_local_check(c(missing, file))
+  expect_equal(check$releases$release_path, c(NA_character_, NA_character_))
+  expect_equal(check$releases$problem, c("not_release", "not_release"))
+})
+
 test_that("og_local_check() reports which Store Release each GWAS Store directory resolved to", {
   skip_if_no_local()
   none <- withr::local_tempdir()
@@ -131,7 +185,7 @@ test_that("og_local_check() reports which Store Release each GWAS Store director
   expect_equal(rows$problem, c(NA, "several", NA, "not_release"))
   expect_equal(rows$readable, c(TRUE, FALSE, TRUE, FALSE))
   expect_false(is.na(rows$reason[[2]]))
-  expect_true(any(grepl(example_releases("dense"), format(check), fixed = TRUE)))
+  expect_identical(expect_output(print(check)), check)
 
   # Without Python, the directories are still resolved: that needs no manifest read.
   local_fresh_python()

@@ -19,7 +19,8 @@ errors: \code{"RETICULATE_PYTHON"}, \code{"use_python"}, \code{"automatic"}, ...
 \item \code{reads}, the format series ogquery reads, such as \code{"0.3"} (any 0.3.x);
 \item \code{releases}, a data frame with one row per path: \code{path} (as given), \code{release_path} (the
 Store Release directory it resolved to: itself for a Store Release directory, the one a GWAS
-Store directory holds, or \code{NA} when it holds none or several), \code{store_id}, \code{release_id},
+Store directory holds, or \code{NA} when it holds none or several, or the path doesn't exist or
+isn't a directory), \code{store_id}, \code{release_id},
 \code{format_version}, \code{readable}, \code{problem} (\code{NA}, \code{"not_release"}, \code{"several"}, \code{"format"} or
 \code{"unavailable"}) and \code{reason};
 \item \code{duplicates}, the GWAS Stores given more than one Store Release;

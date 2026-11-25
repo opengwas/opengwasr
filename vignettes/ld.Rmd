@@ -7,11 +7,15 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-Linkage disequilibrium (LD) is how strongly two variants are inherited together, measured by their correlation r. opengwasr reads LD from **LD Stores** on the OpenGWAS API, or from your own PLINK Reference. This vignette covers each LD operation: choosing the LD, LD matrices, LD proxies, reflookup and clumping.
+Linkage disequilibrium (LD) is how strongly two variants are inherited together, measured by their correlation r. Every Source carries an **LD resource**, which answers LD for it: an **LD Store** on the OpenGWAS API, or your own **PLINK Reference**. This vignette covers each LD operation: choosing the LD, LD matrices, LD proxies, reflookup and clumping.
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the PLINK Reference section, which is shown but not evaluated: building the vignette would need a PLINK binary and a genotype fileset such as 1000 Genomes, which CRAN doesn't have. Its grey output blocks marked `# illustrative` are shaped the way opengwasr returns them (the API isn't involved in them). The package's tests run the same functions with PLINK on a small committed fileset wherever a PLINK binary can be found, as in CI; elsewhere they are skipped.
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except these:
+>
+> - `ld-resource-api` and `ld-resource-override`: the Source's LD resource, `og_api(ld_store = )`, comes in a later step (#34).
+> - `stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39). Its output is illustrative.
+> - The PLINK Reference section, which is shown but not evaluated: building the vignette would need a PLINK binary and a genotype fileset such as 1000 Genomes, which CRAN doesn't have. Its grey output blocks marked `# illustrative` are shaped the way opengwasr returns them (the API isn't involved in them). The package's tests run the same functions with PLINK on a small committed fileset wherever a PLINK binary can be found, as in CI; elsewhere they are skipped.
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
@@ -40,9 +44,42 @@ og_ld_stores(src)
 
 ## Choosing the LD {#choosing-ld}
 
+### The Source's LD resource {#ld-resource}
+
+A Source says where Associations come from, and which **LD resource** answers LD for them. An LD resource is one of three kinds, and each can be on the API or on your machine:
+
+| LD resource | On the API | On your machine |
+|---|---|---|
+| **LD Store**: the precomputed LD of one reference panel | `og_api(ld_store = "EUR")`, an LD Store's name or an ancestry code. Available now | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
+| **Genotype Store**: genotypes of one reference panel, from which LD is computed when asked | `og_api(geno_store = ...)`. Coming, when the API serves Genotype Stores | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
+| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK binary if opengwasr can't find it. Available now |
+| None given | `og_api()`: each Analysis's Assigned Ancestry chooses its LD Store | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give an LD resource |
+
+A form that is coming is refused with an error that says so (class `opengwasr_ld_resource_unavailable`), rather than quietly doing something else. `og_api(ld_store = )` takes what `ld` takes: an LD Store's name, or an ancestry code for that ancestry's LD Store.
+
+Every verb that needs LD uses the Source's LD resource: `og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()`. Here the Source's LD resource is the EUR LD Store, and the top hits are clumped there without `ld`:
+
+```{r ld-resource-api, eval = FALSE}
+src_eur <- og_api(ld_store = "EUR")
+src_eur
+cad_eur <- og_tophits(src_eur, "OGS-00011:GCST003116")
+unique(cad_eur[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
+```
+
+A verb's `ld` overrides the Source's LD resource for that one call ([below](#ld-argument)). The next call uses the Source's again:
+
+```{r ld-resource-override, eval = FALSE}
+basophils <- og_tophits(src_eur, "OGS-00014:GCST90475125", ld = "AMR")
+unique(basophils$clump_ld)
+m <- og_ld_matrix(src_eur, c("16:53772541:A:G", "16:53767042:C:T", "18:60161902:C:T", "2:628504:A:G", "5:75701728:A:AAAAT"))
+og_provenance(m)$ld
+```
+
+The rest of this vignette uses `src`, made with `og_api()`, which has no LD resource of its own, so each Analysis's Assigned Ancestry chooses.
+
 ### Matching by Assigned Ancestry {#ld-store-matching}
 
-By default, opengwasr uses the LD Store that matches each Analysis's **Assigned Ancestry**, the ancestry opengwasdb inferred from the Analysis's allele frequencies. Analyses of different ancestries in one call each get their own LD Store. Here, two Analyses' top hits are clumped (see [Clumping](#clumping)):
+With no LD resource on the API Source and no `ld`, opengwasr uses the LD Store that matches each Analysis's **Assigned Ancestry**, the ancestry opengwasdb inferred from the Analysis's allele frequencies. Analyses of different ancestries in one call each get their own LD Store. Here, two Analyses' top hits are clumped (see [Clumping](#clumping)):
 
 ```{r ld-store-matching, warning = FALSE}
 both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"))
@@ -55,25 +92,25 @@ If several LD Stores serve one ancestry, opengwasr uses the one the LD Store lis
 
 ### The `ld` argument {#ld-argument}
 
-`og_tophits()`, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()` all take `ld`, and it means the same in each:
+`og_tophits()`, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()` all take `ld`, and it means the same in each. It overrides the Source's LD resource for one call:
 
 | `ld` | LD used |
 |---|---|
-| `NULL` (default) | The LD Store matching each Analysis's Assigned Ancestry |
-| An LD Store's name, such as `"hgdp1kgp-v2-EUR-k10"` | That LD Store |
-| An ancestry, such as `"EUR"` | That ancestry's LD Store (its declared default, if it has several) |
-| `og_plink_reference(path)` | Your own PLINK Reference, on your machine ([below](#plink-reference)) |
+| `NULL` (default) | The Source's LD resource. Without one: on the API Source, the LD Store matching each Analysis's Assigned Ancestry; on a Local Source, none, so the call stops and asks for one |
+| An LD Store's name, such as `"hgdp1kgp-v2-EUR-k10"` | That LD Store (API Source only) |
+| An ancestry, such as `"EUR"` | That ancestry's LD Store, its declared default if it has several (API Source only) |
+| `og_plink_reference(path)` | Your own PLINK Reference, on your machine, with either Source ([below](#plink-reference)) |
 
 An exact LD Store name wins; otherwise `ld` is read as an ancestry code and resolved to that ancestry's LD Store. LD Store names (`hgdp1kgp-v2-EUR-k10`) and ancestry codes (`EUR`, `AFR`, `EAS`, `SAS`, `AMR`) can't be confused today, and the provenance always records which LD Store was used. A name gives `ld_choice = "user"` (`clump_ld_choice` when clumping); an ancestry code gives `"ancestry_default"`.
 
-`ld` is separate from the Source the Associations come from, so the same LD choice keeps working whichever Source you use.
+A Local Source never reads the API's LD Stores, so a name or an ancestry code in `ld` is refused there (`opengwasr_local_unsupported`): it would make a local query call the API. A PLINK Reference works as `ld` with either Source.
 
 ```{r choosing-ld}
 cad_eur <- og_tophits(src, "OGS-00011:GCST003116", ld = "hgdp1kgp-v2-EUR-k10")
 unique(cad_eur$clump_ld_choice)
 ```
 
-A plain vector of variants has no ancestry to match, so `og_ld_matrix()` and `og_ld_proxies()` need `ld` when given one.
+A plain vector of variants has no ancestry to match, so `og_ld_matrix()` and `og_ld_proxies()` need an LD resource when given one: the Source's, or `ld`.
 
 ### Unassigned and mixed ancestry {#unassigned-and-mixed-ancestry}
 
@@ -186,6 +223,27 @@ The 2,194 top hits at p ≤ 5e-8 reduce to 49 index variants. `clump_size` count
 - Every top hit at the threshold is clumped, and `limit` (default 1,000) then caps the index variants returned.
 - Absent top hits can't be clumped. They are left out, with a warning giving how many, and the count is kept in the provenance.
 
+### Stored Clumps, and clumping on the fly {#stored-clumps}
+
+`clump = TRUE` is the default, and `clump = FALSE` gives every top hit, unclumped. A set of **Clumps** is always made with one configuration: an LD resource, `r2` and `kb`.
+
+- **Stored Clumps.** Store Releases will carry Clumps computed when they were built: for the 5e-8 top hits, with each ancestry's default LD resource and its default `r2` and `kb`. The default call, `og_tophits(src, ids)`, will read them, so it computes no LD at all, on either Source. Today's Store Releases don't have stored Clumps yet.
+- **Clumping on the fly.** Until a Store Release has them, `clump = TRUE` clumps on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly, with the Source's LD resource or `ld`. Stored Clumps are used only when your request matches their configuration exactly, never when it is merely close.
+- **Provenance says which.** `og_provenance(x)$clump` has a `clumps` column: `"stored"` or `"computed"`, beside the LD resource, `r2` and `kb` used.
+
+Once a Store Release has stored Clumps, the default call reads them:
+
+```{r stored-clumps, eval = FALSE}
+cad <- og_tophits(src, "OGS-00011:GCST003116")
+og_provenance(cad)$clump[, c("id", "ld", "r2", "kb", "leads", "clumps")]
+```
+
+```text
+# illustrative
+                    id                  ld         r2    kb leads clumps
+1 OGS-00011:GCST003116 hgdp1kgp-v2-EUR-k10 0.03186544 10000    49 stored
+```
+
 ### Default thresholds come from the LD Store {#default-thresholds}
 
 You don't need to choose `r2` and `kb`. By default, opengwasr clumps within the LD Store's far window (10,000 kb), at its Far Threshold `t_far` (about 0.03). That is always a question the LD Store can answer exactly.
@@ -252,11 +310,11 @@ og_provenance(cad)
 og_provenance(cad)$clump
 ```
 
-`hits` counts the top hits at the threshold, `absent` those the LD Store doesn't hold, and `leads` the index variants. Two clumpings that differ can be explained from these alone.
+`hits` counts the top hits at the threshold, `absent` those the LD Store doesn't hold, and `leads` the index variants. `clumps` says whether the Clumps were `"computed"` on the fly, as they all are today, or read `"stored"` with the Store Release ([Stored Clumps](#stored-clumps)). Two clumpings that differ can be explained from these alone.
 
 ## Using a PLINK Reference {#plink-reference}
 
-A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`) on your own machine, such as the 1000 Genomes files ieugwasr users already have. Pass it as `ld` to clump or build LD matrices locally with PLINK, as ieugwasr's local functions did. The Associations can still come from any Source.
+A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`) on your own machine, such as the 1000 Genomes files ieugwasr users already have. Pass it as `ld` to clump or build LD matrices locally with PLINK for one call, as ieugwasr's local functions did, with either Source. A Local Source can also carry one as its LD resource, `og_local(gwas = ..., bfile = prefix)`, so every call uses it without `ld` (see [Clumping and LD on a Local Source](local-source.html#local-clumping)).
 
 ```{r plink-reference, eval = FALSE}
 ref <- og_plink_reference("~/ld/1kg/EUR")
@@ -273,7 +331,7 @@ m_local <- og_ld_matrix(src, cad_local, ld = ref)
 - **Variants are matched by rsID,** because PLINK References are usually on GRCh37 while ALIDs are on GRCh38. Variants without an rsID match are left out, and the message says how many. An LD matrix from a PLINK Reference is named `<rsid>_<allele>_<allele>` with the PLINK Reference's alleles, as ieugwasr named it, and the sign of r again refers to the first allele in each name.
 - **`r2` and `kb` are required.** A PLINK Reference has no recorded defaults, so opengwasr won't choose for you. Without them, `og_tophits()` and `og_clump()` stop and ask for both.
 - **PLINK itself** is found from `og_plink_reference(path, plink_bin = )`, then the genetics.binaRies package if it is installed, then your `PATH`. If none has it, the error says how to install it.
-- `og_ld_proxies()` reads LD Stores only.
+- `og_ld_proxies()` and `og_ld_reflookup()` read LD Stores only, and refuse a PLINK Reference, whether it is `ld` or the Source's LD resource.
 - Provenance works as before: `clump_ld` is the PLINK Reference's path, and `clump_ld_choice` is `"user"`.
 
 ### Without an API {#plink-no-source}

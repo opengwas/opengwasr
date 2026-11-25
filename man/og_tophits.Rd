@@ -19,7 +19,7 @@ og_tophits(
 )
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}}.}
 
 \item{analyses}{Analysis identifiers (see \code{\link[=og_analyses]{og_analyses()}}).}
 

@@ -17,7 +17,9 @@ test_that("no Association query method reassigns an argument before provenance r
   methods <- Filter(function(n) is.function(ns[[n]]) && "association_query" %in% all.names(body(ns[[n]])),
                     ls(ns, all.names = TRUE))
   expect_setequal(methods, c("og_tophits.og_api_source", "og_associations.og_api_source",
-                              "og_phewas.og_api_source", "og_range.og_api_source"))
+                              "og_phewas.og_api_source", "og_range.og_api_source",
+                              "og_tophits.og_local_source", "og_associations.og_local_source",
+                              "og_phewas.og_local_source", "og_range.og_local_source"))
   # Every name assigned anywhere in an expression (`x <- `, `x$a <- `, `x[i] = `, `x <<- `).
   assigned <- function(x) {
     if (!is.call(x)) return(character())

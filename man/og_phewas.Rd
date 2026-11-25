@@ -16,7 +16,7 @@ og_phewas(
 )
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}}.}
 
 \item{variants}{rsIDs and ALIDs, such as \code{c("rs1421085", "16:53767042:C:T")}; an ALID must be in
 canonical form (see \code{\link[=og_alid]{og_alid()}}).}

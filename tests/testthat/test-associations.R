@@ -161,6 +161,21 @@ test_api("the vignette workflow: BMI top hits looked up in CAD, Imputed included
   }
 })
 
+test_api("an EAF the API sends as \".\" is NA, and eaf stays a number", {
+  x <- og_associations(src, c(snv, "21:1000:A:G"), bmi, releases = rel)
+  expect_equal(x$alid, c(snv, "21:1000:A:G"))
+  expect_type(x$eaf, "double")
+  expect_equal(x$eaf, c(0.38, NA))
+}, live = FALSE)
+
+test_api("an infinite SE gives beta NaN, and pval is the API's own log10_p", {
+  x <- og_associations(src, c(snv, "21:2000:A:G"), bmi, releases = rel)
+  inf <- x[x$alid == "21:2000:A:G", ]
+  expect_identical(inf$se, Inf)
+  expect_true(is.nan(inf$beta))
+  expect_equal(inf$pval, 10^-8.7)
+}, live = FALSE)
+
 test_api("original_units is passed to the shaper: per-SD Analyses are rescaled, log-odds ones are not", {
   plain <- og_associations(src, snv, c(cad, bmi), releases = rel)
   scaled <- og_associations(src, snv, c(cad, bmi), original_units = TRUE, releases = rel)

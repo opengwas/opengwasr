@@ -53,9 +53,15 @@ Its rows have every column of the API Source's, in the same order and of the sam
 the Store Release's \code{analyses.tsv}; \code{outcome_type} is derived as the catalogue derives it.
 Columns the catalogue adds are NA locally (\code{status}, \code{listed}, \code{trait_class},
 \code{ancestry_category}, \code{label_from_source}), as is any column the Store Release has no value for.
-The other columns of \code{analyses.tsv} follow, as text. A value of \code{analyses.tsv} the catalogue
-would refuse (a sample size that isn't a whole number, say) raises
-\code{opengwasr_invalid_analyses}, naming the Store Release and the column.
+The other columns of \code{analyses.tsv} follow, of the types opengwasdb gives them: the counts
+(\code{n_hits_5e8}, \code{n_hits_5e6}, \code{n_hits_5e4}, \code{completion_n_imputed_total},
+\code{completion_n_missing_total}, \code{n_missing_se_out_of_range}, \code{eaf_orientation_n}, \code{n_loci_5e8},
+\code{n_unclumped_5e8}) integer; \code{completion_median_pearson_r}, \code{eaf_orientation_r} and
+\code{original_sd_dispersion} double; \code{eaf_scope}, \code{completed_against} and \code{eaf_orientation} text. A
+blank is NA of its column's type, and a column opengwasr doesn't know is text. A value of
+\code{analyses.tsv} the catalogue would refuse (a sample size that isn't a whole number, say), or
+that isn't of its column's type (a count of \code{1.5}), raises \code{opengwasr_invalid_analyses}, naming
+the Store Release, the column (\code{column}) and the values (\code{values}).
 }
 
 \examples{

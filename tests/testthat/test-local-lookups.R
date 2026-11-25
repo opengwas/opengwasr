@@ -36,9 +36,78 @@ test_that("og_analyses() on a Local Source returns the Analyses named, with thei
   # So is a column analyses.tsv lacks.
   expect_identical(x$maf_threshold, rep(NA_real_, 3))
   expect_identical(x$source_label, rep(NA_character_, 3))
-  # analyses.tsv's own columns are text, empty as NA.
+})
+
+# analyses.tsv's columns the API Source doesn't return, with the types opengwasdb's analyses model
+# gives them (#42). Values read by eye from each release's analyses.tsv.
+test_that("a Local Source gives analyses.tsv's release-only columns their types", {
+  skip_if_no_local()
+  x <- og_analyses(local_source_of(), c("hyb:trait_b", "s:bmi_irn", "residual-rag:a"))
+  expect_identical(x$eaf_scope, rep("association", 3))
+  expect_identical(x$original_sd_dispersion, rep(NA_real_, 3))
   expect_identical(x$completed_against, c(NA, NA, "EUR"))
-  expect_identical(x$n_hits_5e8, c("4", "8", "60"))
+  expect_identical(x$completion_median_pearson_r, c(NA, NA, 0.596944))
+  expect_identical(x$completion_n_imputed_total, c(NA, NA, 3L))
+  expect_identical(x$completion_n_missing_total, c(NA, NA, 1L))
+  expect_identical(x$n_missing_se_out_of_range, c(0L, 0L, 0L))
+  expect_identical(x$eaf_orientation, rep("unverified", 3))
+  expect_identical(x$eaf_orientation_r, rep(NA_real_, 3))
+  expect_identical(x$eaf_orientation_n, c(0L, 0L, 0L))
+  expect_identical(x$n_hits_5e8, c(4L, 8L, 60L))
+  expect_identical(x$n_hits_5e6, c(4L, 8L, 60L))
+  expect_identical(x$n_hits_5e4, c(4L, 8L, 60L))
+  # The completed Hybrid release's, on its own.
+  y <- og_analyses(local_source_of(c("hyb-c")))
+  expect_identical(y$completion_median_pearson_r, c(0.29718, 0.283722))
+  expect_identical(y$completion_n_imputed_total, c(0L, 4L))
+  expect_identical(y$n_hits_5e8, c(7L, 4L))
+})
+
+test_that("a release-only column's type never depends on which Analyses were asked for", {
+  skip_if_no_local()
+  # Every completion column is blank for this Analysis: typed NA all the same.
+  x <- og_analyses(local_source_of(), "hyb:trait_b")
+  expect_identical(x$completed_against, NA_character_)
+  expect_identical(x$completion_median_pearson_r, NA_real_)
+  expect_identical(x$completion_n_imputed_total, NA_integer_)
+  expect_identical(x$completion_n_missing_total, NA_integer_)
+})
+
+test_that("a release whose release-only columns are blank gives them as typed NA", {
+  skip_if_no_local()
+  blank <- c("eaf_scope", "original_sd_dispersion", "completed_against", "completion_median_pearson_r",
+             "completion_n_imputed_total", "completion_n_missing_total", "n_missing_se_out_of_range",
+             "eaf_orientation", "eaf_orientation_r", "eaf_orientation_n", "n_hits_5e8", "n_hits_5e6",
+             "n_hits_5e4")
+  path <- release_with_analyses(function(table) {
+    table[blank] <- ""
+    table
+  }, from = "ragged")
+  x <- og_analyses(og_local(path))
+  expect_equal(x$id, c("residual-rag:a", "residual-rag:b"))
+  for (name in c("eaf_scope", "completed_against", "eaf_orientation")) {
+    expect_identical(x[[name]], rep(NA_character_, 2), label = name)
+  }
+  for (name in c("original_sd_dispersion", "completion_median_pearson_r", "eaf_orientation_r")) {
+    expect_identical(x[[name]], rep(NA_real_, 2), label = name)
+  }
+  for (name in c("completion_n_imputed_total", "completion_n_missing_total", "n_missing_se_out_of_range",
+                 "eaf_orientation_n", "n_hits_5e8", "n_hits_5e6", "n_hits_5e4")) {
+    expect_identical(x[[name]], rep(NA_integer_, 2), label = name)
+  }
+})
+
+test_that("a release-only value that isn't of its column's type is refused, never coerced", {
+  skip_if_no_local()
+  path <- release_with_analyses(function(table) {
+    table$n_hits_5e8[table$analysis_id == "b"] <- "1.5"
+    table
+  }, from = "ragged")
+  e <- expect_error(og_analyses(og_local(path)), class = "opengwasr_invalid_analyses")
+  expect_equal(e$store_id, "residual-rag")
+  expect_equal(e$release_id, "comp")
+  expect_equal(e$column, "n_hits_5e8")
+  expect_equal(e$values, "1.5")
 })
 
 test_that("a local Analysis row has every API Source column in its order, then the release's own", {
@@ -90,6 +159,27 @@ test_that("a value of analyses.tsv the catalogue would refuse is refused, never 
   rows <- finish_analyses(local_analysis_rows(table, "s", "r"), c("s:a", "s:b"))
   expect_identical(rows$sample_size, c(1000L, NA))
   expect_identical(rows$original_sd, c(1.5, NA))
+})
+
+test_that("a release-only count, number or column opengwasr doesn't know is parsed by its type", {
+  table <- data.frame(analysis_index = c("0", "1"), analysis_id = c("a", "b"), n_hits_5e8 = c("3", "-1"),
+                      eaf_orientation_r = c("0.5", ""), completion_n_imputed_total = c("", ""),
+                      n_loci_5e8 = c("2", ""), notes = c("7", ""), stringsAsFactors = FALSE)
+  # A count is a non-negative whole number (n_missing_se_out_of_range's NON_NEGATIVE_INTEGER_OR_BLANK).
+  e <- expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
+  expect_equal(e$column, "n_hits_5e8")
+  expect_equal(e$values, "-1")
+  table$n_hits_5e8 <- c("3", "")
+  table$eaf_orientation_r <- c("0.5", "NaN")
+  e <- expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
+  expect_equal(e$column, "eaf_orientation_r")
+  table$eaf_orientation_r <- c("0.5", "")
+  rows <- finish_analyses(local_analysis_rows(table, "s", "r"), c("s:a", "s:b"))
+  expect_identical(rows$n_hits_5e8, c(3L, NA))
+  expect_identical(rows$eaf_orientation_r, c(0.5, NA))
+  expect_identical(rows$completion_n_imputed_total, c(NA_integer_, NA_integer_))
+  expect_identical(rows$n_loci_5e8, c(2L, NA))
+  expect_identical(rows$notes, c("7", NA))
 })
 
 test_that("an Analysis a Local Source doesn't hold gets the API Source's class", {

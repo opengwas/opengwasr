@@ -309,6 +309,9 @@
     {"alid": "1:1003500:A:G", "analysis_id": "a", "analysis_label": "", "association_status": "missing", "chromosome": "1", "eaf": ".", "effect_allele": "A", "log10_p": "NaN", "other_allele": "G", "position": 1003500, "release_id": "comp", "rsid": "rs1007", "se": "NaN", "store_id": "residual-rag", "z": "NaN"},
     {"alid": "1:1003500:A:G", "analysis_id": "b", "analysis_label": "", "association_status": "missing", "chromosome": "1", "eaf": ".", "effect_allele": "A", "log10_p": "NaN", "other_allele": "G", "position": 1003500, "release_id": "comp", "rsid": "rs1007", "se": "NaN", "store_id": "residual-rag", "z": "NaN"}
    ]},
+  {"endpoint": "/api/phewas",
+   "body": {"variant": "1:9000:A:G", "threshold": 1e-08, "limit": 0, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]},
+   "error": {"status": 400, "body": {"error": "invalid_request", "message": "Malformed request"}}},
   {"endpoint": "/api/associations/range",
    "body": {"analyses": ["s:bmi_irn", "hyb:trait_a"], "chromosome": "1", "start": 4000, "end": 9000, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "hyb", "release_id": "v1"}]},
    "metadata": {},

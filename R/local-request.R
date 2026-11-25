@@ -332,7 +332,7 @@ local_top_hit_tier <- function(ogquery, src, store_id, threshold, call) {
     og_abort(paste0("threshold must be at most ", formatC(max(tiers), format = "g"),
                     ", the loosest p-value the Top-Hit Index of ", store_id, " holds"),
              class = api_error_class("unsupported_threshold", 400L), api_error = "unsupported_threshold",
-             indexed_thresholds = sort(tiers), call = call)
+             indexed_thresholds = as.list(sort(tiers)), call = call)
   }
   min(looser)
 }
@@ -361,8 +361,9 @@ local_require_associations <- function(src, releases, call, phewas = FALSE) {
 # A request the API's body model refuses, refused the same way. The API's per-endpoint routes
 # validate the body as its model (schemas.py: a range's chromosome, a threshold or limit out of
 # range) before anything else, and answer 400 `invalid_request`, "Malformed request" (ogdb-api
-# main.py:773-784, errors.py:56-64). Its message is the API's; `reason` says what was wrong.
+# main.py:773-784, errors.py:56-64). Its message is the API's exactly, never reworded (ADR 0002);
+# `reason` says what was wrong.
 local_malformed <- function(reason, call) {
-  og_abort(c("Malformed request", x = reason), class = api_error_class("invalid_request", 400L),
+  og_abort("Malformed request", class = api_error_class("invalid_request", 400L),
            api_error = "invalid_request", reason = reason, call = call)
 }

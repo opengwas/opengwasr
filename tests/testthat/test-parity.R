@@ -13,8 +13,9 @@
 #  * the API Source against the generated answer (runs everywhere: no Python needed);
 #  * the Local Source against the generated answer;
 #  * the API Source against the Local Source: identical data frames (columns, types, row order and
-#    values), the same warnings, the same refusal. Provenance is compared too, less what can't
-#    agree: `retrieved` (when each answer was read), `job_ids` (a Local Source runs no Job) and
+#    values), the same warnings (class chain and message), the same refusal (class chain, message,
+#    `api_error` and every field both carry). Provenance is compared too, less what can't agree:
+#    `retrieved` (when each answer was read), `job_ids` (a Local Source runs no Job) and
 #    `cost_estimate` (the API's estimate per Job; a Local Source has none, NA).
 # When the last fails, the first two say which side is off.
 #
@@ -31,19 +32,29 @@
 #    of the golden set: tophits-truncated's limit of 5 stops above it. Asserted below for the Local
 #    Source.
 #  * Missing Top-Hit Index. The API answers a release without one with an untyped 501
-#    (`opengwasr_api_error`); a Local Source refuses with `opengwasr_local_unsupported`
-#    (opengwas/opengwasr#33). The example releases all have one, so it is left out; #33's tests
-#    cover the local refusal.
+#    (`opengwasr_api_error`); a Local Source refuses with `opengwasr_local_unsupported`. No issue
+#    resolves it, and none is planned: the API's 501 "Not yet implemented" is its one answer for a
+#    capability a release lacks, with no code to class it by, and every published Store Release has
+#    a Top-Hit Index. Left out: the example releases have one; test-local-associations.R covers the
+#    local refusal.
 #  * Ragged release without its by-variant index. The API serves its Associations and fails in the
-#    reader; a Local Source refuses up front (opengwasr_local_unsupported, opengwas/opengwasr#33).
-#    Left out: the example releases have their index; #33's tests cover the local refusal.
+#    reader; a Local Source refuses up front (`opengwasr_local_unsupported`). No issue resolves it,
+#    and none is planned: a Ragged Store Release is published with its index, so only a damaged
+#    copy lacks it. Left out: the example releases have theirs; test-local-associations.R covers the
+#    local refusal.
 #  * og_analyses(). The catalogue's own columns (status, listed, trait_class, ancestry_category,
 #    label_from_source) are NA on a Local Source (#32's ruling): compared only on the shared
 #    columns, and those five asserted NA. A Local Source's further analyses.tsv columns follow
 #    the API's and aren't compared.
 #  * Capabilities. The bundled copies of the example releases lack variants.tsv.gz, which
 #    ogdb-api's `_capabilities` (releases.py:137-171) requires for variant lookups and PheWAS. The
-#    bundle's own releases have it, so the generator takes every capability as present.
+#    bundle's own releases have it, so the generator takes every capability as present. No issue
+#    is planned: it is a difference between the bundled copies and the releases the API serves, not
+#    between the two Sources.
+#  * HTTP. A refusal from the API Source carries what came over HTTP: `status`, `api_message` and
+#    `api_body`. A Local Source has no HTTP, so carries none of them, and carries the reason for a
+#    malformed request in `reason`, which the API gives only as "Malformed request". Permanent: the
+#    Source comparison checks that these are the only fields one carries and the other doesn't.
 
 fake_three <- local_fake_api(n_synthetic = 0, parity = "three")
 fake_completed <- local_fake_api(n_synthetic = 0, parity = "completed")
@@ -66,13 +77,14 @@ catalogue_only <- c("status", "listed", "trait_class", "ancestry_category", "lab
 
 # Running a golden query --------------------------------------------------------------------------
 
-# A golden query on `src`: its value (or the error it raised) and the classes of the warnings it gave.
+# A golden query on `src`: its value (or the error it raised) and the warnings it gave (class chain
+# and message of each).
 parity_run <- function(query, src) {
-  warnings <- character()
+  warnings <- list()
   value <- withCallingHandlers(
     tryCatch(do.call(query$verb, c(list(src), query$args)), error = function(e) e),
     warning = function(w) {
-      warnings <<- c(warnings, class(w)[[1]])
+      warnings[[length(warnings) + 1]] <<- list(class = class(w), message = conditionMessage(w))
       invokeRestart("muffleWarning")
     }
   )
@@ -89,8 +101,15 @@ api_run <- function(query) {
   api_runs[[query$name]]
 }
 
+# Each golden query once on a Local Source, kept for the comparison with the API Source.
 parity_sources <- jsonlite::read_json(file.path(parity_dir, "queries.json"), simplifyVector = TRUE)$sources
-local_run <- function(query) parity_run(query, local_source_of(parity_sources[[query$source]]))
+local_runs <- new.env()
+local_run <- function(query) {
+  if (is.null(local_runs[[query$name]])) {
+    local_runs[[query$name]] <- parity_run(query, local_source_of(parity_sources[[query$source]]))
+  }
+  local_runs[[query$name]]
+}
 
 # The generated answer to a query's last request (the Job whose rows the result holds), from
 # `answers` (answers.json, parsed).
@@ -101,17 +120,37 @@ generated_answer <- function(query, answers = parity_answers) {
   stop("answers.json has no answer for query ", query$name, "; run fixtures/parity/generate.py.")
 }
 
-# What is compared of a value: a data frame with its provenance, less the fields that can't agree.
+# What is compared of a data frame: itself with its provenance, less the fields that can't agree.
 comparable <- function(value) {
-  if (inherits(value, "condition")) {
-    return(list(class = class(value), api_error = value$api_error))
-  }
   prov <- attr(value, "og_provenance", exact = TRUE)
   if (!is.null(prov)) {
     prov[c("retrieved", "job_ids", "cost_estimate")] <- NULL
     attr(value, "og_provenance") <- prov
   }
   value
+}
+
+# Fields of a condition that aren't what it says (rlang's own), and those only one Source carries
+# (the known difference "HTTP").
+rlang_fields <- c("message", "trace", "parent", "call", "rlang", "body", "footer", "use_cli_format")
+api_only_fields <- c("status", "api_message", "api_body")
+local_only_fields <- "reason"
+
+# How a Local Source's refusal differs from the API Source's, as messages: the class chain, the
+# message, and every field both carry; and any field one carries beyond the known difference.
+condition_differences <- function(here, api) {
+  if (!inherits(here, "condition") || !inherits(api, "condition")) return("only one Source refused")
+  found <- character()
+  if (!identical(class(here), class(api))) found <- c(found, paste("class", paste(class(here), collapse = "/")))
+  if (!identical(conditionMessage(here), conditionMessage(api))) found <- c(found, paste("message", conditionMessage(here)))
+  here_fields <- setdiff(names(unclass(here)), rlang_fields)
+  api_fields <- setdiff(names(unclass(api)), rlang_fields)
+  for (name in intersect(here_fields, api_fields)) {
+    if (!identical(here[[name]], api[[name]])) found <- c(found, paste("field", name))
+  }
+  extra <- c(setdiff(api_fields, c(here_fields, api_only_fields)), setdiff(here_fields, c(api_fields, local_only_fields)))
+  if (length(extra) > 0) found <- c(found, paste("fields on one Source only:", paste(extra, collapse = ", ")))
+  found
 }
 
 # Each Source against the generated answer ----------------------------------------------------------
@@ -146,11 +185,17 @@ generated_differences <- function(result, query, answers = parity_answers) {
   answer <- generated_answer(query, answers)
   value <- result$value
   if (!is.null(answer$error)) {
-    code <- answer$error$body$error
-    if (!inherits(value, paste0("opengwasr_", code)) || !identical(value$api_error, code)) {
-      return(paste0("expected the refusal `", code, "`, got ", class(value)[[1]]))
+    body <- answer$error$body
+    if (!inherits(value, paste0("opengwasr_", body$error)) || !identical(value$api_error, body$error)) {
+      return(paste0("expected the refusal `", body$error, "`, got ", class(value)[[1]]))
     }
-    return(character())
+    found <- character()
+    if (!identical(conditionMessage(value), body$message)) found <- paste("message", conditionMessage(value))
+    # Every other field of the API's body, as the condition carries it.
+    for (name in setdiff(names(body), c("error", "message", "detail"))) {
+      if (!identical(unlist(value[[name]]), unlist(body[[name]]))) found <- c(found, paste("field", name))
+    }
+    return(found)
   }
   if (inherits(value, "condition")) return(paste("expected rows, got", class(value)[[1]], conditionMessage(value)))
   lookup <- query$verb %in% c("og_variants_rsid", "og_variants_chrpos")
@@ -255,6 +300,8 @@ for (query in parity_queries) local({
       shared <- setdiff(names(api$value), catalogue_only)
       expect_identical(names(here$value)[seq_along(names(api$value))], names(api$value))
       expect_identical(here$value[shared], api$value[shared])
+    } else if (inherits(api$value, "condition") || inherits(here$value, "condition")) {
+      expect_identical(condition_differences(here$value, api$value), character())
     } else {
       expect_identical(comparable(here$value), comparable(api$value))
     }

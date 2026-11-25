@@ -48,7 +48,7 @@ An LD resource is one of three kinds, and each can be on the API or on your mach
 |---|---|---|
 | **LD Store**: the precomputed LD of one reference panel | `og_api(ld_store = "EUR")`, an LD Store's name or an ancestry code. Available now | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
 | **Genotype Store**: genotypes of one reference panel, from which LD is computed when asked | `og_api(geno_store = ...)`. Coming, when the API serves Genotype Stores | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
-| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK binary if opengwasr can't find it. Available now |
+| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
 | None given | `og_api()`: each Analysis's Assigned Ancestry chooses its LD Store | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give an LD resource |
 
 A form that is coming is refused with an error that says so, rather than quietly doing something else.

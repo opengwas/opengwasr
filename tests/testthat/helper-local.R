@@ -42,6 +42,18 @@ three <- local({
   }
 })
 
+# A Local Source over the named example Store Releases (a parity source set, such as
+# c("dense", "ragged", "hyb-c")), opened once per test process for each set. Call it after
+# skip_if_no_local().
+local_source_of <- local({
+  opened <- list()
+  function(names) {
+    key <- paste(names, collapse = "+")
+    if (is.null(opened[[key]])) opened[[key]] <<- og_local(example_releases(names))
+    opened[[key]]
+  }
+})
+
 # A path as og_local() and og_local_check() store and report it: the one place tests normalise a
 # path, through the package's own normaliser (whose separators test-local-source.R checks with
 # literals), so a test compares like with like on Windows too.

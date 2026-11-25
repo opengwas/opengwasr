@@ -83,7 +83,7 @@ fake_key <- "fake-key-not-a-secret"
 
 # The world the fake serves: real Analysis rows recorded from the dev Data API
 # (fixtures/world.json) plus hand-written scenarios the dev catalogue can't produce today.
-fake_world <- function(n_synthetic = 1001) {
+fake_world <- function(n_synthetic = 1001, parity = NULL, parity_edit = identity) {
   world <- read_fixture("world.json")
   template <- world$analyses[[1]]
   # Synthetic rows carry only the keys the tests read, so a 1,001-row catalogue is cheap to serve.
@@ -205,7 +205,41 @@ fake_world <- function(n_synthetic = 1001) {
                      busy = "none", busy_times = 0L, busy_after = 3L, busy_route = "submit")
   world$key <- fake_key
   world$ld_stores <- fake_ld_stores()
+  if (!is.null(parity)) world <- fake_parity_world(world, parity, parity_edit)
   world
+}
+
+# The parity world (test-parity.R): the Data API as it would serve the example Store Releases of
+# source set `set` ("three" or "completed", fixtures/parity/queries.json), from the answers
+# fixtures/parity/generate.py wrote (answers.json). The fake serves those Store Releases, their
+# Analyses as the catalogue would (`catalogue`), and, to each golden Job, its generated answer
+# (rows and metadata, or the API's error), found by endpoint and body (parity_key()); the Job,
+# paging and result routes are the usual ones. A Job request with no generated answer is a 500
+# naming it, so a golden query whose requests changed fails loudly rather than reading the fake's
+# own rows. `edit` changes the answers first (test-parity.R's mutation test).
+fake_parity_world <- function(world, set, edit = identity) {
+  answers <- edit(read_fixture(file.path("parity", "answers.json")))
+  releases <- answers$sources[[set]]
+  if (is.null(releases)) stop("No parity source set `", set, "` in answers.json.")
+  held <- vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), "")
+  world$releases <- releases
+  world$analyses <- Filter(function(a) paste0(a$store_id, "/", a$release_id) %in% held, answers$catalogue)
+  world$legacy <- list()
+  world$retired <- list()
+  world$parity <- stats::setNames(answers$answers, vapply(answers$answers, function(a) parity_key(a$endpoint, a$body), ""))
+  world$mode$parity <- TRUE
+  world
+}
+
+# A Job request's key among the generated answers: its endpoint and its body, every object's
+# members in name order, as JSON.
+parity_key <- function(endpoint, body) {
+  canonical <- function(x) {
+    if (!is.list(x)) return(x)
+    if (!is.null(names(x))) x <- x[order(names(x), method = "radix")]
+    lapply(x, canonical)
+  }
+  paste(endpoint, jsonlite::toJSON(canonical(body), auto_unbox = TRUE, null = "null", digits = NA))
 }
 
 # The LD Stores, as `GET /api/ld/stores` gives them (the real five, with their real limits). Under the
@@ -530,6 +564,25 @@ fake_api <- function(world = fake_world()) {
                        ignored_fields = ignored),
                   auto_unbox = TRUE, null = "null")
   }
+  # In the parity world (fake_parity_world()), a golden Job's generated answer: its rows and
+  # metadata as a Job, or the API's error, with the body the API builds (`detail` repeating it, as
+  # fixtures/errors.json records). TRUE when it answered.
+  parity_job <- function(req, res, endpoint, body) {
+    world <- req$app$locals$world
+    if (!isTRUE(world$mode$parity)) return(FALSE)
+    key <- parity_key(endpoint, body)
+    found <- world$parity[[key]]
+    if (is.null(found)) {
+      res$set_status(500)$set_type("text/plain")$send(paste("The parity fake has no generated answer for", key))
+    } else if (!is.null(found$error)) {
+      error <- found$error
+      res$set_status(error$status)$send_json(c(error$body, list(detail = error$body)), auto_unbox = TRUE,
+                                             null = "null", digits = NA)
+    } else {
+      submit_job(req, res, endpoint, body, found$rows, if (length(found$metadata) > 0) found$metadata)
+    }
+    TRUE
+  }
   app$post("/api/tophits", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     if (busy_refusal(req, res, "submit")) return()
@@ -538,6 +591,7 @@ fake_api <- function(world = fake_world()) {
     received(req, "/api/tophits", body)
     problems <- body_problems(req, body, "/api/tophits")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (parity_job(req, res, "/api/tophits", body)) return()
     threshold <- body$threshold %||% 5e-8
     if (threshold > 5e-4) return(fail(req, res, "unsupported_threshold"))
     limit <- body$limit %||% 1000L
@@ -590,6 +644,7 @@ fake_api <- function(world = fake_world()) {
     received(req, "/api/associations", body)
     problems <- body_problems(req, body, "/api/associations")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (parity_job(req, res, "/api/associations", body)) return()
     # The real API also expands rsIDs. The fake does not, so a client that skips resolving them gets
     # no rows (and the tests that look at the submitted body see ALIDs only).
     alids <- unlist(body$variants)
@@ -611,6 +666,7 @@ fake_api <- function(world = fake_world()) {
     received(req, "/api/variants/rsid", body)
     problems <- body_problems(req, body, "/api/variants/rsid")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (parity_job(req, res, "/api/variants/rsid", body)) return()
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     rows <- Filter(function(v) v$rsid %in% unlist(body$rsids) &&
                      paste0(v$store_id, "/", v$release_id) %in% wanted, world$variants)
@@ -742,6 +798,7 @@ fake_api <- function(world = fake_world()) {
     received(req, "/api/phewas", body)
     problems <- body_problems(req, body, "/api/phewas")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (parity_job(req, res, "/api/phewas", body)) return()
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     held <- world$associations[unlist(body$analyses) %||% names(world$associations)]
     rows <- list()
@@ -766,6 +823,7 @@ fake_api <- function(world = fake_world()) {
     received(req, "/api/associations/range", body)
     problems <- body_problems(req, body, "/api/associations/range")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (parity_job(req, res, "/api/associations/range", body)) return()
     if (!isTRUE(world$mode$lift_limits) && body$end - body$start + 1 > 1e7) return(fail(req, res, "request_too_large"))
     rows <- list()
     for (id in unlist(body$analyses %||% body$ids)) {
@@ -785,6 +843,7 @@ fake_api <- function(world = fake_world()) {
     received(req, "/api/variants/chrpos", body)
     problems <- body_problems(req, body, "/api/variants/chrpos")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
+    if (parity_job(req, res, "/api/variants/chrpos", body)) return()
     wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
     positions <- sub("^chr", "", unlist(body$positions))
     rows <- Filter(function(v) paste0(v$chromosome, ":", v$position) %in% positions &&
@@ -837,7 +896,11 @@ fake_api <- function(world = fake_world()) {
     first <- page * job$page_rows
     rows <- job$rows[seq_along(job$rows) > first & seq_along(job$rows) <= first + job$page_rows]
     final <- first + job$page_rows >= length(job$rows)
-    lines <- vapply(rows, function(r) as.character(jsonlite::toJSON(r, auto_unbox = TRUE, null = "null", digits = NA)), "")
+    # Every number as the API's json.dumps() writes it: one that reads back exactly (17 significant
+    # digits; `digits = NA` gives only 15), and a whole double with its decimal point (-9.0, which
+    # jsonlite reads as a double, not the integer -9).
+    lines <- vapply(rows, function(r) as.character(jsonlite::toJSON(r, auto_unbox = TRUE, null = "null", digits = I(17),
+                                                                    always_decimal = TRUE)), "")
     out <- list(page_index = page, row_count = length(rows), ndjson = paste(lines, collapse = "\n"),
                 next_cursor = if (final) NULL else paste0("page:", page + 1L), final = final)
     if (identical(job$scenario, "no_ndjson")) out$ndjson <- NULL

@@ -1,0 +1,232 @@
+---
+title: "Querying downloaded Store Releases"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Querying downloaded Store Releases}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+A **Local Source** answers your queries from **Store Releases** you have downloaded to your own machine, without calling the OpenGWAS API. It suits large queries: thousands of variants in thousands of Analyses, which the API Source would split into many Jobs. You create it with `og_local(dir)`, and then pass it where you passed `og_api()`. The verbs, arguments and columns are the same (see [Getting started](opengwasr.html)).
+
+This vignette follows one journey: set up Python, open a directory of Store Releases, run your script against it, clump what you fetched, and run a TwoSampleMR pipeline on it.
+
+> **Status.** The Local Source is being built (epic #2), so none of these chunks is run yet: every one is set to `eval = FALSE`, and the grey output blocks marked `# illustrative` are shaped the way opengwasr returns them, not recorded. Each later ticket of the epic turns on the chunks it makes work. Where a detail isn't settled, an HTML comment in this file's source names the ticket that settles it.
+
+```{r setup, eval = FALSE}
+library(opengwasr)
+```
+
+## What you need {#local-needs}
+
+- **Store Releases on disk.** A **Local Source** reads a directory that holds one or more Store Releases, each in its own folder. opengwasr doesn't download them for you.
+- **Python, with ogquery.** ogquery is the **Store Reader**, the library every consumer uses to read a Store Release. It is on PyPI (0.1.0) and needs only numpy, zarr and numcodecs. It runs on Linux, macOS and Windows, with Python 3.12 to 3.14. opengwasr calls it through reticulate. You never use ogquery by name from R, and API users never need Python.
+- **Store Release format 0.3.0.** ogquery reads format 0.3.0. A 0.2.x release is refused, with its format named. The hosted Store Releases are being rebuilt at 0.3.0.
+
+## Setting up Python {#local-python}
+
+opengwasr looks for Python in this order, and your choice always wins over the automatic setup:
+
+1. **`RETICULATE_PYTHON`**, if set, names the Python to use.
+2. **A conda environment** you name.
+3. **Automatic setup.** Otherwise opengwasr asks `reticulate::py_require("ogquery")`, and reticulate uses uv to make an environment with ogquery in it. This needs nothing from you on a laptop.
+
+### On a laptop {#local-python-laptop}
+
+Do nothing. The first call that needs the Store Reader sets Python up, which takes a minute or so once.
+
+### On an HPC cluster {#local-python-hpc}
+
+Compute nodes often have no internet, so prepare the environment on a login node and tell R where it is. In a shell on the login node:
+
+```{bash local-python-hpc-shell, eval = FALSE}
+python3 -m venv ~/venvs/ogquery
+~/venvs/ogquery/bin/pip install ogquery
+```
+
+Then, in your `.Renviron` (which you can open with `usethis::edit_r_environ()`):
+
+```text
+RETICULATE_PYTHON=~/venvs/ogquery/bin/python
+```
+
+Restart R, and every job on the cluster reads the same environment.
+
+### Checking the setup {#local-check}
+
+`og_local_check()` reports the Python opengwasr found, the ogquery release it has, and, for each Store Release in the directory, whether its format is readable:
+
+```{r local-check, eval = FALSE}
+og_local_check("~/opengwas/stores")
+```
+
+<!-- Final form of the output, and of og_local_check()'s arguments: settled in #31. -->
+
+```text
+# illustrative
+Python:  /home/me/venvs/ogquery/bin/python
+ogquery: 0.1.0
+
+Store Releases in ~/opengwas/stores:
+  OGS-00011/OGS-00011-completed   format 0.3.0   readable
+  OGS-00009/OGS-00009-v1          format 0.2.1   not readable: ogquery reads format 0.3.0
+```
+
+Without Python, or without ogquery in it, a Local Source stops and says what to do:
+
+<!-- The error's wording and class: settled in #31. -->
+
+```text
+# illustrative
+Error in `og_local()`:
+! Can't find Python with ogquery.
+ℹ Set `RETICULATE_PYTHON` to a Python that has ogquery, or install reticulate and let it set one up.
+```
+
+## Opening a directory of Store Releases {#local-open}
+
+```{r local-open, eval = FALSE}
+local <- og_local("~/opengwas/stores")
+local
+```
+
+```text
+# illustrative
+<og_local_source>
+Directory: ~/opengwas/stores
+Store Releases: 2 (OGS-00009, OGS-00011)
+```
+
+`og_local()` reads nothing big: it lists the Store Releases in the directory and checks their format.
+
+## Changing one line {#local-switch}
+
+A script written for the API Source runs on the Local Source by changing the line that makes the Source. Everything after it is the same:
+
+```{r local-switch, eval = FALSE}
+# src <- og_api()
+src <- og_local("~/opengwas/stores")
+
+top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE, limit = 5)
+head(top[, c("rsid", "alid", "beta", "se", "pval", "association_status")], 4)
+```
+
+```text
+# illustrative
+        rsid             alid    beta     se      pval association_status
+1  rs1333049  9:22125503:C:G  0.0560 0.0044 1.2e-37           observed
+2  rs4977574  9:22098574:A:G  0.0551 0.0043 2.7e-37           observed
+3   rs9349379  6:12903957:A:G -0.0410 0.0047 3.5e-18           observed
+4  rs1746048 10:44775824:C:T -0.0390 0.0057 6.6e-12           observed
+```
+
+The data frame has the columns of the API Source's, in the same order (see [What the columns mean](opengwasr.html#columns)). The Analyses, the Associations and the numbers agree with it, because both read the same Store Releases and shape the rows with the same code. `og_provenance()` says which Store Release each answer came from.
+
+The other verbs work the same way:
+
+```{r local-verbs, eval = FALSE}
+og_analyses(src, "OGS-00011:GCST003116")
+og_associations(src, c("rs1421085", "16:53767042:C:T"), c("OGS-00011:GCST90029007", "OGS-00011:GCST003116"))
+og_phewas(src, "rs1421085", threshold = 1e-50)
+og_range(src, "OGS-00011:GCST003116", chromosome = "9", start = 22090000, end = 22130000)
+og_variants_rsid(src, "rs34159589")
+```
+
+`og_status()`, `og_user()`, `og_submit()` and the `og_job_*` functions mean nothing for a Local Source: there is no API to ask, and nothing to queue.
+
+<!-- Which of these refuse, and with which condition class: settled in #32. -->
+
+## Naming Analyses {#local-names}
+
+### Store Releases and the latest Release {#local-releases}
+
+An Analysis is named `<store_id>:<analysis_id>`, such as `OGS-00011:GCST003116`, as with the API Source. If the directory holds several Store Releases of one GWAS Store, opengwasr uses the **latest** of each. To use another, pin it with `releases`, which every verb accepts:
+
+```{r local-pin, eval = FALSE}
+og_analyses(src, "OGS-00011:GCST003116", releases = "OGS-00011/OGS-00011-completed")
+```
+
+A name that more than one Analysis could answer to is refused, and the error lists them, as with the API Source. Record the `store_id` and `release_id` columns that come back with every Association to reproduce an analysis later.
+
+### Legacy OpenGWAS ids {#local-legacy-ids}
+
+Store Releases don't carry the ids **Legacy OpenGWAS** used (`ieu-a-2`, `ukb-b-19953`), so a Local Source refuses one rather than guess, and the error tells you what to do. It stays on your machine and never calls the API for you.
+
+```{r local-legacy, eval = FALSE, error = TRUE}
+og_tophits(src, "ieu-a-2")
+```
+
+<!-- The error's class and wording: settled in #32. -->
+
+```text
+# illustrative
+Error in `og_tophits()`:
+! `ieu-a-2` is a Legacy OpenGWAS id, and a Local Source holds only canonical ids.
+ℹ Translate it with `og_analyses(og_api(), "ieu-a-2")`, then use the `id` it returns.
+```
+
+Translate once, with the API Source, and keep the canonical id from then on:
+
+```{r local-translate, eval = FALSE}
+og_analyses(og_api(), "ukb-b-19953")[, c("requested_id", "id")]
+```
+
+```text
+# illustrative
+  requested_id                     id
+1  ukb-b-19953  OGS-00009:ukb-b-19953
+```
+
+Then use `OGS-00009:ukb-b-19953` in every Local Source call.
+
+## Clumping {#local-clumping}
+
+`og_tophits()` clumps by default, as with the API Source. The clumping needs LD, and a Local Source doesn't hold LD Stores. You say where the LD comes from with `ld`, which is separate from the Source (see [The `ld` argument](ld.html#ld-argument)).
+
+### With an LD Store on the API {#local-clumping-api}
+
+The Associations come from your files, and the API answers only the LD, so this needs your OpenGWAS token (see [Credentials](opengwasr.html#credentials)).
+
+<!-- How `ld` names an LD Store on the API from a Local Source call, and how the API Source is supplied: settled in #34. -->
+
+```{r local-clumping-api, eval = FALSE}
+cad <- og_tophits(src, "OGS-00011:GCST003116", ld = "EUR")
+unique(cad[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
+```
+
+### With a PLINK Reference {#local-clumping-plink}
+
+With your own **PLINK Reference** (see [Using a PLINK Reference](ld.html#plink-reference)), nothing leaves your machine:
+
+```{r local-clumping-plink, eval = FALSE}
+ref <- og_plink_reference("~/ld/1kg/EUR")
+cad <- og_tophits(src, "OGS-00011:GCST003116", ld = ref,
+                  r2 = 0.001, kb = 10000)
+```
+
+`r2` and `kb` are required with a PLINK Reference, and variants are matched to it by rsID. To clump Associations you already have, use `og_clump()`:
+
+```{r local-og-clump, eval = FALSE}
+top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE)
+cad <- og_clump(src, top, ld = ref, r2 = 0.001, kb = 10000)
+```
+
+Reading downloaded LD Stores is not part of the Local Source yet.
+
+## TwoSampleMR on a Local Source {#local-twosamplemr}
+
+TwoSampleMR's data functions pass a Source through to opengwasr, so a pipeline runs on your downloaded Store Releases once TwoSampleMR 0.8.0 is installed. Make the Local Source as above and give it to the functions that fetch data:
+
+<!-- The name of the argument by which TwoSampleMR 0.8.0's functions take a Source: settled in the TwoSampleMR 0.8.0 ticket (T8), not here. `src =` is a placeholder. -->
+
+```{r local-twosamplemr, eval = FALSE}
+library(TwoSampleMR)
+src <- og_local("~/opengwas/stores")
+
+exposure <- extract_instruments("OGS-00009:ukb-b-19953", src = src)
+outcome <- extract_outcome_data(exposure$SNP, "OGS-00011:GCST003116", src = src)
+dat <- harmonise_data(exposure, outcome)
+mr(dat)
+```
+
+Instruments are clumped as in [Clumping](#local-clumping), so name the LD where TwoSampleMR's defaults wouldn't find it. Your numbers can differ from ieugwasr's for the reasons in [Migrating from ieugwasr](migrating-from-ieugwasr.html#what-changed).

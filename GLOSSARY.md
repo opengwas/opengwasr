@@ -82,7 +82,7 @@ The OpenGWAS service in production today, which ieugwasr calls, until OpenGWAS r
 _Avoid_: the old API, bare "OpenGWAS" for that service
 
 **Local Source**:
-Store Releases and LD Stores downloaded to the user's own machine, suited to large queries.
+Store Releases downloaded to the user's own machine, suited to large queries. Reading downloaded LD Stores is a later addition.
 _Avoid_: offline mode, local files
 
 **Job**:
@@ -90,5 +90,5 @@ A query submitted to the API Source that is queued and later collected, rather t
 _Avoid_: request, task
 
 **Store Reader**:
-The single library through which every consumer reads a Store Release.
+The single library through which every consumer reads a Store Release. It is ogquery.
 _Avoid_: query engine, opengwasdb (for the reading part)

@@ -14,7 +14,7 @@ This vignette follows one journey: set up Python, open your Store Releases, run 
 > **Status.** The Local Source is being built. Today it sets up and checks Python, opens Store Releases, looks up Analyses and variants, and answers top hits, Associations, PheWAS and ranges, and clumps and reads LD matrices with a PLINK Reference. Those chunks run on the small example Store Releases that come with opengwasr, wherever Python and ogquery are set up where this vignette was built (on CRAN, which has no Python, the code is shown unevaluated). The chunks that don't run, or need more, and why:
 >
 > - `local-python-hpc-shell`, `local-python-conda-shell` and `local-python-conda`: they set up a Python environment on your machine.
-> - `local-translate`: it calls the OpenGWAS API, and this vignette never touches the network.
+> - `local-translate` and `local-ld-api`: they call the OpenGWAS API, and this vignette never touches the network.
 > - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever one is found (`plink_ready`: genetics.binaRies, or `plink` on the `PATH`), as in CI; without one their code is shown unevaluated.
 > - `local-stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39).
 > - `local-twosamplemr`: TwoSampleMR on a Local Source comes in a later step (#36), on full-size Store Releases.
@@ -268,9 +268,9 @@ A form that is coming is refused (`opengwasr_local_unsupported`), and so is givi
 
 `og_tophits()` clumps by default (`clump = TRUE`), as with the API Source; `clump = FALSE` gives every top hit, unclumped.
 
-- **Stored Clumps.** Store Releases will carry Clumps computed when they were built: for the 5e-8 top hits, with each ancestry's default LD resource. The default call, `og_tophits(src, ids)`, will read them, so it needs no LD resource at all. Today's Store Releases don't have stored Clumps yet.
-- **Clumping on the fly.** Until a Store Release has them, clumping is computed on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly.
-- **Provenance says which.** `og_provenance(x)$clump` records the LD resource, `r2` and `kb`, and whether the Clumps were `"stored"` or `"computed"`.
+- **Stored Clumps.** Store Releases will carry Clumps made when each release was built: its 5e-8 top hits, clumped with each ancestry's default LD resource and its `r2` and `kb`. The default call, `og_tophits(src, ids)`, will read them, so it needs no LD resource at all, on either Source. They are used only when your request matches that configuration exactly, never when it is merely close. Today's Store Releases don't have stored Clumps yet.
+- **Clumping on the fly.** Until a Store Release has them, `clump = TRUE` clumps on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly, with the Source's LD resource or `ld`.
+- **Provenance says which.** `og_provenance(x)$clump` records the LD resource, `r2` and `kb` used, and in `clumps` whether the Clumps were `"stored"` or `"computed"`.
 
 So today, a Local Source with no LD resource can't clump. It stops (class `opengwasr_ld_resource_required`), names the LD resources you can give it, and offers `clump = FALSE`:
 
@@ -342,7 +342,19 @@ ref <- og_plink_reference(bfile)
 og_ld_matrix(local, c("rs5000", "rs1000"), ld = ref)
 ```
 
-`ld` can't name one of the API's LD Stores on a Local Source: that would make a local query call the API.
+`ld` can't name one of the API's LD Stores on a Local Source: a Local Source holds none, and a local query never calls the API. Use the two steps below instead.
+
+### LD from the API's LD Stores {#local-ld-api}
+
+To clump Associations from your Store Releases with LD from the API's LD Stores, do it in two steps, naming the API Source yourself: read the top hits unclumped from your Store Releases, then clump them with `og_clump()` on the API Source. This needs your OpenGWAS token (see [Credentials](opengwasr.html#credentials)). Nothing goes to the API unless you write `og_api()`.
+
+```{r local-ld-api, eval = FALSE}
+hits <- og_tophits(local, "OGS-00011:GCST003116", clump = FALSE)
+cad <- og_clump(og_api(), hits)                  # the LD Store matching the Analysis's Assigned Ancestry
+cad <- og_clump(og_api(ld_store = "EUR"), hits)  # or the EUR LD Store
+```
+
+`og_clump()` clumps its rows as one set, so give it one Analysis's top hits at a time, or those of Analyses of one ancestry. The LD Store's own `r2` and `kb` apply, as on the API Source (see [Clumping](ld.html#clumping)).
 
 ## TwoSampleMR on a Local Source {#local-twosamplemr}
 

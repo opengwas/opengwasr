@@ -14,7 +14,7 @@ The API's LD resources come from a registry. Each has an `OGL-` id and is specif
 - reading local LD Stores (ogquery#2);
 - local Genotype Stores (no reader yet).
 
-**One place, one override.** The Source's LD resource is the default for every verb that needs LD: `og_tophits()` when clumping, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()`. The verb's existing `ld` argument overrides it for one call. No verb gains an argument. `og_plink_reference(path, plink_bin)` and the string forms of `ld` (an LD Store name or an ancestry code) keep working as values of `ld`, so scripts written for the API epic, and TwoSampleMR 0.8.0, are unchanged.
+**One place, one override.** The Source's LD resource is the default for every verb that needs LD: `og_tophits()` when clumping, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`. The verb's existing `ld` argument overrides it for one call. No verb gains an argument. `og_plink_reference(path, plink_bin)` and the string forms of `ld` (an LD Store name or an ancestry code) keep working as values of `ld`, so scripts written for the API epic, and TwoSampleMR 0.8.0, are unchanged.
 
 **Stored clumps by default, clumping on the fly otherwise.** GWAS Store Releases gain stored Clumps for their 5e-8 Top-Hit tier (opengwasdb#62, ADR 0106 there). Each set of Clumps was built with one configuration: (LD resource, r², kb), from the ancestry's default LD resource.
 - `og_tophits(src, ids)`, with `clump = TRUE` and its default `threshold`, `r2` and `kb`, reads the stored Clumps. No LD is computed, so it works on a Local Source with no LD resource.

@@ -7,7 +7,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Associations and LD. Every query function takes a **Source** as its first argument, which says where the query is answered. This vignette uses the API Source, `og_api()`, which queries the OpenGWAS API over the network. A Local Source reads Store Releases downloaded to your own machine instead (see [Sources](#sources)). Code written against `og_api()` works with it unchanged.
+opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Associations and LD. Every query function takes a **Source** as its first argument, which says where the query is answered. This vignette uses the API Source, `og_api()`, which queries the OpenGWAS API over the network. A Local Source reads Store Releases downloaded to your own machine instead (see [Sources](#sources)). Its verbs, arguments and columns are the same, but it answers LD (clumping and LD matrices) only when you give it an LD resource.
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 

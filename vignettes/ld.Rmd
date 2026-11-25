@@ -102,7 +102,7 @@ If several LD Stores serve one ancestry, opengwasr uses the one the LD Store lis
 
 An exact LD Store name wins; otherwise `ld` is read as an ancestry code and resolved to that ancestry's LD Store. LD Store names (`hgdp1kgp-v2-EUR-k10`) and ancestry codes (`EUR`, `AFR`, `EAS`, `SAS`, `AMR`) can't be confused today, and the provenance always records which LD Store was used. A name gives `ld_choice = "user"` (`clump_ld_choice` when clumping); an ancestry code gives `"ancestry_default"`.
 
-A Local Source never reads the API's LD Stores, so a name or an ancestry code in `ld` is refused there (`opengwasr_local_unsupported`): it would make a local query call the API. A PLINK Reference works as `ld` with either Source.
+A Local Source holds no LD Stores, so a name or an ancestry code in `ld` is refused there (`opengwasr_local_unsupported`): it would make a local query call the API. To clump local Associations in the API's LD Stores, name the API Source yourself, in two steps ([LD from the API's LD Stores](local-source.html#local-ld-api)). A PLINK Reference works as `ld` with either Source.
 
 ```{r choosing-ld}
 cad_eur <- og_tophits(src, "OGS-00011:GCST003116", ld = "hgdp1kgp-v2-EUR-k10")
@@ -226,9 +226,9 @@ The 2,194 top hits at p ≤ 5e-8 reduce to 49 index variants. `clump_size` count
 
 `clump = TRUE` is the default, and `clump = FALSE` gives every top hit, unclumped. A set of **Clumps** is always made with one configuration: an LD resource, `r2` and `kb`.
 
-- **Stored Clumps.** Store Releases will carry Clumps computed when they were built: for the 5e-8 top hits, with each ancestry's default LD resource and its default `r2` and `kb`. The default call, `og_tophits(src, ids)`, will read them, so it computes no LD at all, on either Source. Today's Store Releases don't have stored Clumps yet.
-- **Clumping on the fly.** Until a Store Release has them, `clump = TRUE` clumps on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly, with the Source's LD resource or `ld`. Stored Clumps are used only when your request matches their configuration exactly, never when it is merely close.
-- **Provenance says which.** `og_provenance(x)$clump` has a `clumps` column: `"stored"` or `"computed"`, beside the LD resource, `r2` and `kb` used.
+- **Stored Clumps.** Store Releases will carry Clumps made when each release was built: its 5e-8 top hits, clumped with each ancestry's default LD resource and its `r2` and `kb`. The default call, `og_tophits(src, ids)`, will read them, so it needs no LD resource at all, on either Source. They are used only when your request matches that configuration exactly, never when it is merely close. Today's Store Releases don't have stored Clumps yet.
+- **Clumping on the fly.** Until a Store Release has them, `clump = TRUE` clumps on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly, with the Source's LD resource or `ld`.
+- **Provenance says which.** `og_provenance(x)$clump` records the LD resource, `r2` and `kb` used, and in `clumps` whether the Clumps were `"stored"` or `"computed"`.
 
 Once a Store Release has stored Clumps, the default call reads them:
 

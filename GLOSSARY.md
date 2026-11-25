@@ -73,7 +73,7 @@ Where a Source's LD comes from: an LD Store, a Genotype Store or a PLINK Referen
 _Avoid_: LD reference, LD panel, LD source
 
 **Clumps**:
-The index variants of an Analysis's top hits, each standing for the weaker top hits in LD with it, together with the configuration that made them: the LD resource, `r2` and `kb`. Stored Clumps are built with a Store Release, for its 5e-8 top hits with its ancestry's default LD resource; any other Clumps are computed on the fly. Provenance says which.
+The index variants of an Analysis's top hits, each standing for the weaker top hits in LD with it, together with the configuration that made them: the LD resource, `r2` and `kb`. Stored Clumps are made when a Store Release is built: its 5e-8 top hits, clumped with each ancestry's default LD resource and its `r2` and `kb`, and used only when a request matches that configuration exactly. Any other Clumps are computed on the fly. Provenance says which.
 _Avoid_: clumped hits, independent hits, pruned variants
 
 **LD Reference Panel**:

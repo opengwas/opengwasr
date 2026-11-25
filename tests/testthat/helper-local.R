@@ -9,8 +9,13 @@
 #   hyb-c   hyb           v1-completed  0.3.0
 
 example_releases <- function(...) {
-  file.path(normalizePath(system.file("releases", package = "opengwasr", mustWork = TRUE)), c(...))
+  local_path(file.path(system.file("releases", package = "opengwasr", mustWork = TRUE), c(...)))
 }
+
+# A path as og_local() and og_local_check() store and report it: the one place tests normalise a
+# path, through the package's own normaliser (whose separators test-local-source.R checks with
+# literals), so a test compares like with like on Windows too.
+local_path <- function(path) normalise_path(path)
 
 # Skip unless this session can read Store Releases: never on CRAN, and only with a Python the run
 # chose itself (`RETICULATE_PYTHON`), so a test never sets one up with uv or touches the network.

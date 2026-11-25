@@ -266,19 +266,15 @@ finish_analyses <- function(analyses, requested) {
   analyses
 }
 
-# Each column of analysis_columns as the catalogue's type, whatever the rows hold: the API's JSON
-# makes a column null in every row logical, and one of whole numbers integer.
+# Each column of analysis_columns as the catalogue's type, whatever the rows hold: the one typing
+# of both Sources' Analysis columns. The API's JSON makes a column null in every row logical, and
+# one of whole numbers integer; a Local Source's rows hold catalogue_value()'s text and numbers.
 type_analyses <- function(analyses) {
+  as_type <- list(text = as.character, integer = as.integer, real = as.double)
   for (name in intersect(names(analysis_columns), names(analyses))) {
-    analyses[[name]] <- as_analysis_type(analyses[[name]], analysis_columns[[name]])
+    analyses[[name]] <- as_type[[analysis_columns[[name]]]](analyses[[name]])
   }
   analyses
-}
-
-# Values as an analysis_columns type: "text", "integer" or "real". The one conversion both Sources'
-# Analysis columns go through (type_analyses(), catalogue_value()).
-as_analysis_type <- function(x, type) {
-  switch(type, text = as.character(x), integer = as.integer(x), real = as.double(x))
 }
 
 # `<store_id>:<analysis_id>` for each row.
@@ -404,13 +400,14 @@ local_analysis_rows <- function(table, store_id, release_id, call = rlang::calle
   rows
 }
 
-# A column's cells as the catalogue's type (policy.py `_typed()`): empty is NA; `maf_threshold` and
-# `info_score_threshold` read "NaN" as none (NAN_IS_ABSENT). A value the catalogue refuses (a
-# number that isn't finite, an integer that isn't a whole number, or one R can't hold) is refused
-# too: the catalogue would never serve it, and opengwasr never rounds one.
+# A column's cells parsed as the catalogue parses them (policy.py `_typed()`): empty is NA;
+# `maf_threshold` and `info_score_threshold` read "NaN" as none (NAN_IS_ABSENT); a number column's
+# cells are numbers. A value the catalogue refuses (a number that isn't finite, an integer that
+# isn't a whole number, or one R can't hold) is refused too: the catalogue would never serve it,
+# and opengwasr never rounds one. finish_analyses() types them (type_analyses()).
 catalogue_value <- function(cell, name, type, store_id, release_id, call) {
   cell[!nzchar(cell) | (name %in% c("maf_threshold", "info_score_threshold") & cell %in% "NaN")] <- NA
-  if (type == "text") return(as_analysis_type(cell, type))
+  if (type == "text") return(cell)
   number <- suppressWarnings(as.numeric(cell))
   bad <- !is.na(cell) & (is.na(number) | !is.finite(number) |
                            (type == "integer" & (number != round(number) | abs(number) > .Machine$integer.max)))
@@ -422,7 +419,7 @@ catalogue_value <- function(cell, name, type, store_id, release_id, call) {
              class = "opengwasr_invalid_analyses", store_id = store_id, release_id = release_id, column = name,
              values = unique(cell[bad]), call = call)
   }
-  as_analysis_type(number, type)
+  number
 }
 
 # An Analysis's outcome type as the catalogue derives it, which the API Source returns and

@@ -48,8 +48,11 @@
 #' there. opengwasr never swaps it for another: if reticulate can't start the Python you chose and
 #' starts a lower choice, its automatic one or one it found itself instead, `og_local()` refuses.
 #' Otherwise (and with `RETICULATE_PYTHON=managed` or `RETICULATE_USE_MANAGED_VENV=true`, which ask
-#' for it) reticulate sets one up automatically with uv (`reticulate::py_require("ogquery")`),
-#' which needs the internet the first time.
+#' for it) reticulate sets one up automatically with uv
+#' (`reticulate::py_require("ogquery>=0.1.0,<1")`), which needs the internet the first time.
+#'
+#' opengwasr reads ogquery `>=0.1.0,<1`. An ogquery outside that range, or without
+#' `ogquery.release` (such as the placeholder 0.0.0 on PyPI), is refused before anything is read.
 #'
 #' One gap: a `use_virtualenv()`, `use_condaenv()` or `use_python()` call can't be seen before
 #' Python starts, so opengwasr declares ogquery with `py_require()` as for no choice. Once Python
@@ -60,12 +63,16 @@
 #'
 #' Without reticulate, `og_local()` offers to install it, or, when R isn't interactive, stops
 #' with `opengwasr_local_unavailable`, as it does whenever no Python with ogquery can be found.
-#' That error carries `e$need` (`"reticulate"`, `"python"`, `"ogquery"` or `"chosen_python"`),
+#' That error carries `e$need` (`"reticulate"`, `"python"`, `"ogquery"`, `"ogquery_version"` or
+#' `"chosen_python"`), `e$found` (for `"ogquery_version"`, the ogquery version found, or `NA` for
+#' none), `e$required` (the ogquery versions opengwasr supports, `">=0.1.0,<1"`),
 #' `e$python`, `e$chosen_by` (how the Python was chosen: `"RETICULATE_PYTHON"`,
 #' `"RETICULATE_PYTHON_ENV"`, `"use_python"`, `"VIRTUAL_ENV"`, `"automatic"` or `"reticulate"`, one
 #' reticulate found itself), `e$started_by` (for `"chosen_python"`, how the Python reticulate
 #' started instead was chosen), `e$install` (the command that installs what is missing, when there
-#' is one) and `e$setting` (the setting that names a Python). [og_local_check()] reports what
+#' is one; for an unsupported ogquery in reticulate's automatic Python, the command that clears
+#' uv's cached ogquery, after which restarting R sets up a supported one) and `e$setting` (the
+#' setting that names a Python). [og_local_check()] reports what
 #' was found.
 #'
 #' @section LD resource:
@@ -209,7 +216,10 @@ print.og_local_source <- print_formatted
 #' @return An `og_local_check`: a list with
 #'   * `python` (the Python's path) and `chosen_by` (how it was chosen, as for [og_local()]'s
 #'     errors: `"RETICULATE_PYTHON"`, `"use_python"`, `"automatic"`, ...);
-#'   * `reticulate` and `ogquery`, their versions;
+#'   * `reticulate` and `ogquery`, their versions (`ogquery` is the one found, even when opengwasr
+#'     doesn't support it);
+#'   * `ogquery_required`, the ogquery versions opengwasr supports (`">=0.1.0,<1"`), and
+#'     `ogquery_in_range`, whether the ogquery found is one of them (`NA` when none is found);
 #'   * `reads`, the format series ogquery reads, such as `"0.3"` (any 0.3.x);
 #'   * `releases`, a data frame with one row per path: `path` (as given), `release_path` (the
 #'     Store Release directory it resolved to: itself for a Store Release directory, the one a GWAS
@@ -243,7 +253,7 @@ og_local_check <- function(path) {
                        problem = problem$unavailable,
                        reason = unavailable_reason[[unavailable$need]], stringsAsFactors = FALSE)
     info <- list(python = unavailable$python, chosen_by = unavailable$chosen_by,
-                 ogquery = NA_character_, reads = NA_character_)
+                 ogquery = unavailable$found, reads = NA_character_)
     problems <- conditionMessage(unavailable)
   } else {
     unavailable <- NULL
@@ -260,7 +270,9 @@ og_local_check <- function(path) {
   }, character(1)))
   structure(
     list(python = info$python, chosen_by = info$chosen_by, reticulate = local_reticulate_version(),
-         ogquery = info$ogquery, reads = info$reads,
+         ogquery = info$ogquery, ogquery_required = ogquery_required,
+         ogquery_in_range = if (is.na(info$ogquery) && !identical(unavailable$need, "ogquery_version")) NA else ogquery_in_range(info$ogquery),
+         reads = info$reads,
          releases = rows[c("path", "release_path", "store_id", "release_id", "format_version", "readable",
                            "problem", "reason")],
          duplicates = duplicates, unavailable = unavailable, problems = unname(problems)),
@@ -285,12 +297,16 @@ format.og_local_check <- function(x, ...) {
   lines <- unlist(lapply(seq_len(nrow(r)), function(i) {
     c(paste0("  ", r$path[[i]]), if (!is.na(resolved[[i]])) resolved[[i]], paste0("    ", found[[i]]))
   }))
+  ogquery <- if (isFALSE(x$ogquery_in_range)) {
+    paste0(na_as(x$ogquery, "no version"), ", not supported (opengwasr needs ogquery ", x$ogquery_required, ")")
+  } else {
+    na_as(x$ogquery, "not found")
+  }
   c(
     "<og_local_check>",
     paste0("Python:     ", na_as(x$python, "none found"), if (!is.na(x$chosen_by)) paste0(" (chosen by ", x$chosen_by, ")")),
     paste0("reticulate: ", na_as(x$reticulate, "not installed")),
-    paste0("ogquery:    ", na_as(x$ogquery, "not found"),
-           if (!all(is.na(x$reads))) paste0(", reads format ", series_text(x$reads))),
+    paste0("ogquery:    ", ogquery, if (!all(is.na(x$reads))) paste0(", reads format ", series_text(x$reads))),
     "",
     "Store Releases:",
     lines,
@@ -649,20 +665,43 @@ refuse_duplicate_store <- function(rows, store_id, call = rlang::caller_env()) {
 # can't be swapped once it has.
 local_state <- new.env(parent = emptyenv())
 
+# The ogquery releases opengwasr reads, as one pip requirement: from 0.1.0, the oldest release
+# tested (0.3.0 passes too), up to, not including, 1.0. ogquery 0.0.0, an early placeholder on PyPI,
+# has no `ogquery.release`. Everything that names the range uses these: py_require(), the version
+# check, the install advice, og_local_check(); and, as text, DESCRIPTION, the CI workflows and
+# vignette("local-source"), which say it once each.
+ogquery_range <- c(lower = "0.1.0", upper = "1")
+ogquery_required <- paste0(">=", ogquery_range[["lower"]], ",<", ogquery_range[["upper"]])
+ogquery_requirement <- paste0("ogquery", ogquery_required)
+
+# Whether an ogquery version is in ogquery_range. Only its release numbers are compared, so a
+# pre-release or development build counts as its release: "1.0.0rc1" is outside, "0.3.1.dev2" in.
+# No version (NA or NULL), or one that doesn't start with a number, is outside.
+ogquery_in_range <- function(version) {
+  if (!length(version) || is.na(version)) return(FALSE)
+  release <- regmatches(version, regexpr("^[0-9]+(\\.[0-9]+)*", version))
+  if (!length(release)) return(FALSE)
+  release <- numeric_version(release)
+  release >= ogquery_range[["lower"]] && release < ogquery_range[["upper"]]
+}
+
 # ogquery's modules, and `info`: the Python, how it was chosen, the ogquery version and the format
 # series it reads. A Python the user chose wins (python_choice()), and py_require() then isn't
 # called: reticulate's own discovery (py_discover_config() in reticulate 1.47) ranks that choice
 # above its automatic environment, and a requirement declared for the automatic one would only
 # matter if reticulate fell back to it, which opengwasr refuses (python_swapped()). Without a
-# choice, py_require("ogquery") declares ogquery, before Python starts or, for reticulate's
-# automatic environment already running, after (reticulate adds it then). How the Python was
-# chosen is what reticulate says once it has started it (started_by()).
+# choice, py_require() declares ogquery in ogquery_range, before Python starts or, for
+# reticulate's automatic environment already running, after (reticulate adds it then). How the
+# Python was chosen is what reticulate says once it has started it (started_by()). What the Python
+# has of ogquery is checked before anything is imported from it: none, or a version outside
+# ogquery_range, or one without `ogquery.release`, is refused, so no read meets an ogquery
+# opengwasr doesn't support.
 local_ogquery <- function(call = rlang::caller_env()) {
   if (!is.null(local_state$ogquery)) return(local_state$ogquery)
   require_reticulate(call)
   choice <- python_choice(if (local_py_started()) local_py_config())
-  if (is.null(choice)) local_py_require()
-  modules <- tryCatch(local_import_ogquery(), error = identity)
+  if (is.null(choice)) local_py_require(ogquery_requirement)
+  found <- tryCatch(local_find_ogquery(), error = identity)
   config <- tryCatch(local_py_config(), error = function(e) NULL)
   python <- normalise_path(config$python %||% choice$python %||% NA_character_, resolve = FALSE)
   chosen_by <- if (!is.null(config)) started_by(config) else choice$chosen_by %||% NA_character_
@@ -677,10 +716,16 @@ local_ogquery <- function(call = rlang::caller_env()) {
   if (!is.null(choice) && !is.null(config) && is.null(config$forced) && !isTRUE(config$ephemeral)) {
     chosen_by <- choice$chosen_by
   }
-  if (inherits(modules, "error")) python_unavailable(modules, python, chosen_by, choice, call)
-  versions <- local_ogquery_versions(modules)
+  if (inherits(found, "error")) python_unavailable(found, python, chosen_by, choice, call = call)
+  if (!isTRUE(found$installed)) ogquery_missing(python, chosen_by, choice, found$pip, call)
+  version <- found$version %||% NA_character_
+  if (!isTRUE(found$release) || !ogquery_in_range(version)) {
+    ogquery_unsupported(version, python, chosen_by, found$pip, call)
+  }
+  modules <- tryCatch(local_import_ogquery(), error = identity)
+  if (inherits(modules, "error")) python_unavailable(modules, python, chosen_by, choice, found$pip, call)
   local_state$ogquery <- c(modules, list(info = list(python = python, chosen_by = chosen_by,
-                                                      ogquery = versions$ogquery, reads = versions$reads)))
+                                                      ogquery = version, reads = local_ogquery_reads(modules))))
   local_state$ogquery
 }
 
@@ -764,35 +809,82 @@ require_reticulate <- function(call) {
   }
 }
 
-python_unavailable <- function(e, python, chosen_by, choice, call) {
+python_unavailable <- function(e, python, chosen_by, choice, pip = NULL, call) {
   if (inherits(e, "python.builtin.ModuleNotFoundError") || inherits(e, "python.builtin.ImportError")) {
-    install <- paste0(python, " -m pip install ogquery")
-    local_unavailable(c(paste0("The Python in use, ", python, " (", chosen_by, "), can't import ogquery."),
-                        x = python_message(e),
-                        i = paste0("Install ogquery into that Python: `", install, "`, then restart R."),
-                        if (is.null(choice)) c(i = "Or set `RETICULATE_PYTHON` to a Python that has ogquery.")),
-                      need = "ogquery", python = python, chosen_by = chosen_by, install = install,
-                      setting = if (is.null(choice)) "RETICULATE_PYTHON" else NA_character_, call = call)
+    ogquery_missing(python, chosen_by, choice, pip, call, why = python_message(e))
   }
+  install <- paste0("pip install ", shell_word(ogquery_requirement))
   local_unavailable(c("Can't find Python with ogquery.",
                       x = python_message(e),
-                      i = paste0("Set `RETICULATE_PYTHON` to a Python 3.12 or later that has ogquery (`pip install ogquery`), ",
+                      i = paste0("Set `RETICULATE_PYTHON` to a Python 3.12 or later that has ogquery (`", install, "`), ",
                                  "or leave Python unset to let reticulate set one up with uv, which needs the internet the first time.")),
-                    need = "python", python = python, chosen_by = chosen_by, install = "pip install ogquery",
+                    need = "python", python = python, chosen_by = chosen_by, install = install,
                     setting = "RETICULATE_PYTHON", call = call)
 }
 
+# A Python without ogquery, or that can't import a part of it opengwasr uses (`why`, Python's
+# error).
+ogquery_missing <- function(python, chosen_by, choice, pip, call, why = NULL) {
+  install <- ogquery_install(python, pip)
+  local_unavailable(c(paste0("The Python in use, ", python, " (", chosen_by, "), can't import ogquery."),
+                      x = why,
+                      i = paste0("Install ogquery into that Python: `", install, "`, then restart R."),
+                      if (is.null(choice)) c(i = "Or set `RETICULATE_PYTHON` to a Python that has ogquery.")),
+                    need = "ogquery", python = python, chosen_by = chosen_by, install = install,
+                    setting = if (is.null(choice)) "RETICULATE_PYTHON" else NA_character_, call = call)
+}
+
+# An ogquery opengwasr doesn't support: a version (`found`, or NA for none) outside ogquery_range,
+# or one without `ogquery.release`. For a Python the user chose, the advice installs a supported
+# ogquery there. For reticulate's automatic environment, which py_require() asked for a supported
+# ogquery, an unsupported one came from uv's cache or from a session whose Python started before
+# that requirement: the advice clears uv's cached ogquery, with the uv reticulate uses, and
+# restarts R, so reticulate resolves ogquery afresh.
+ogquery_unsupported <- function(found, python, chosen_by, pip, call) {
+  has <- if (is.na(found)) "an ogquery with no version" else paste0("ogquery ", found)
+  needs <- paste0("opengwasr needs ogquery ", ogquery_required, ".")
+  if (identical(chosen_by, "automatic")) {
+    install <- local_uv_cache_clean()
+    advice <- c(i = paste0("reticulate set this Python up automatically, with uv. Clear uv's cached ogquery with `",
+                           install, "`, then restart R, and reticulate sets up a supported ogquery."),
+                i = paste0("Or set `RETICULATE_PYTHON` to a Python that has a supported ogquery (`",
+                           ogquery_install("<python>", TRUE), "`)."))
+  } else {
+    install <- ogquery_install(python, pip)
+    advice <- c(i = paste0("Install a supported ogquery into that Python: `", install, "`, then restart R."))
+  }
+  local_unavailable(c(paste0("The Python in use, ", python, " (", chosen_by, "), has ", has, ". ", needs), advice),
+                    need = "ogquery_version", found = found, python = python, chosen_by = chosen_by,
+                    install = install, call = call)
+}
+
+# The command that installs a supported ogquery into `python`: with its pip, or, for a Python
+# without pip (`pip` FALSE, such as one uv made), with uv. `pip` NULL (not known) assumes pip.
+ogquery_install <- function(python, pip) {
+  if (isFALSE(pip)) {
+    paste0("uv pip install --python ", shell_word(python), " ", shell_word(ogquery_requirement))
+  } else {
+    paste0(shell_word(python), " -m pip install ", shell_word(ogquery_requirement))
+  }
+}
+
+# A word of a shell command, quoted when it holds what a shell would split or redirect on.
+shell_word <- function(x) if (grepl("[[:space:]<>|&;()]", x)) paste0("\"", x, "\"") else x
+
+# Every one carries `required`, the ogquery versions opengwasr supports, and `found`, the version
+# found when it is outside them (need "ogquery_version").
 local_unavailable <- function(message, need, python = NA_character_, chosen_by = NA_character_,
                               started_by = NA_character_, install = NA_character_,
-                              setting = NA_character_, call) {
+                              setting = NA_character_, found = NA_character_, call) {
   og_abort(message, class = "opengwasr_local_unavailable", need = need, python = python,
            chosen_by = chosen_by, started_by = started_by, install = install, setting = setting,
-           call = call)
+           found = found, required = ogquery_required, call = call)
 }
 
 # og_local_check()'s reason for each Store Release when no Python with ogquery is found.
 unavailable_reason <- c(reticulate = "reticulate isn't installed", python = "no Python found",
                         ogquery = "the Python in use has no ogquery",
+                        ogquery_version = paste0("the Python in use has an ogquery outside ", ogquery_required),
                         chosen_python = "reticulate didn't start the Python you chose")
 
 python_message <- function(e) {
@@ -825,13 +917,71 @@ local_py_config <- function() {
   list(python = config$python, forced = config$forced, ephemeral = isTRUE(config$ephemeral))
 }
 
-local_py_require <- function() reticulate::py_require("ogquery")
+local_py_require <- function(packages) reticulate::py_require(packages)
+
+# What the Python in use has of ogquery, found without importing any of it but its package (and
+# starting Python, if it hasn't started): `installed`; `version`, from `ogquery.version` (as
+# ogquery 0.1.0 and later have it), or else the installed distribution's metadata (NULL for
+# neither); `release`, whether it has `ogquery.release`; and `pip`, whether the Python has pip.
+local_find_ogquery <- function() {
+  found <- reticulate::py_run_string(local_python_find, local = TRUE)$find()
+  list(installed = isTRUE(found$installed), version = found$version, release = isTRUE(found$release),
+       pip = isTRUE(found$pip))
+}
+
+# Its imports are inside find(): py_run_string(local = TRUE) keeps top-level names out of the
+# globals a function defined there sees.
+local_python_find <- "
+def find():
+    import importlib, importlib.metadata, importlib.util
+
+    def has(name):
+        try:
+            return importlib.util.find_spec(name) is not None
+        except Exception:
+            return False
+    found = {'installed': has('ogquery'), 'version': None, 'release': False, 'pip': has('pip')}
+    if not found['installed']:
+        return found
+    found['release'] = has('ogquery.release')
+    try:
+        found['version'] = str(importlib.import_module('ogquery.version').__version__)
+    except Exception:
+        try:
+            found['version'] = importlib.metadata.version('ogquery')
+        except Exception:
+            pass
+    return found
+"
+
+# The command that clears uv's cached ogquery, with the uv reticulate uses and its cache. This
+# follows reticulate 1.47's choice of uv (its internal uv_binary()): `RETICULATE_UV`, unless
+# "managed"; then the uv reticulate last used (option `reticulate.uv_binary`); then a uv on the
+# PATH or in ~/.local/bin; and otherwise reticulate's own uv, under its cache directory
+# (tools::R_user_dir("reticulate", "cache")), which keeps its cache there too (`--cache-dir`).
+local_uv_cache_clean <- function() {
+  managed_root <- file.path(tools::R_user_dir("reticulate", "cache"), "uv")
+  managed <- file.path(managed_root, "bin", if (on_windows()) "uv.exe" else "uv")
+  configured <- Sys.getenv("RETICULATE_UV", unset = NA)
+  cached <- getOption("reticulate.uv_binary")
+  uv <- if (!is.na(configured) && configured != "managed") {
+    configured
+  } else if (is.na(configured) && length(cached) && !identical(cached, "managed") &&
+             !isTRUE(attr(cached, "reticulate-managed", exact = TRUE))) {
+    cached
+  } else if (is.na(configured)) {
+    on_path <- c(as.character(Sys.which("uv")), path.expand("~/.local/bin/uv"))
+    on_path[nzchar(on_path) & file.exists(on_path)][1]
+  }
+  if (length(uv) && !is.na(uv)) return(paste0(shell_word(normalise_path(uv, resolve = FALSE)), " cache clean ogquery"))
+  paste0(shell_word(normalise_path(managed, resolve = FALSE)), " cache clean ogquery --cache-dir ",
+         shell_word(normalise_path(file.path(managed_root, "cache"), resolve = FALSE)))
+}
 
 # Starts Python, if it hasn't started, and imports the parts of ogquery opengwasr uses.
 local_import_ogquery <- function() {
   list(release = reticulate::import("ogquery.release"), manifest = reticulate::import("ogquery.manifest"),
-       format = reticulate::import("ogquery.format"), version = reticulate::import("ogquery.version"),
-       json = reticulate::import("json"), identity = reticulate::import("ogquery.identity"),
+       format = reticulate::import("ogquery.format"), json = reticulate::import("json"), identity = reticulate::import("ogquery.identity"),
        stats = reticulate::import("ogquery.stats"), top_hits = reticulate::import("ogquery.top_hits"),
        by_variant = reticulate::import("ogquery.by_variant"),
        columns = reticulate::py_run_string(local_python_columns, local = TRUE))
@@ -885,18 +1035,18 @@ local_probe_release <- function(release) {
   invisible()
 }
 
-# ogquery's version, and the format series it reads alone. ogquery has no public "which formats
+# The format series ogquery reads alone. ogquery has no public "which formats
 # can I read" call, so this reads two undocumented parts of ogquery.format: the series it
 # implements (`SUPPORTED_FORMAT_VERSIONS`), less those read through a Store Variant Table
 # (`carries_variant_offsets()`: the 0.1 and 0.2 series), which needs a reader opengwasr doesn't
 # have. A series, such as "0.3": ogquery reads any patch of it. Here alone, so a public call can
 # replace it in one place.
-local_ogquery_versions <- function(modules) {
+local_ogquery_reads <- function(modules) {
   supported <- reticulate::iterate(modules$format$SUPPORTED_FORMAT_VERSIONS$items())
   series <- vapply(supported, function(s) paste(unlist(s[[1]]), collapse = "."), character(1))
   newest <- vapply(supported, function(s) paste(c(unlist(s[[1]]), unlist(s[[2]])), collapse = "."), character(1))
   alone <- !vapply(newest, function(v) isTRUE(modules$format$carries_variant_offsets(v)), logical(1))
-  list(ogquery = as.character(modules$version$`__version__`), reads = unname(series[alone]))
+  unname(series[alone])
 }
 
 local_is_stale <- function(object) reticulate::py_is_null_xptr(object)

@@ -337,11 +337,99 @@ test_that("with no Python, og_local() says what to set", {
 })
 
 test_that("a Python without ogquery is refused with how to install it there", {
-  calls <- mock_python(import = python_error("python.builtin.ModuleNotFoundError", "No module named 'ogquery'"))
+  calls <- mock_python(ogquery = list(installed = FALSE, pip = TRUE))
   e <- expect_error(og_local(example_releases("dense")), class = "opengwasr_local_unavailable")
   expect_equal(e$need, "ogquery")
   expect_equal(e$python, "/opt/py/bin/python")
-  expect_equal(e$install, "/opt/py/bin/python -m pip install ogquery")
+  expect_equal(e$install, '/opt/py/bin/python -m pip install "ogquery>=0.1.0,<1"')
+
+  # A Python without pip, such as a uv-made environment: uv installs into it.
+  calls <- mock_python(ogquery = list(installed = FALSE, pip = FALSE))
+  e <- expect_error(og_local(example_releases("dense")), class = "opengwasr_local_unavailable")
+  expect_equal(e$need, "ogquery")
+  expect_equal(e$install, 'uv pip install --python /opt/py/bin/python "ogquery>=0.1.0,<1"')
+
+  # ogquery found, but one of the modules opengwasr imports isn't.
+  calls <- mock_python(import = python_error("python.builtin.ModuleNotFoundError", "No module named 'ogquery'"))
+  e <- expect_error(og_local(example_releases("dense")), class = "opengwasr_local_unavailable")
+  expect_equal(e$need, "ogquery")
+  expect_equal(e$install, '/opt/py/bin/python -m pip install "ogquery>=0.1.0,<1"')
+})
+
+# Which ogquery releases opengwasr reads: 0.1.0 (the oldest tested) up to, not including, 1.0.
+# ogquery 0.0.0, an early placeholder on PyPI, has neither a version nor `ogquery.release`.
+test_that("ogquery outside >=0.1.0,<1, or without ogquery.release, is refused before any read", {
+  user_python <- list(python = "/home/me/venvs/og/bin/python", forced = "RETICULATE_PYTHON", ephemeral = FALSE)
+  refused <- function(ogquery, config = user_python) {
+    mock_python(config = config, ogquery = ogquery, env = parent.frame())
+    if (!isTRUE(config$ephemeral)) withr::local_envvar(RETICULATE_PYTHON = config$python)
+    expect_error(og_local(example_releases("dense")), class = "opengwasr_local_unavailable")
+  }
+
+  # 0.0.0 as PyPI has it: no ogquery.release, and no version of its own.
+  e <- refused(list(installed = TRUE, version = NULL, release = FALSE, pip = TRUE))
+  expect_false(inherits(e, "opengwasr_refusal"))
+  expect_equal(e$need, "ogquery_version")
+  expect_true(is.na(e$found))
+  expect_equal(e$required, ">=0.1.0,<1")
+  expect_equal(e$python, "/home/me/venvs/og/bin/python")
+  expect_equal(e$chosen_by, "RETICULATE_PYTHON")
+  expect_equal(e$install, '/home/me/venvs/og/bin/python -m pip install "ogquery>=0.1.0,<1"')
+
+  # 0.0.0, its version read from the installed distribution.
+  e <- refused(list(installed = TRUE, version = "0.0.0", release = FALSE, pip = TRUE))
+  expect_equal(e$need, "ogquery_version")
+  expect_equal(e$found, "0.0.0")
+
+  # Too new, too old, and a version in range that lacks ogquery.release.
+  e <- refused(list(installed = TRUE, version = "1.2.0", release = TRUE, pip = TRUE))
+  expect_equal(e$need, "ogquery_version")
+  expect_equal(e$found, "1.2.0")
+  e <- refused(list(installed = TRUE, version = "1.0.0rc1", release = TRUE, pip = TRUE))
+  expect_equal(e$found, "1.0.0rc1")
+  e <- refused(list(installed = TRUE, version = "0.0.9", release = TRUE, pip = TRUE))
+  expect_equal(e$found, "0.0.9")
+  e <- refused(list(installed = TRUE, version = "0.2.0", release = FALSE, pip = TRUE))
+  expect_equal(e$need, "ogquery_version")
+  expect_equal(e$found, "0.2.0")
+
+  # A Python the user chose without pip: uv installs into it.
+  e <- refused(list(installed = TRUE, version = "0.0.0", release = FALSE, pip = FALSE))
+  expect_equal(e$install, 'uv pip install --python /home/me/venvs/og/bin/python "ogquery>=0.1.0,<1"')
+
+  # reticulate's automatic environment: clear uv's cached ogquery (as reticulate's own uv sees it).
+  local_mocked_bindings(local_uv_cache_clean = function() "/home/me/.cache/R/reticulate/uv/bin/uv cache clean ogquery")
+  e <- refused(list(installed = TRUE, version = "0.0.0", release = FALSE, pip = FALSE), config = automatic_python)
+  expect_equal(e$need, "ogquery_version")
+  expect_equal(e$chosen_by, "automatic")
+  expect_equal(e$found, "0.0.0")
+  expect_equal(e$install, "/home/me/.cache/R/reticulate/uv/bin/uv cache clean ogquery")
+})
+
+test_that("ogquery 0.1.0 and 0.3.0 are read", {
+  for (version in c("0.1.0", "0.3.0", "0.3.1.dev2")) {
+    mock_python(ogquery = list(installed = TRUE, version = version, release = TRUE, pip = TRUE))
+    expect_equal(local_ogquery()$info$ogquery, version)
+  }
+})
+
+test_that("the automatic setup asks py_require() for a supported ogquery", {
+  calls <- mock_python(config = automatic_python)
+  local_ogquery()
+  expect_equal(calls$packages, "ogquery>=0.1.0,<1")
+})
+
+test_that("the uv cache advice names the uv reticulate uses, and its cache", {
+  withr::local_envvar(RETICULATE_UV = "/opt/uv/bin/uv")
+  expect_equal(local_uv_cache_clean(), "/opt/uv/bin/uv cache clean ogquery")
+
+  # reticulate's own uv, which keeps its cache beside it.
+  withr::local_envvar(RETICULATE_UV = "managed")
+  cache <- tools::R_user_dir("reticulate", "cache")
+  expect_equal(local_uv_cache_clean(),
+               paste0(normalise_path(file.path(cache, "uv", "bin", "uv"), resolve = FALSE),
+                      " cache clean ogquery --cache-dir ",
+                      normalise_path(file.path(cache, "uv", "cache"), resolve = FALSE)))
 })
 
 # Which Python, and whether py_require() declares ogquery, setting by setting: reticulate's
@@ -429,13 +517,13 @@ test_that("with no choice, py_require() declares ogquery", {
 
 test_that("a Python the user chose without ogquery is refused, never swapped for the automatic one", {
   calls <- mock_python(config = list(python = "/home/me/venvs/bare/bin/python", forced = "RETICULATE_PYTHON", ephemeral = FALSE),
-                       import = python_error("python.builtin.ModuleNotFoundError", "No module named 'ogquery'"))
+                       ogquery = list(installed = FALSE, pip = TRUE))
   withr::local_envvar(RETICULATE_PYTHON = "/home/me/venvs/bare/bin/python")
   e <- expect_error(og_local(example_releases("dense")), class = "opengwasr_local_unavailable")
   expect_equal(calls$required, 0)
   expect_equal(e$need, "ogquery")
   expect_equal(e$chosen_by, "RETICULATE_PYTHON")
-  expect_equal(e$install, "/home/me/venvs/bare/bin/python -m pip install ogquery")
+  expect_equal(e$install, '/home/me/venvs/bare/bin/python -m pip install "ogquery>=0.1.0,<1"')
 })
 
 test_that("if reticulate starts a Python other than the one the user chose, og_local() refuses", {
@@ -561,6 +649,30 @@ test_that("og_local_check() reports a missing reticulate instead of raising it",
   expect_false(check$releases$readable)
   expect_equal(check$releases$problem, "unavailable")
   expect_identical(expect_output(print(check)), check)
+})
+
+test_that("og_local_check() reports the ogquery version found and whether opengwasr reads it, raising nothing", {
+  empty <- withr::local_tempdir()
+  mock_python(ogquery = list(installed = TRUE, version = "0.0.0", release = FALSE, pip = TRUE))
+  check <- og_local_check(empty)
+  expect_equal(check$ogquery, "0.0.0")
+  expect_false(check$ogquery_in_range)
+  expect_equal(check$ogquery_required, ">=0.1.0,<1")
+  expect_equal(check$unavailable$need, "ogquery_version")
+  expect_equal(check$releases$problem, "unavailable")
+  expect_identical(expect_output(print(check)), check)
+
+  mock_python(ogquery = list(installed = TRUE, version = "0.3.0", release = TRUE, pip = TRUE))
+  check <- og_local_check(empty)
+  expect_equal(check$ogquery, "0.3.0")
+  expect_true(check$ogquery_in_range)
+  expect_null(check$unavailable)
+
+  # No ogquery at all: nothing to range.
+  mock_python(ogquery = list(installed = FALSE, pip = TRUE))
+  check <- og_local_check(empty)
+  expect_true(is.na(check$ogquery))
+  expect_true(is.na(check$ogquery_in_range))
 })
 
 test_that("og_local_check() refuses only bad arguments", {

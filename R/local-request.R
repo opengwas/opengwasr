@@ -96,12 +96,12 @@ local_endpoints <- list(
   },
   # Every Association of a window of one chromosome, in the Analyses named, as the API
   # (`execute_operation`): ogquery's `range_phewas()`, cut to those Analyses before any row is
-  # resolved (`keep_analyses`). A chromosome other than 1-22, X, Y or MT is refused, as the API
-  # refuses the request (schemas.py `check_chromosome`). The engine orders the rows.
+  # resolved (`keep_analyses`). A chromosome other than 1-22, X, Y or MT is refused, as the API's
+  # body model refuses it (schemas.py `check_chromosome`). The engine orders the rows.
   "api/associations/range" = function(src, body, releases, call) {
     ogquery <- local_ogquery(call)
     if (!local_primary_chromosome(ogquery, body$chromosome)) {
-      local_invalid_query(paste0("chromosome '", body$chromosome, "' is not one of 1-22, X, Y or MT"), call)
+      local_malformed(paste0("chromosome '", body$chromosome, "' is not one of 1-22, X, Y or MT"), call)
     }
     local_require_associations(src, releases, call)
     rows <- local_release_rows(src, releases, call, function(facade, release) {
@@ -123,7 +123,7 @@ local_endpoints <- list(
   # (order_by_analysis()). `truncated` says whether any Analysis had more than `limit`.
   "api/tophits" = function(src, body, releases, call) {
     threshold <- body$threshold
-    if (!(threshold > 0 && threshold < 1)) local_invalid_query("threshold must be greater than 0 and less than 1", call)
+    if (!(threshold > 0 && threshold < 1)) local_malformed("threshold must be greater than 0 and less than 1", call)
     ogquery <- local_ogquery(call)
     # Every Store Release's tier is chosen before any is read, as the API chooses them when the Job is
     # submitted.
@@ -159,9 +159,9 @@ local_endpoints <- list(
   "api/phewas" = function(src, body, releases, call) {
     threshold <- body$threshold
     limit <- body$limit
-    if (!(threshold > 0 && threshold <= 1)) local_invalid_query("threshold must be greater than 0 and at most 1", call)
+    if (!(threshold > 0 && threshold <= 1)) local_malformed("threshold must be greater than 0 and at most 1", call)
     if (!(limit >= 1 && limit <= max_phewas_per_variant)) {
-      local_invalid_query(paste0("limit must be from 1 to ", max_phewas_per_variant), call)
+      local_malformed(paste0("limit must be from 1 to ", max_phewas_per_variant), call)
     }
     local_require_associations(src, releases, call, phewas = TRUE)
     ogquery <- local_ogquery(call)
@@ -332,7 +332,7 @@ local_top_hit_tier <- function(ogquery, src, store_id, threshold, call) {
     og_abort(paste0("threshold must be at most ", formatC(max(tiers), format = "g"),
                     ", the loosest p-value the Top-Hit Index of ", store_id, " holds"),
              class = api_error_class("unsupported_threshold", 400L), api_error = "unsupported_threshold",
-             indexed_thresholds = sort(tiers), call = call)
+             indexed_thresholds = as.list(sort(tiers)), call = call)
   }
   min(looser)
 }
@@ -358,7 +358,12 @@ local_require_associations <- function(src, releases, call, phewas = FALSE) {
   }
 }
 
-# A request the API refuses as invalid (`invalid_query`), refused the same way.
-local_invalid_query <- function(message, call) {
-  og_abort(message, class = api_error_class("invalid_query", 400L), api_error = "invalid_query", call = call)
+# A request the API's body model refuses, refused the same way. The API's per-endpoint routes
+# validate the body as its model (schemas.py: a range's chromosome, a threshold or limit out of
+# range) before anything else, and answer 400 `invalid_request`, "Malformed request" (ogdb-api
+# main.py:773-784, errors.py:56-64). Its message is the API's exactly, never reworded (ADR 0002);
+# `reason` says what was wrong.
+local_malformed <- function(reason, call) {
+  og_abort("Malformed request", class = api_error_class("invalid_request", 400L),
+           api_error = "invalid_request", reason = reason, call = call)
 }

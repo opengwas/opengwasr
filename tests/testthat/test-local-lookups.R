@@ -91,7 +91,8 @@ test_that("a value of analyses.tsv the catalogue would refuse is refused, never 
   table$original_sd <- c("1.5", "Inf")
   expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
   table$original_sd <- c("1.5", "")
-  rows <- local_analysis_rows(table, "s", "r")
+  # Parsed here; typed where both Sources' rows end (finish_analyses()).
+  rows <- finish_analyses(local_analysis_rows(table, "s", "r"), c("s:a", "s:b"))
   expect_identical(rows$sample_size, c(1000L, NA))
   expect_identical(rows$original_sd, c(1.5, NA))
 })

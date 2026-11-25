@@ -1,6 +1,6 @@
 # The Local Source (#31): og_local(path) over ogquery, finding Python, and og_local_check().
 #
-# Reads use the example Store Releases bundled in inst/releases (helper-local.R) and skip without a
+# Reads use the example Store Releases bundled in inst/stores (helper-local.R) and skip without a
 # Python that has ogquery. The Python boundary (local_* in R/local-source.R) is mocked at its
 # primitives (mock_python()) for the paths with no reticulate, no Python or no ogquery, and to
 # drive the rule for which Python is chosen. Tests assert on classes and fields, never on
@@ -40,6 +40,106 @@ test_that("og_local() refuses two Store Releases of one GWAS Store", {
   expect_equal(e$store_id, "hyb")
   expect_equal(e$releases, c("hyb/v1", "hyb/v1-completed"))
   expect_equal(e$paths, example_releases("hyb", "hyb-c"))
+})
+
+# GWAS Store directories (#38) -------------------------------------------------------------------
+
+test_that("og_local() given a GWAS Store directory opens its Store Release, as if given that Store Release", {
+  skip_if_no_local()
+  by_store <- og_local(example_stores("dense", "ragged"))
+  by_release <- og_local(example_releases("dense", "ragged"))
+  expect_equal(by_store$releases, by_release$releases)
+  expect_equal(by_store$releases$path, example_releases("dense", "ragged"))
+  expect_equal(og_analyses(by_store), og_analyses(by_release))
+
+  # The two forms mix, one element each.
+  mixed <- og_local(c(example_stores("dense"), example_releases("hyb")))
+  expect_equal(mixed$releases$store_id, c("s", "hyb"))
+  expect_equal(mixed$releases$path, example_releases("dense", "hyb"))
+})
+
+test_that("og_local() refuses a GWAS Store directory holding no Store Release, and one holding several", {
+  skip_if_no_local()
+  none <- withr::local_tempdir()
+  dir.create(file.path(none, "work"))
+  e <- expect_error(og_local(c(example_stores("dense"), none)), class = "opengwasr_not_store_release")
+  expect_equal(e$paths, local_path(none))
+  expect_length(e$reasons, 1)
+
+  # hyb holds v1 and v1c, two Store Releases of GWAS Store hyb.
+  e <- expect_error(og_local(example_stores("dense", "hyb")), class = "opengwasr_several_releases")
+  expect_s3_class(e, "opengwasr_refusal")
+  expect_equal(e$directory, rep(example_stores("hyb"), 2))
+  expect_equal(e$store_id, c("hyb", "hyb"))
+  expect_equal(e$release_id, c("v1", "v1-completed"))
+  expect_equal(e$releases, c("hyb/v1", "hyb/v1-completed"))
+  expect_equal(e$paths, example_releases("hyb", "hyb-c"))
+})
+
+test_that("a GWAS Store directory is searched one level down, never deeper", {
+  skip_if_no_local()
+  # A Hybrid Store Release one level down is the Store Release, not its Dense Component below it.
+  store <- withr::local_tempdir()
+  file.copy(example_releases("hyb"), store, recursive = TRUE)
+  expect_true(file.exists(file.path(store, "v1", "dense", "manifest.json")))
+  src <- og_local(store)
+  expect_equal(src$releases$path, local_path(file.path(store, "v1")))
+  expect_equal(src$releases$release_id, "v1")
+
+  # Without the Store Release's own manifest, only the Dense Component's is left, two levels down:
+  # never found.
+  unlink(file.path(store, "v1", "manifest.json"))
+  e <- expect_error(og_local(store), class = "opengwasr_not_store_release")
+  expect_equal(e$paths, local_path(store))
+  check <- og_local_check(store)
+  expect_equal(check$releases$problem, "not_release")
+  expect_true(is.na(check$releases$release_path))
+})
+
+test_that("a GWAS Store directory laid out as this host's resolves to its one Store Release", {
+  skip_if_no_local()
+  # The layout of /data/opengwasdb/stores/OGS-00011: the Store Release in store.opengwasdb/, earlier
+  # ones under replaced/<time>/, and a build's work/, tmp/, admission, records and logs, none with a
+  # manifest.json one level down, some with one deeper.
+  store <- withr::local_tempdir()
+  file.copy(example_releases("dense"), store, recursive = TRUE)
+  file.rename(file.path(store, "r"), file.path(store, "store.opengwasdb"))
+  for (deeper in c("replaced/20261122T224238Z", "replaced/20261125T035841Z", "work/x", "tmp/partial")) {
+    dir.create(file.path(store, deeper), recursive = TRUE)
+    file.copy(example_releases("ragged"), file.path(store, deeper), recursive = TRUE)
+  }
+  for (other in c("store.opengwasdb.admission", "records", "logs")) dir.create(file.path(store, other))
+  writeLines("{}", file.path(store, "work", "analyses.exclusions.json"))
+  writeLines("{}", file.path(store, "store.opengwasdb.admission", "admission.json"))
+
+  src <- og_local(store)
+  expect_equal(src$releases$path, local_path(file.path(store, "store.opengwasdb")))
+  expect_equal(src$releases$store_id, "s")
+  check <- og_local_check(store)
+  expect_equal(check$releases$release_path, local_path(file.path(store, "store.opengwasdb")))
+  expect_true(check$releases$readable)
+})
+
+test_that("og_local_check() reports which Store Release each GWAS Store directory resolved to", {
+  skip_if_no_local()
+  none <- withr::local_tempdir()
+  check <- og_local_check(c(example_stores("dense", "hyb"), example_releases("ragged"), none))
+  rows <- check$releases
+  expect_equal(rows$path, c(example_stores("dense", "hyb"), example_releases("ragged"), local_path(none)))
+  expect_equal(rows$release_path, c(example_releases("dense"), NA, example_releases("ragged"), NA))
+  expect_equal(rows$store_id, c("s", NA, "residual-rag", NA))
+  expect_equal(rows$problem, c(NA, "several", NA, "not_release"))
+  expect_equal(rows$readable, c(TRUE, FALSE, TRUE, FALSE))
+  expect_false(is.na(rows$reason[[2]]))
+  expect_true(any(grepl(example_releases("dense"), format(check), fixed = TRUE)))
+
+  # Without Python, the directories are still resolved: that needs no manifest read.
+  local_fresh_python()
+  local_mocked_bindings(local_reticulate_installed = function() FALSE,
+                        local_install_reticulate = function() stop("not interactive"))
+  offline <- og_local_check(example_stores("dense", "hyb"))
+  expect_equal(offline$releases$release_path, c(example_releases("dense"), NA))
+  expect_equal(offline$releases$problem, c("unavailable", "unavailable"))
 })
 
 test_that("og_local() refuses a path that isn't a Store Release, and an empty `path`", {

@@ -12,16 +12,25 @@
 #' Create a Local Source
 #'
 #' A Local Source answers queries from Store Releases downloaded to this machine, through
-#' ogquery, the Store Reader. Give it the full path of each Store Release, one element per Store
-#' Release: nothing scans a directory. Each Store Release names itself by its manifest
-#' (`store_id`, `release_id`, `format_version`), and a Local Source holds at most one Store
-#' Release of each GWAS Store, so no query ever chooses between Store Releases.
+#' ogquery, the Store Reader. Give it the directory of each GWAS Store, one element per GWAS Store.
+#' A GWAS Store directory holds one Store Release, one level down: the directory there holding a
+#' `manifest.json`. It is searched one level down and never deeper, so the Dense Component inside a
+#' Hybrid Store Release (`<release>/dense/manifest.json`) is never taken for a Store Release. A
+#' Store Release's own directory (the one holding its `manifest.json`) works too. Each Store
+#' Release names itself by its manifest (`store_id`, `release_id`, `format_version`), and a Local
+#' Source holds at most one Store Release of each GWAS Store, so no query ever chooses between
+#' Store Releases.
 #'
-#' `og_local()` reads no Associations. It checks that each path is a Store Release that the
-#' installed ogquery can read, and refuses the Source otherwise:
+#' `og_local()` reads no Associations. It checks that each path is, or holds, a Store Release that
+#' the installed ogquery can read, and refuses the Source otherwise:
 #'
-#' * a path that doesn't exist, or isn't a Store Release (no manifest, or one ogquery can't
-#'   parse): `opengwasr_not_store_release`, with `e$paths` and why each was refused, `e$reasons`;
+#' * a path that doesn't exist, or holds no Store Release (no manifest in it or one level down, or
+#'   one ogquery can't parse): `opengwasr_not_store_release`, with `e$paths` and why each was
+#'   refused, `e$reasons`;
+#' * a GWAS Store directory holding several Store Releases: `opengwasr_several_releases`, with one
+#'   element per Store Release found in `e$directory` (the GWAS Store directory given),
+#'   `e$store_id`, `e$release_id`, `e$releases` (`<store_id>/<release_id>`) and `e$paths`, so you
+#'   can give the one you want;
 #' * a Store Release whose format version ogquery can't read: `opengwasr_format_unsupported`,
 #'   with `e$paths`, each one's version (`e$format_version`) and the format series ogquery reads
 #'   (`e$readable`);
@@ -56,22 +65,25 @@
 #' is one) and `e$setting` (the setting that names a Python). [og_local_check()] reports what
 #' was found.
 #'
-#' @param path The full path of each Store Release: a character vector, one element per Store
-#'   Release directory.
+#' @param path The directory of each GWAS Store, or of each Store Release: a character vector,
+#'   one element per GWAS Store.
 #' @return An `og_local_source`. Its `releases` is a data frame with one row per Store Release:
-#'   `store_id`, `release_id`, `format_version` and `path`.
+#'   `store_id`, `release_id`, `format_version` and `path` (the Store Release's own directory).
 #' @seealso [og_local_check()], [og_api()].
 #' @examplesIf nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")
 #' stores <- system.file("stores", package = "opengwasr")
-#' src <- og_local(file.path(stores, c("dense/r", "ragged/comp", "hyb/v1")))
+#' # GWAS Store directories, and, for hyb, which holds two, a Store Release directory
+#' src <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")))
 #' src
 #' @export
 og_local <- function(path) {
   path <- check_release_paths(path)
   ogquery <- local_ogquery()
-  found <- lapply(path, read_release, ogquery = ogquery)
+  found <- lapply(path, find_release, ogquery = ogquery)
+  refuse_release_problems(found, ogquery$info)
   rows <- release_rows(found)
-  refuse_release_problems(rows, ogquery$info)
+  # Every path now names one Store Release, which the Source keeps by its own directory.
+  rows$path <- rows$release_path
   duplicate <- duplicate_stores(rows)
   if (length(duplicate)) refuse_duplicate_store(rows, duplicate[[1]])
 
@@ -107,22 +119,26 @@ print.og_local_source <- print_formatted
 #' Check the setup of a Local Source
 #'
 #' Reports the Python a Local Source uses and how it was chosen, the reticulate and ogquery
-#' versions, the format series ogquery reads, and, for each Store Release, its `store_id`,
-#' `release_id` and `format_version` and whether ogquery can read it. It reports problems instead
+#' versions, the format series ogquery reads, and, for each path, the Store Release found there
+#' (for a GWAS Store directory, the one it resolved to), its `store_id`, `release_id` and
+#' `format_version`, and whether ogquery can read it. It reports problems instead
 #' of raising them, so it is the place to start when [og_local()] refuses: only a `path` that
 #' isn't a character vector of paths, or a Local Source, is an error.
 #'
 #' Like [og_local()], it finds Python on first use, so it sets Python up automatically when you
 #' haven't chosen one.
 #'
-#' @param path The full path of each Store Release, as for [og_local()], or a Local Source.
+#' @param path The directory of each GWAS Store or Store Release, as for [og_local()], or a Local
+#'   Source.
 #' @return An `og_local_check`: a list with
 #'   * `python` (the Python's path) and `chosen_by` (how it was chosen, as for [og_local()]'s
 #'     errors: `"RETICULATE_PYTHON"`, `"use_python"`, `"automatic"`, ...);
 #'   * `reticulate` and `ogquery`, their versions;
 #'   * `reads`, the format series ogquery reads, such as `"0.3"` (any 0.3.x);
-#'   * `releases`, a data frame with one row per path: `path`, `store_id`, `release_id`,
-#'     `format_version`, `readable`, `problem` (`NA`, `"not_release"`, `"format"` or
+#'   * `releases`, a data frame with one row per path: `path` (as given), `release_path` (the
+#'     Store Release directory it resolved to: itself for a Store Release directory, the one a GWAS
+#'     Store directory holds, or `NA` when it holds none or several), `store_id`, `release_id`,
+#'     `format_version`, `readable`, `problem` (`NA`, `"not_release"`, `"several"`, `"format"` or
 #'     `"unavailable"`) and `reason`;
 #'   * `duplicates`, the GWAS Stores given more than one Store Release;
 #'   * `unavailable`, the `opengwasr_local_unavailable` condition [og_local()] would raise, or
@@ -132,7 +148,7 @@ print.og_local_source <- print_formatted
 #'   Missing values are `NA`.
 #' @examplesIf nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")
 #' stores <- system.file("stores", package = "opengwasr")
-#' og_local_check(file.path(stores, c("dense/r", "hyb/v1")))
+#' og_local_check(file.path(stores, c("dense", "hyb")))
 #' @export
 og_local_check <- function(path) {
   if (inherits(path, "og_local_source")) {
@@ -143,15 +159,21 @@ og_local_check <- function(path) {
   ogquery <- tryCatch(local_ogquery(), opengwasr_local_unavailable = identity)
   if (inherits(ogquery, "error")) {
     unavailable <- ogquery
-    rows <- data.frame(path = path, store_id = NA_character_, release_id = NA_character_,
-                       format_version = NA_character_, problem = problem$unavailable,
+    # Which Store Release each path names needs no Python: only its manifest does.
+    release_path <- vapply(path, function(p) {
+      dirs <- release_dirs(p)
+      if (length(dirs) == 1) dirs else NA_character_
+    }, character(1), USE.NAMES = FALSE)
+    rows <- data.frame(path = path, release_path = release_path, store_id = NA_character_,
+                       release_id = NA_character_, format_version = NA_character_,
+                       problem = problem$unavailable,
                        reason = unavailable_reason[[unavailable$need]], stringsAsFactors = FALSE)
     info <- list(python = unavailable$python, chosen_by = unavailable$chosen_by,
                  ogquery = NA_character_, reads = NA_character_)
     problems <- conditionMessage(unavailable)
   } else {
     unavailable <- NULL
-    rows <- release_rows(lapply(path, read_release, ogquery = ogquery))
+    rows <- release_rows(lapply(path, find_release, ogquery = ogquery))
     info <- ogquery$info
     problems <- character()
   }
@@ -165,7 +187,8 @@ og_local_check <- function(path) {
   structure(
     list(python = info$python, chosen_by = info$chosen_by, reticulate = local_reticulate_version(),
          ogquery = info$ogquery, reads = info$reads,
-         releases = rows[c("path", "store_id", "release_id", "format_version", "readable", "problem", "reason")],
+         releases = rows[c("path", "release_path", "store_id", "release_id", "format_version", "readable",
+                           "problem", "reason")],
          duplicates = duplicates, unavailable = unavailable, problems = unname(problems)),
     class = "og_local_check"
   )
@@ -182,6 +205,12 @@ format.og_local_check <- function(x, ...) {
     label <- paste(c(name, fmt), collapse = ", ")
     if (nzchar(label)) paste0(label, ": ", says) else says
   }, character(1))
+  # A GWAS Store directory's line is followed by the Store Release it resolved to.
+  resolved <- ifelse(!is.na(r$release_path) & r$release_path != r$path,
+                     paste0("    resolved to ", r$release_path), NA_character_)
+  lines <- unlist(lapply(seq_len(nrow(r)), function(i) {
+    c(paste0("  ", r$path[[i]]), if (!is.na(resolved[[i]])) resolved[[i]], paste0("    ", found[[i]]))
+  }))
   c(
     "<og_local_check>",
     paste0("Python:     ", na_as(x$python, "none found"), if (!is.na(x$chosen_by)) paste0(" (chosen by ", x$chosen_by, ")")),
@@ -190,7 +219,7 @@ format.og_local_check <- function(x, ...) {
            if (!all(is.na(x$reads))) paste0(", reads format ", series_text(x$reads))),
     "",
     "Store Releases:",
-    as.vector(rbind(paste0("  ", r$path), paste0("    ", found))),
+    lines,
     if (length(x$problems)) c("", paste0("! ", x$problems))
   )
 }
@@ -207,7 +236,7 @@ local_release <- function(src, store_id, call = rlang::caller_env()) {
   if (is.null(release) || local_is_stale(release)) {
     ogquery <- local_ogquery(call)
     found <- read_release(path, ogquery)
-    refuse_release_problems(release_rows(list(found)), ogquery$info, call = call)
+    refuse_release_problems(list(found), ogquery$info, call = call)
     release <- found$release
     assign(path, release, envir = src$handles)
   }
@@ -299,8 +328,8 @@ og_ld_reflookup.og_local_source <- function(src, variants, ld = NULL) {
 # `exist = FALSE` (og_local_check()) reports a missing path as a row rather than refusing it.
 check_release_paths <- function(path, exist = TRUE, call = rlang::caller_env()) {
   if (!is.character(path) || !length(path) || anyNA(path) || !all(nzchar(path))) {
-    og_abort(c("`path` must be the full path of each Store Release: a character vector, one element per Store Release.",
-               i = "For example `og_local(c(\"/data/opengwas/OGS-00009/OGS-00009-v2\", \"/data/opengwas/OGS-00011/OGS-00011-v2\"))`."),
+    og_abort(c("`path` must be the directory of each GWAS Store, or of each Store Release: a character vector, one element per GWAS Store.",
+               i = "For example `og_local(c(\"/data/opengwas/OGS-00009\", \"/data/opengwas/OGS-00011\"))`."),
              class = "opengwasr_argument", call = call)
   }
   path <- normalise_path(path)
@@ -328,7 +357,54 @@ on_windows <- function() .Platform$OS.type == "windows"
 # Reading each Store Release through ogquery ----------------------------------------------------
 
 # Why a Store Release can't be read, as `problem` holds it (NA when it can).
-problem <- list(not_release = "not_release", format = "format", unavailable = "unavailable")
+problem <- list(not_release = "not_release", several = "several", format = "format", unavailable = "unavailable")
+
+# The Store Release directories a path names: itself, when it holds a manifest.json (a Store Release
+# directory); otherwise (a GWAS Store directory) each directory one level down that holds one, and
+# never deeper, so the Dense Component inside a Hybrid Store Release (<release>/dense/manifest.json)
+# is never taken for a Store Release. A path that doesn't exist names itself, for read_release() to
+# refuse. In C-locale order, so the result is the same on every machine.
+release_dirs <- function(path) {
+  if (!dir.exists(path) || has_manifest(path)) return(path)
+  inside <- list.dirs(path, full.names = TRUE, recursive = FALSE)
+  normalise_path(sort(inside[has_manifest(inside)], method = "radix"))
+}
+
+has_manifest <- function(dir) utils::file_test("-f", file.path(dir, "manifest.json"))
+
+# What ogquery makes of one path given (`path`): read_release() of the one Store Release it names,
+# at `release_path`; or, for a GWAS Store directory holding none or several, the problem, with each
+# one found in `candidates` (its manifest's identity, read as read_release() reads it, and path).
+find_release <- function(path, ogquery) {
+  dirs <- release_dirs(path)
+  if (length(dirs) == 1) {
+    found <- read_release(dirs, ogquery)
+    found$path <- path
+    return(found)
+  }
+  row <- list(path = path, release_path = NA_character_, store_id = NA_character_, release_id = NA_character_,
+              format_version = NA_character_, release = NULL)
+  if (!length(dirs)) {
+    return(c(row, list(problem = problem$not_release,
+                       reason = "no Store Release in it or one level down (no manifest.json)")))
+  }
+  ids <- lapply(dirs, manifest_identity, ogquery = ogquery)
+  candidates <- data.frame(store_id = vapply(ids, `[[`, "", "store_id"),
+                           release_id = vapply(ids, `[[`, "", "release_id"), path = dirs,
+                           stringsAsFactors = FALSE)
+  names <- release_names(na_as(candidates$store_id, "?"), na_as(candidates$release_id, "?"))
+  c(row, list(problem = problem$several, candidates = candidates,
+              reason = paste0(length(dirs), " Store Releases one level down (",
+                              paste0(names, " in ", basename(dirs), collapse = ", "),
+                              "); a GWAS Store directory holds one")))
+}
+
+# A Store Release's identity from its manifest, as read_release() reads it: through ogquery's
+# StoreManifest.load(), or, for a manifest it refuses, what the file declares (NA for each field it
+# lacks).
+manifest_identity <- function(dir, ogquery) {
+  tryCatch(local_load_manifest(ogquery, dir), error = function(e) local_declared_manifest(ogquery, dir))
+}
 
 # What ogquery makes of one path: its manifest's identity, the opened release, and its `problem`
 # and `reason`. The manifest is read first, with ogquery's StoreManifest.load(): a path with none
@@ -339,7 +415,7 @@ problem <- list(not_release = "not_release", format = "format", unavailable = "u
 # doesn't have.
 read_release <- function(path, ogquery) {
   row <- function(manifest = list(), release = NULL, problem = NA_character_, reason = NA_character_) {
-    list(path = path, store_id = manifest$store_id %||% NA_character_,
+    list(path = path, release_path = path, store_id = manifest$store_id %||% NA_character_,
          release_id = manifest$release_id %||% NA_character_,
          format_version = manifest$format_version %||% NA_character_,
          release = release, problem = problem, reason = reason)
@@ -380,24 +456,45 @@ read_release <- function(path, ogquery) {
 release_rows <- function(found) {
   field <- function(name) vapply(found, function(f) as.character(f[[name]]), character(1))
   data.frame(store_id = field("store_id"), release_id = field("release_id"),
-             format_version = field("format_version"), path = field("path"),
+             format_version = field("format_version"), path = field("path"), release_path = field("release_path"),
              problem = field("problem"), reason = field("reason"), stringsAsFactors = FALSE)
 }
 
-# Refuse the Store Releases that can't be read: first those that aren't Store Releases, then those
-# whose format ogquery can't read.
-refuse_release_problems <- function(rows, info, call = rlang::caller_env()) {
+# Refuse the paths whose Store Release can't be read (`found`, from find_release() or
+# read_release()): first those that aren't or hold no Store Release, then GWAS Store directories
+# holding several, then Store Releases whose format ogquery can't read. Each is named by the Store
+# Release directory when there is one, and otherwise by the path given.
+refuse_release_problems <- function(found, info, call = rlang::caller_env()) {
+  rows <- release_rows(found)
+  where <- ifelse(is.na(rows$release_path), rows$path, rows$release_path)
   not_release <- which(rows$problem %in% problem$not_release)
-  if (length(not_release)) refuse_not_store_release(rows$path[not_release], rows$reason[not_release], call = call)
+  if (length(not_release)) refuse_not_store_release(where[not_release], rows$reason[not_release], call = call)
+  several <- which(rows$problem %in% problem$several)
+  if (length(several)) refuse_several_releases(found[several], call = call)
   unreadable <- which(rows$problem %in% problem$format)
-  if (length(unreadable)) refuse_format(rows$path[unreadable], rows$format_version[unreadable], info, call = call)
+  if (length(unreadable)) refuse_format(where[unreadable], rows$format_version[unreadable], info, call = call)
   invisible()
+}
+
+refuse_several_releases <- function(found, call = rlang::caller_env()) {
+  candidates <- do.call(rbind, lapply(found, `[[`, "candidates"))
+  directory <- rep(vapply(found, `[[`, "", "path"), vapply(found, function(f) nrow(f$candidates), integer(1)))
+  releases <- release_names(candidates$store_id, candidates$release_id)
+  og_abort(c(paste0("A GWAS Store directory holds one Store Release, and ",
+                    if (length(found) == 1) "this one holds several: " else "these hold several: ",
+                    paste0(unique(directory), collapse = ", ")),
+             stats::setNames(paste0(releases, ": ", candidates$path), rep("x", nrow(candidates))),
+             i = "Give `og_local()` the directory of the Store Release you want instead, one of those listed."),
+           class = "opengwasr_several_releases", refusal = TRUE, directory = directory,
+           store_id = candidates$store_id, release_id = candidates$release_id, releases = releases,
+           paths = candidates$path, call = call)
 }
 
 refuse_not_store_release <- function(paths, reasons, call = rlang::caller_env()) {
   og_abort(c(paste0(if (length(paths) == 1) "This path isn't a Store Release:" else "These paths aren't Store Releases:"),
              stats::setNames(paste0(paths, " (", reasons, ")"), rep("x", length(paths))),
-             i = "Give `og_local()` the directory of each Store Release, the one holding its `manifest.json`."),
+             i = paste("Give `og_local()` the directory of each GWAS Store, holding its Store Release one level down,",
+                       "or of each Store Release, the one holding its `manifest.json`.")),
            class = "opengwasr_not_store_release", paths = paths, reasons = reasons, call = call)
 }
 

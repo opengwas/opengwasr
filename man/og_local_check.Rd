@@ -7,7 +7,8 @@
 og_local_check(path)
 }
 \arguments{
-\item{path}{The full path of each Store Release, as for \code{\link[=og_local]{og_local()}}, or a Local Source.}
+\item{path}{The directory of each GWAS Store or Store Release, as for \code{\link[=og_local]{og_local()}}, or a Local
+Source.}
 }
 \value{
 An \code{og_local_check}: a list with
@@ -16,8 +17,10 @@ An \code{og_local_check}: a list with
 errors: \code{"RETICULATE_PYTHON"}, \code{"use_python"}, \code{"automatic"}, ...);
 \item \code{reticulate} and \code{ogquery}, their versions;
 \item \code{reads}, the format series ogquery reads, such as \code{"0.3"} (any 0.3.x);
-\item \code{releases}, a data frame with one row per path: \code{path}, \code{store_id}, \code{release_id},
-\code{format_version}, \code{readable}, \code{problem} (\code{NA}, \code{"not_release"}, \code{"format"} or
+\item \code{releases}, a data frame with one row per path: \code{path} (as given), \code{release_path} (the
+Store Release directory it resolved to: itself for a Store Release directory, the one a GWAS
+Store directory holds, or \code{NA} when it holds none or several), \code{store_id}, \code{release_id},
+\code{format_version}, \code{readable}, \code{problem} (\code{NA}, \code{"not_release"}, \code{"several"}, \code{"format"} or
 \code{"unavailable"}) and \code{reason};
 \item \code{duplicates}, the GWAS Stores given more than one Store Release;
 \item \code{unavailable}, the \code{opengwasr_local_unavailable} condition \code{\link[=og_local]{og_local()}} would raise, or
@@ -29,8 +32,9 @@ Missing values are \code{NA}.
 }
 \description{
 Reports the Python a Local Source uses and how it was chosen, the reticulate and ogquery
-versions, the format series ogquery reads, and, for each Store Release, its \code{store_id},
-\code{release_id} and \code{format_version} and whether ogquery can read it. It reports problems instead
+versions, the format series ogquery reads, and, for each path, the Store Release found there
+(for a GWAS Store directory, the one it resolved to), its \code{store_id}, \code{release_id} and
+\code{format_version}, and whether ogquery can read it. It reports problems instead
 of raising them, so it is the place to start when \code{\link[=og_local]{og_local()}} refuses: only a \code{path} that
 isn't a character vector of paths, or a Local Source, is an error.
 }
@@ -40,7 +44,7 @@ haven't chosen one.
 }
 \examples{
 \dontshow{if (nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")) withAutoprint(\{ # examplesIf}
-releases <- system.file("releases", package = "opengwasr")
-og_local_check(file.path(releases, c("dense", "hyb")))
+stores <- system.file("stores", package = "opengwasr")
+og_local_check(file.path(stores, c("dense", "hyb")))
 \dontshow{\}) # examplesIf}
 }

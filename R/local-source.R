@@ -62,8 +62,8 @@
 #'   `store_id`, `release_id`, `format_version` and `path`.
 #' @seealso [og_local_check()], [og_api()].
 #' @examplesIf nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")
-#' releases <- system.file("releases", package = "opengwasr")
-#' src <- og_local(file.path(releases, c("dense", "ragged", "hyb")))
+#' stores <- system.file("stores", package = "opengwasr")
+#' src <- og_local(file.path(stores, c("dense/r", "ragged/comp", "hyb/v1")))
 #' src
 #' @export
 og_local <- function(path) {
@@ -131,8 +131,8 @@ print.og_local_source <- print_formatted
 #'
 #'   Missing values are `NA`.
 #' @examplesIf nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")
-#' releases <- system.file("releases", package = "opengwasr")
-#' og_local_check(file.path(releases, c("dense", "hyb")))
+#' stores <- system.file("stores", package = "opengwasr")
+#' og_local_check(file.path(stores, c("dense/r", "hyb/v1")))
 #' @export
 og_local_check <- function(path) {
   if (inherits(path, "og_local_source")) {

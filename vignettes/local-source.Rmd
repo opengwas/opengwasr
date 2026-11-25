@@ -11,7 +11,14 @@ A **Local Source** answers your queries from **Store Releases** you have downloa
 
 This vignette follows one journey: set up Python, open your Store Releases, run your script against them, clump what you fetched, and run a TwoSampleMR pipeline on them.
 
-> **Status.** The Local Source is being built. Setting up Python, checking the setup, opening Store Releases, looking up Analyses and looking up variants work today, and those chunks run on the small example Store Releases that come with opengwasr whenever Python and ogquery are set up where this vignette was built. Queries of Associations come next: that code shows how it will work, and is not run yet. The grey output blocks marked `# illustrative` are shaped the way opengwasr returns results, not recorded from a run.
+> **Status.** The Local Source is being built. Today it sets up and checks Python, opens Store Releases, looks up Analyses and variants, and answers top hits (unclumped), Associations, PheWAS and ranges. Those chunks run on the small example Store Releases that come with opengwasr, wherever Python and ogquery are set up where this vignette was built (on CRAN, which has no Python, the code is shown unevaluated). The chunks that don't run, and why:
+>
+> - `local-python-hpc-shell`, `local-python-conda-shell` and `local-python-conda`: they set up a Python environment on your machine.
+> - `local-translate`: it calls the OpenGWAS API, and this vignette never touches the network.
+> - `local-clumping-api`, `local-clumping-plink` and `local-og-clump`: clumping on a Local Source comes in a later step (#34), and a PLINK Reference needs a PLINK binary and a genotype fileset.
+> - `local-twosamplemr`: TwoSampleMR on a Local Source comes in a later step (#36), on full-size Store Releases.
+>
+> The grey output blocks marked `# illustrative` are shaped the way opengwasr returns results, not recorded from a run.
 
 ```{r setup, include = FALSE}
 # The chunks that read the bundled example Store Releases run only where a Python with ogquery is
@@ -125,26 +132,23 @@ og_local(file.path(releases, c("hyb", "hyb-c")))
 
 A script written for the API Source runs on the Local Source by changing the line that makes the Source. Everything after it is the same:
 
-```{r local-switch, eval = FALSE}
+```{r local-switch}
 # src <- og_api()
-src <- og_local("/data/opengwas/OGS-00011/OGS-00011-v2")
+src <- og_local(file.path(releases, c("dense", "ragged", "hyb")))
 
-top <- og_tophits(src, "OGS-00011:GCST003116", clump = FALSE, limit = 5)
+top <- og_tophits(src, "s:bmi_irn", clump = FALSE, limit = 10)
 head(top[, c("rsid", "alid", "beta", "se", "pval", "association_status")], 4)
 ```
 
-```text
-# illustrative
-        rsid           alid       beta          se         pval association_status
-1  rs2891168 9:22098620:A:G -0.1933591 0.009185791 2.296241e-98           observed
-2  rs4977574 9:22098575:A:G -0.1929106 0.009185791 6.425124e-98           observed
-3 rs10738610 9:22123767:A:C -0.1936836 0.009292603 1.772656e-96           observed
-4 rs10757275 9:22106226:A:G  0.1930436 0.009269714 2.558808e-96           observed
+Here `src` is the example Store Releases. With your own, give their paths, such as `og_local("/data/opengwas/OGS-00011/OGS-00011-v2")`, and name your Analyses, such as `"OGS-00011:GCST003116"`. The data frame has the columns of the API Source's, in the same order (see [What the columns mean](opengwasr.html#columns)):
+
+```{r local-switch-columns}
+names(top)
 ```
 
-The data frame has the columns of the API Source's, in the same order (see [What the columns mean](opengwasr.html#columns)). The Analyses, the Associations and the numbers agree with the API Source's, because both read the same Store Releases and shape the results with the same code. `og_provenance()` says which Store Release each answer came from.
+The numbers come from the same Store Reader the API uses, and are shaped by the same code, so a Store Release gives the same answer from either Source. `og_provenance()` says which Store Release each answer came from.
 
-The other verbs work the same way. On the example Store Releases, the top hits of `s:bmi_irn`, strongest first, with `limit` cutting them off as on the API Source (`opengwasr_truncated`):
+When `limit` cuts an Analysis's top hits off, you get the warning the API Source gives (`opengwasr_truncated`):
 
 ```{r local-tophits}
 cols <- c("id", "alid", "rsid", "beta", "se", "pval", "association_status")
@@ -153,7 +157,9 @@ top[, cols]
 og_provenance(top)
 ```
 
-A local result's provenance names the Store Releases read, and no Jobs: a Local Source answers at once. The Associations of variants in Analyses: an rsID stands for every variant it names, here two at `1:5000`. `residual-rag` is a Reference-Completed Store Release, and its Association at `1:1001500:A:G` is an Imputed Association, which `observed_only = TRUE` leaves out:
+A local result's provenance names the Store Releases read, and no Jobs: a Local Source answers at once.
+
+The other verbs work the same way. The Associations of variants in Analyses: an rsID stands for every variant it names, here two at `1:5000`. `residual-rag` is a Reference-Completed Store Release, and its Association at `1:1001500:A:G` is an Imputed Association, which `observed_only = TRUE` leaves out:
 
 ```{r local-associations}
 og_associations(local, c("rs5000", "1:1001500:A:G"), c("s:bmi_irn", "residual-rag:a"))[, cols]

@@ -15,7 +15,7 @@ This vignette follows one journey: set up Python, open your Store Releases, run 
 >
 > - `local-python-hpc-shell`, `local-python-conda-shell` and `local-python-conda`: they set up a Python environment on your machine.
 > - `local-translate` and `local-ld-api`: they call the OpenGWAS API, and this vignette never touches the network.
-> - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever one is found (`plink_ready`: genetics.binaRies, or `plink` on the `PATH`), as in CI; without one their code is shown unevaluated.
+> - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever PLINK 1.9 or 2 is found (`plink_ready`: genetics.binaRies, or `plink` or `plink2` on the `PATH`), as in CI; without one their code is shown unevaluated.
 > - `local-stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39).
 > - `local-twosamplemr`: it needs TwoSampleMR 0.8.0 (#36), which opengwasr doesn't depend on, and full-size Store Releases.
 >
@@ -29,8 +29,8 @@ local_ready <- nzchar(Sys.getenv("RETICULATE_PYTHON")) &&
   requireNamespace("reticulate", quietly = TRUE) &&
   reticulate::py_module_available("ogquery")
 knitr::opts_chunk$set(eval = local_ready)
-# The chunks that clump or read LD with the bundled PLINK Reference also need a PLINK binary
-# (genetics.binaRies, or plink on the PATH), as in CI. Without one, their code is shown unevaluated.
+# The chunks that clump or read LD with the bundled PLINK Reference also need PLINK 1.9 or 2
+# (genetics.binaRies, or plink or plink2 on the PATH), as in CI. Without one, their code is shown unevaluated.
 plink_ready <- local_ready && !inherits(
   tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
            error = identity),
@@ -268,7 +268,7 @@ A Source carries an **LD resource**, which answers LD for its Associations (see 
 
 | LD resource | On your machine |
 |---|---|
-| **PLINK Reference** | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK binary if opengwasr can't find it. Available now |
+| **PLINK Reference** | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
 | **LD Store** | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
 | **Genotype Store** | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
 | None given | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give one |
@@ -318,7 +318,7 @@ top[, c("alid", "rsid", "z", "clump_r2", "clump_kb", "clump_size")]
 og_provenance(top)$clump[, c("id", "ld_choice", "r2", "kb", "hits", "absent", "leads", "clumps")]
 ```
 
-With your own, give its prefix, and the PLINK binary if opengwasr can't find one (it looks in the genetics.binaRies package, then on your `PATH`): `og_local(gwas = "/data/opengwas/OGS-00011", plink = "/usr/local/bin/plink", bfile = "/data/ld/1kg/EUR")`. Variants are matched to the PLINK Reference by rsID, because PLINK References are usually on GRCh37: a top hit with no rsID, or one the reference doesn't hold, is left out, and a message says how many. The Analysis's top hits are read from your Store Releases, and PLINK clumps them on your machine.
+With your own, give its prefix, and the PLINK binary if opengwasr can't find one (it looks in the genetics.binaRies package, then for `plink`, then `plink2`, on your `PATH`): `og_local(gwas = "/data/opengwas/OGS-00011", plink = "/usr/local/bin/plink", bfile = "/data/ld/1kg/EUR")`. PLINK 1.9 and PLINK 2 (2.0.0-a.6.0 or later) both work, and give the same clumps and LD. `plink` is a path, or a command on your `PATH`, such as `plink = "plink2"`. The Source prints the PLINK it uses and its version. A PLINK you name that isn't supported, such as 1.07, is refused (class `opengwasr_plink_unsupported`); when opengwasr looks for one itself, it skips those. Variants are matched to the PLINK Reference by rsID, because PLINK References are usually on GRCh37: a top hit with no rsID, or one the reference doesn't hold, is left out, and a message says how many. The Analysis's top hits are read from your Store Releases, and PLINK clumps them on your machine.
 
 A PLINK Reference has no default `r2` and `kb` of its own, so clumping with one needs both (class `opengwasr_plink_settings_required`):
 

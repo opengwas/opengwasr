@@ -49,13 +49,41 @@ jobs:
       # R CMD check --as-cran runs the tests on a library of the declared dependencies only, and
       # genetics.binaRies isn't one (it isn't on CRAN), so the tests can't call it: put its PLINK on
       # the PATH instead, where find_plink() looks next. It downloads the binary on first use.
+      # On the job that runs with PLINK 2 (below), PLINK 1.9 stays off the PATH, and
+      # OPENGWASR_TEST_PLINK1 names it for the test that runs both.
       - name: Put PLINK on the PATH
         shell: Rscript {0}
+        env:
+          PLINK2_JOB: ${{ matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release' }}
         run: |
           plink <- genetics.binaRies::get_plink_binary()
           Sys.chmod(plink, "755")
           stopifnot(file.access(plink, 1) == 0)
-          cat(normalizePath(dirname(plink)), "\n", sep = "", file = Sys.getenv("GITHUB_PATH"), append = TRUE)
+          if (Sys.getenv("PLINK2_JOB") == "true") {
+            cat("OPENGWASR_TEST_PLINK1=", normalizePath(plink), "\n", sep = "", file = Sys.getenv("GITHUB_ENV"), append = TRUE)
+          } else {
+            cat(normalizePath(dirname(plink)), "\n", sep = "", file = Sys.getenv("GITHUB_PATH"), append = TRUE)
+          }
+
+      # PLINK 2 on one job, the build that was tested (#41): every PLINK test there runs with PLINK 2
+      # as the PLINK found (`plink2` alone on the PATH), and test-plink-versions.R runs both. Every
+      # other job runs with PLINK 1.9.
+      - name: Install PLINK 2 from bioconda
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release'
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: plink2
+          create-args: -c bioconda -c conda-forge plink2=2.0.0b1.post4
+          init-shell: none
+
+      - name: Put PLINK 2 on the PATH
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/plink2-bin"
+          ln -s "$MAMBA_ROOT_PREFIX/envs/plink2/bin/plink2" "$RUNNER_TEMP/plink2-bin/plink2"
+          "$RUNNER_TEMP/plink2-bin/plink2" --version
+          echo "$RUNNER_TEMP/plink2-bin" >> "$GITHUB_PATH"
 
       # The Local Source reads Store Releases through ogquery in Python, which reticulate (in
       # Suggests) finds through RETICULATE_PYTHON: the local tests and the vignette's local chunks

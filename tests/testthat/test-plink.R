@@ -61,6 +61,7 @@ test_that("og_ld_matrix() reads r from PLINK, named by rsID and the reference's 
   expect_equal(prov$ld_choice, "user")
   expect_equal(prov$absent, character())
   expect_equal(prov$plink_bin, ref$plink_bin)
+  expect_equal(prov$plink_version, ref$plink_version)
   expect_match(prov$query, "ld = ", fixed = TRUE)
 })
 
@@ -150,6 +151,7 @@ test_that("og_tophits() with a PLINK Reference fetches unclumped hits, clumps th
   expect_equal(unique(top$clump_ld), ref$path)
   expect_equal(unique(top$clump_ld_choice), "user")
   expect_equal(og_provenance(top)$clump$ld, ref$path)
+  expect_equal(og_provenance(top)$plink_version, ref$plink_version)
   clump <- og_provenance(top)$clump
   expect_equal(c(clump$id, clump$hits, clump$absent, clump$leads), c(cad, "5", "1", "2"))
   expect_equal(c(clump$r2, clump$kb), c(0.2, 100))
@@ -164,7 +166,7 @@ test_that("og_tophits() with a PLINK Reference fetches unclumped hits, clumps th
 })
 
 test_that("the warning for top hits the API cut off says clumping saw only the strongest", {
-  ref <- structure(list(path = "ref", plink_bin = "plink"), class = "og_plink_reference")
+  ref <- structure(list(path = "ref", plink_bin = "plink", plink_version = "1.90b6.21"), class = "og_plink_reference")
   contribution <- plink_clump_contribution(list(plink = ref, store = list(ld_store = "ref"), choice = "user"),
                                            list(r2 = 0.2, kb = 100, limit = 10, threshold = 5e-8),
                                            data.frame(id = c("A", "B")), NULL)

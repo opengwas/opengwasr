@@ -14,14 +14,14 @@ Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.ht
 > **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026 (`ld-resource-api` and `ld-resource-override` replay the same requests as `choosing-ld`, `unassigned-ld` and `ld-matrices`), except these:
 >
 > - `stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39). Its output is illustrative.
-> - `plink-reference` and `plink-no-source`: they read the small synthetic PLINK Reference that comes with opengwasr, and need a PLINK binary. They run wherever one is found (`plink_ready`: genetics.binaRies, or `plink` on the `PATH`), as in CI; without one, as on CRAN, their code is shown unevaluated.
+> - `plink-reference` and `plink-no-source`: they read the small synthetic PLINK Reference that comes with opengwasr, and need a PLINK binary. They run wherever PLINK 1.9 or 2 is found (`plink_ready`: genetics.binaRies, or `plink` or `plink2` on the `PATH`), as in CI; without one, as on CRAN, their code is shown unevaluated.
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
 ```{r credentials, include = FALSE}
 source("recordings.R")
 start_recordings("recordings-ld")
-# The PLINK Reference chunks run only where a PLINK binary is found, as in local-source.Rmd.
+# The PLINK Reference chunks run only where PLINK 1.9 or 2 is found, as in local-source.Rmd.
 plink_ready <- !inherits(
   tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
            error = identity),
@@ -56,7 +56,7 @@ A Source says where Associations come from, and which **LD resource** answers LD
 |---|---|---|
 | **LD Store**: the precomputed LD of one reference panel | `og_api(ld_store = "EUR")`, an LD Store's name or an ancestry code. Available now | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
 | **Genotype Store**: genotypes of one reference panel, from which LD is computed when asked | `og_api(geno_store = ...)`. Coming, when the API serves Genotype Stores | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
-| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK binary if opengwasr can't find it. Available now |
+| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
 | None given | `og_api()`: each Analysis's Assigned Ancestry chooses its LD Store | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give an LD resource |
 
 A form that is coming is refused with an error that says so (class `opengwasr_ld_resource_unavailable`), rather than quietly doing something else. `og_api(ld_store = )` takes what `ld` takes: an LD Store's name, or an ancestry code for that ancestry's LD Store.
@@ -325,12 +325,13 @@ og_provenance(cad)$clump
 
 ## Using a PLINK Reference {#plink-reference}
 
-A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`) on your own machine, such as the 1000 Genomes files ieugwasr users already have. Pass it as `ld` to clump or build LD matrices locally with PLINK for one call, as ieugwasr's local functions did, with either Source. A Local Source can also carry one as its LD resource, `og_local(gwas = ..., bfile = prefix)`, so every call uses it without `ld` (see [Clumping and LD on a Local Source](local-source.html#local-clumping)).
+A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`) on your own machine, such as the 1000 Genomes files ieugwasr users already have. Pass it as `ld` to clump or build LD matrices locally with PLINK 1.9 or PLINK 2 for one call, as ieugwasr's local functions did, with either Source. A Local Source can also carry one as its LD resource, `og_local(gwas = ..., bfile = prefix)`, so every call uses it without `ld` (see [Clumping and LD on a Local Source](local-source.html#local-clumping)).
 
 For your own, such as `og_plink_reference("~/ld/1kg/EUR")`, the calls are `og_tophits(src, ids, ld = ref, r2 = 0.001, kb = 10000)`, `og_clump(src, data, ld = ref, r2 = 0.001, kb = 10000)` and `og_ld_matrix(src, variants, ld = ref)`. Here, the small synthetic PLINK Reference that comes with opengwasr, 300 made-up people, whose rsIDs include a few CAD and BMI signals, clumps the CAD and BMI index variants from [above](#og-clump) together, and reads an LD matrix of rsIDs. It holds only a few of these real variants, so most are left out, as the message says; your own PLINK Reference holds far more:
 
 ```{r plink-reference, eval = plink_ready}
 ref <- og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref"))
+ref$plink_version   # the PLINK that was found, 1.9 or 2
 joint_local <- og_clump(src, rbind(cad, bmi), ld = ref, r2 = 0.001, kb = 10000)
 joint_local[, c("id", "rsid", "alid", "z", "clump_r2", "clump_kb", "clump_size")]
 m_local <- og_ld_matrix(src, c("rs4977574", "rs2891168", "rs1333049", "rs1421085"), ld = ref)
@@ -339,7 +340,9 @@ round(m_local, 3)
 
 - **Variants are matched by rsID,** because PLINK References are usually on GRCh37 while ALIDs are on GRCh38. Variants without an rsID match are left out, and the message says how many. An LD matrix from a PLINK Reference is named `<rsid>_<allele>_<allele>` with the PLINK Reference's alleles, as ieugwasr named it, and the sign of r again refers to the first allele in each name.
 - **`r2` and `kb` are required.** A PLINK Reference has no recorded defaults, so opengwasr won't choose for you. Without them, `og_tophits()` and `og_clump()` stop and ask for both.
-- **PLINK itself** is found from `og_plink_reference(path, plink_bin = )`, then the genetics.binaRies package if it is installed, then your `PATH`. If none has it, the error says how to install it.
+- **PLINK itself** is PLINK 1.9, or PLINK 2 from build 2.0.0-a.6.0 (November 2024) on, the first with every option opengwasr uses. `og_plink_reference(path, plink_bin = )` takes its path, or a command on your `PATH` such as `plink_bin = "plink2"`; as in a shell, a name without a `/` is a command. Without `plink_bin`, opengwasr looks in the genetics.binaRies package if it is installed, then for `plink`, then `plink2`, on your `PATH`, and takes the first that is a supported PLINK. Another program called `plink`, such as PuTTY's, or an older PLINK, is skipped. If none is supported, the error (class `opengwasr_plink_not_found`) lists what it skipped, in `skipped`, and says how to install PLINK.
+- **Its version** is read once, when the PLINK Reference is made, and kept on it (`ref$plink_version`) and in provenance (`og_provenance(x)$plink_version`, beside `plink_bin`). A PLINK you name that isn't supported, such as 1.07, is refused (class `opengwasr_plink_unsupported`, with the `version` found and the versions `supported`). If a supported `plink` or `plink2` is on your `PATH`, the error suggests it.
+- **PLINK 1.9 and PLINK 2 give the same answer.** opengwasr asks each for the same thing in its own words: an LD matrix of r with the reference's allele order kept (`--r square --keep-allele-order` in 1.9, `--r-unphased square ref-based` in 2), and clumping with `--clump`, read from `.clumped` or `.clumps`. On the PLINK Reference that comes with opengwasr, both give the same clumps, and r equal to within 1e-6.
 - `og_ld_proxies()` and `og_ld_reflookup()` read LD Stores only, and refuse a PLINK Reference, whether it is `ld` or the Source's LD resource.
 - Provenance works as before: `clump_ld` is the PLINK Reference's path, and `clump_ld_choice` is `"user"`.
 

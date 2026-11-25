@@ -8,9 +8,10 @@ withr::local_options(opengwasr.progress = FALSE)
 bmi <- "s:bmi_irn"
 clump_cols <- c("clump_ld", "clump_ld_choice", "clump_r2", "clump_kb", "clump_size")
 
-# The example Store Release `dense` (GWAS Store `s`), with the bundled PLINK Reference or without any.
-dense_plink <- function() og_local(gwas = example_releases("dense"), bfile = plink_fixture())
-dense_bare <- function() og_local(example_releases("dense"))
+# The example Store Release `dense` (GWAS Store `s`), with the bundled PLINK Reference or without
+# any: each opened once (local_source_of()).
+dense_plink <- function() local_source_of("dense", bfile = plink_fixture())
+dense_bare <- function() local_source_of("dense")
 
 test_that("og_local() refuses the LD resources it can't read yet, a mixture of them, and `plink` alone, before any Python", {
   gwas <- example_releases("dense")

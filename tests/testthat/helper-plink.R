@@ -6,7 +6,7 @@
 
 plink_fixture <- function() {
   dir <- system.file("plink", package = "opengwasr", mustWork = TRUE)
-  file.path(normalizePath(dir), "ref")
+  file.path(normalise_path(dir), "ref")  # as og_plink_reference() normalises it
 }
 
 # A PLINK Reference over the fixture, or skip the test: nothing here runs without a PLINK binary.

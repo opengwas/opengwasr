@@ -65,13 +65,10 @@ og_analyses.og_api_source <- function(src, ids = NULL, releases = NULL) {
   analyses_lookup(src, ids, releases)
 }
 
+# One route for both Sources, like every other verb: analyses_lookup() and analyses_catalogue()
+# read a Local Source's Store Releases themselves.
 #' @export
-og_analyses.og_local_source <- function(src, ids = NULL, releases = NULL) {
-  check_analysis_ids(ids)
-  releases <- resolve_releases(src, releases)
-  if (is.null(ids)) return(local_analyses_catalogue(src, releases))
-  local_analyses_lookup(src, ids, releases)
-}
+og_analyses.og_local_source <- og_analyses.og_api_source
 
 # Kept: an R argument's type, checked before any request.
 check_analysis_ids <- function(ids, call = rlang::caller_env()) {
@@ -322,7 +319,7 @@ local_analyses_lookup <- function(src, ids, releases, call = rlang::caller_env()
   releases <- local_releases_held(src, releases, call)
   held <- local_analyses(src, source_releases(src, call), call)
   analyses <- held[release_names(held$store_id, held$release_id) %in%
-                     release_names(vapply(releases, `[[`, "", "store_id"), vapply(releases, `[[`, "", "release_id")), ,
+                     release_names(releases), ,
                    drop = FALSE]
   canonical <- canonical_ids(analyses)
   index <- rep(NA_integer_, length(ids))

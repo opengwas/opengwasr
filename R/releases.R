@@ -62,8 +62,18 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
   out
 }
 
-# Store Releases as `<store_id>/<release_id>`, as pins, provenance and messages name them.
-release_names <- function(store_id, release_id) paste0(store_id, "/", release_id)
+# Store Releases as `<store_id>/<release_id>`, as pins, provenance and messages name them: the one
+# place that string is made. Give the ids, or (`release_id` missing) a list of Store Releases as the
+# API takes them, each `list(store_id, release_id, ...)`.
+release_names <- function(store_id, release_id) {
+  if (missing(release_id)) {
+    releases <- store_id
+    store_id <- vapply(releases, function(r) as.character(r$store_id), "")
+    release_id <- vapply(releases, function(r) as.character(r$release_id), "")
+  }
+  if (length(store_id) == 0) return(character())
+  paste0(store_id, "/", release_id)
+}
 
 # The Store Releases a Source answers from, each `list(store_id, release_id, ...)`: the API's, those
 # /api/batches says it serves; a Local Source's, those it holds (one of each GWAS Store, so the

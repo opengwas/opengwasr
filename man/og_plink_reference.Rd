@@ -14,7 +14,8 @@ package if it is installed, then on your \code{PATH}; if there is none, it stops
 \code{opengwasr_plink_not_found}) and says how to install it.}
 }
 \value{
-An object of class \code{og_plink_reference}: \code{path} (absolute) and \code{plink_bin}.
+An object of class \code{og_plink_reference}: \code{path} (absolute, with forward slashes on every
+platform) and \code{plink_bin}.
 }
 \description{
 \code{og_plink_reference()} names a PLINK binary fileset (\code{.bed}, \code{.bim}, \code{.fam}) on your machine, and

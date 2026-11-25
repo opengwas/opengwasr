@@ -114,7 +114,7 @@
 og_local <- function(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL) {
   # The LD resource first: it needs no Python, so a refusal costs nothing.
   ld <- local_ld_resource(plink, bfile, ld_store, geno_store)
-  gwas <- check_release_paths(gwas)
+  gwas <- check_release_paths(gwas, arg = "gwas")
   ogquery <- local_ogquery()
   found <- lapply(gwas, find_release, ogquery = ogquery)
   refuse_release_problems(found, ogquery$info)
@@ -231,7 +231,7 @@ og_local_check <- function(path) {
   if (inherits(path, "og_local_source")) {
     path <- path$releases$path
   } else {
-    path <- check_release_paths(path, exist = FALSE)
+    path <- check_release_paths(path, exist = FALSE, arg = "path")
   }
   ogquery <- tryCatch(local_ogquery(), opengwasr_local_unavailable = identity)
   if (inherits(ogquery, "error")) {
@@ -336,10 +336,34 @@ local_facade <- function(src, store_id, call = rlang::caller_env()) {
   key <- paste0("query:", local_release_path(src, store_id, call))
   facade <- get0(key, envir = src$handles, inherits = FALSE)
   if (is.null(facade) || local_is_stale(facade)) {
-    facade <- local_open_facade(release, call)
+    facade <- local_open_facade(release)
+    # ogquery refuses a Ragged or Hybrid release without its by-variant index, which the Data API
+    # wouldn't serve either: refused as a release a Local Source can't read.
+    if (inherits(facade, "error")) {
+      local_unsupported(c("This Store Release has no by-variant index, which ogquery needs to read it.",
+                          x = conditionMessage(facade)),
+                        "Use a copy of the Store Release that has its index.", call = call)
+    }
     assign(key, facade, envir = src$handles)
   }
   facade
+}
+
+# The variants at each `chromosome[i]:position[i]`, in variant-index order, each once. A chromosome
+# ogquery can't normalise, one no ALID spells, such as "27" or "NA", is refused, naming each, as the
+# API fails the Job.
+variants_at_positions <- function(facade, chromosome, position, call = rlang::caller_env()) {
+  found <- lapply(seq_along(chromosome), function(i) local_read_variants_at(facade, chromosome[[i]], position[[i]]))
+  bad <- unique(chromosome[vapply(found, is.null, NA)])
+  if (length(bad) > 0) {
+    og_abort(c(paste0(if (length(bad) == 1) "No variant can be on chromosome " else "No variant can be on chromosomes ",
+                      some_ids(bad, 10, quote = "`"), "."),
+               i = "Give positions as `chromosome:position`, such as \"16:53767042\" or \"X:2500\"."),
+             class = "opengwasr_argument", chromosomes = bad, call = call)
+  }
+  rows <- do.call(rbind, c(list(lookup_fields()), found))
+  rows <- rows[!duplicated(rows$variant_index), , drop = FALSE]
+  rows[order(rows$variant_index), , drop = FALSE]
 }
 
 # What a Local Source refuses ---------------------------------------------------------------------
@@ -396,12 +420,13 @@ og_ld_reflookup.og_local_source <- function(src, variants, ld = NULL) {
 # Paths, before any Python ------------------------------------------------------------------------
 
 # Kept: an R argument's type and shape, and whether each path exists, which needs no Python.
-# `exist = FALSE` (og_local_check()) reports a missing path as a row rather than refusing it.
-check_release_paths <- function(path, exist = TRUE, call = rlang::caller_env()) {
+# `exist = FALSE` (og_local_check()) reports a missing path as a row rather than refusing it. `arg`
+# is the caller's name for the paths: og_local()'s `gwas`, og_local_check()'s `path`.
+check_release_paths <- function(path, exist = TRUE, arg, call = rlang::caller_env()) {
   if (!is.character(path) || !length(path) || anyNA(path) || !all(nzchar(path))) {
-    og_abort(c("`path` must be the directory of each GWAS Store, or of each Store Release: a character vector, one element per GWAS Store.",
+    og_abort(c(paste0("`", arg, "` must be the directory of each GWAS Store, or of each Store Release: a character vector, one element per GWAS Store."),
                i = "For example `og_local(c(\"/data/opengwas/OGS-00009\", \"/data/opengwas/OGS-00011\"))`."),
-             class = "opengwasr_argument", call = call)
+             class = "opengwasr_argument", arg = arg, call = call)
   }
   path <- normalise_path(path)
   missing <- path[!dir.exists(path)]
@@ -476,7 +501,7 @@ find_release <- function(path, ogquery) {
               format_version = NA_character_, release = NULL)
   dirs <- named$candidates
   if (length(dirs) < 2) return(c(row, list(problem = problem$not_release, reason = named$reason)))
-  ids <- lapply(dirs, manifest_identity, ogquery = ogquery)
+  ids <- lapply(dirs, function(dir) manifest_identity(dir, ogquery)$identity)
   candidates <- data.frame(store_id = vapply(ids, `[[`, "", "store_id"),
                            release_id = vapply(ids, `[[`, "", "release_id"), path = dirs,
                            stringsAsFactors = FALSE)
@@ -487,11 +512,13 @@ find_release <- function(path, ogquery) {
                               "); a GWAS Store directory holds one")))
 }
 
-# A Store Release's identity from its manifest, as read_release() reads it: through ogquery's
-# StoreManifest.load(), or, for a manifest it refuses, what the file declares (NA for each field it
-# lacks).
+# A Store Release's identity from its manifest: through ogquery's StoreManifest.load(), or, for a
+# manifest it refuses, what the file declares (NA for each field it lacks). The one reader of a
+# manifest: `identity`, and `error`, what StoreManifest.load() raised (NULL when it read it).
 manifest_identity <- function(dir, ogquery) {
-  tryCatch(local_load_manifest(ogquery, dir), error = function(e) local_declared_manifest(ogquery, dir))
+  loaded <- tryCatch(local_load_manifest(ogquery, dir), error = identity)
+  if (!inherits(loaded, "error")) return(list(identity = loaded, error = NULL))
+  list(identity = local_declared_manifest(ogquery, dir), error = loaded)
 }
 
 # What ogquery makes of one path: its manifest's identity, the opened release, and its `problem`
@@ -509,18 +536,19 @@ read_release <- function(path, ogquery) {
          release = release, problem = problem, reason = reason)
   }
   if (!dir.exists(path)) return(row(problem = problem$not_release, reason = "no such directory"))
-  manifest <- tryCatch(local_load_manifest(ogquery, path), error = identity)
-  if (inherits(manifest, "ogquery.format.UnsupportedFormatVersion")) {
+  read <- manifest_identity(path, ogquery)
+  manifest <- read$identity
+  if (inherits(read$error, "ogquery.format.UnsupportedFormatVersion")) {
     # ogquery's refusal carries no version, and its wording is no contract: the identity and the
     # version are read from the manifest itself.
-    return(row(local_declared_manifest(ogquery, path), problem = problem$format, reason = format_reason(ogquery$info)))
+    return(row(manifest, problem = problem$format, reason = format_reason(ogquery$info)))
   }
-  if (inherits(manifest, "python.builtin.FileNotFoundError")) {
+  if (inherits(read$error, "python.builtin.FileNotFoundError")) {
     return(row(problem = problem$not_release, reason = "not a Store Release (no manifest)"))
   }
-  if (inherits(manifest, "error")) {
+  if (!is.null(read$error)) {
     return(row(problem = problem$not_release,
-               reason = paste0("not a Store Release (its manifest can't be read: ", python_message(manifest), ")")))
+               reason = paste0("not a Store Release (its manifest can't be read: ", python_message(read$error), ")")))
   }
   release <- tryCatch(local_open_release(ogquery, path), error = identity)
   if (!inherits(release, "error")) {
@@ -873,15 +901,11 @@ local_ogquery_versions <- function(modules) {
 
 local_is_stale <- function(object) reticulate::py_is_null_xptr(object)
 
-# ogquery opens a Ragged or Hybrid release's by-variant index with it, and refuses one without
-# (`VariantIndexError`), which the Data API wouldn't serve either: refused as a release a Local
-# Source can't read.
-local_open_facade <- function(release, call = rlang::caller_env()) {
-  tryCatch(release$query(), ogquery.by_variant.VariantIndexError = function(e) {
-    local_unsupported(c("This Store Release has no by-variant index, which ogquery needs to read it.",
-                        x = conditionMessage(e)),
-                      "Use a copy of the Store Release that has its index.", call = call)
-  })
+# The query facade over an opened release; or, for a Ragged or Hybrid release without its
+# by-variant index, which ogquery refuses (`VariantIndexError`), that error, which local_facade()
+# refuses.
+local_open_facade <- function(release) {
+  tryCatch(release$query(), ogquery.by_variant.VariantIndexError = identity)
 }
 
 # A Store Release's Analyses, `analyses_table()`: every column of analyses.tsv, as text ("" for
@@ -914,28 +938,12 @@ local_read_variants <- function(facade, identifiers) {
   local_variant_frame(facade$variants(as.list(identifiers)))
 }
 
-# The variants at each `chromosome[i]:position[i]` (`variants_in_range()`, one position each), in
-# variant-index order. ogquery refuses a chromosome it can't normalise, one no ALID spells, such as
-# "27" or "NA" (`VariantNormalisationError`); so does this, naming each, as the API fails the Job.
-local_read_variants_at <- function(facade, chromosome, position, call = rlang::caller_env()) {
-  bad <- character()
-  found <- lapply(seq_along(chromosome), function(i) {
-    tryCatch(local_variant_frame(facade$variants_in_range(chromosome[[i]], position[[i]], position[[i]])),
-             ogquery.identity.VariantNormalisationError = function(e) {
-               bad <<- c(bad, chromosome[[i]])
-               NULL
-             })
-  })
-  if (length(bad) > 0) {
-    bad <- unique(bad)
-    og_abort(c(paste0(if (length(bad) == 1) "No variant can be on chromosome " else "No variant can be on chromosomes ",
-                      some_ids(bad, 10, quote = "`"), "."),
-               i = "Give positions as `chromosome:position`, such as \"16:53767042\" or \"X:2500\"."),
-             class = "opengwasr_argument", chromosomes = bad, call = call)
-  }
-  rows <- do.call(rbind, c(list(lookup_fields()), found))
-  rows <- rows[!duplicated(rows$variant_index), , drop = FALSE]
-  rows[order(rows$variant_index), , drop = FALSE]
+# The variants at one `chromosome:position` (`variants_in_range()`), in variant-index order; or NULL
+# for a chromosome ogquery can't normalise (`VariantNormalisationError`), which
+# variants_at_positions() refuses.
+local_read_variants_at <- function(facade, chromosome, position) {
+  tryCatch(local_variant_frame(facade$variants_in_range(chromosome, position, position)),
+           ogquery.identity.VariantNormalisationError = function(e) NULL)
 }
 
 # The Analyses a Store Release holds, `analysis_index` and `analysis_id`, in index order: what a

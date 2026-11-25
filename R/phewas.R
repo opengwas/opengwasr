@@ -28,7 +28,7 @@
 #' Associations that passed `threshold`. `observed_only` is always sent; opengwasr never relies on the
 #' API's default.
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()] or [og_local()].
 #' @param variants rsIDs and ALIDs, such as `c("rs1421085", "16:53767042:C:T")`; an ALID must be in
 #'   canonical form (see [og_alid()]).
 #' @param threshold The largest p-value to return; `1` returns every Association.
@@ -66,3 +66,6 @@ og_phewas.og_api_source <- function(src, variants, threshold = 1e-8, analyses = 
                     },
                     spec = list(all_analyses = TRUE, one_variant = TRUE))
 }
+
+#' @export
+og_phewas.og_local_source <- og_phewas.og_api_source

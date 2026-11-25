@@ -618,8 +618,26 @@ local_py_require <- function() reticulate::py_require("ogquery")
 local_import_ogquery <- function() {
   list(release = reticulate::import("ogquery.release"), manifest = reticulate::import("ogquery.manifest"),
        format = reticulate::import("ogquery.format"), version = reticulate::import("ogquery.version"),
-       json = reticulate::import("json"))
+       json = reticulate::import("json"), identity = reticulate::import("ogquery.identity"),
+       stats = reticulate::import("ogquery.stats"), top_hits = reticulate::import("ogquery.top_hits"),
+       columns = reticulate::py_run_string(local_python_columns, local = TRUE))
 }
+
+# Two conversions done in Python, where they cost one call rather than one per row: an
+# Associations record's index columns and z (`raw`), and its rows (`take(keep)` of them, 0-based,
+# or all), resolved with their variant identity and rsID as the Data API resolves them
+# (`resolve(..., include_variant_info=True)`), as one list per field (`resolved`).
+local_python_columns <- "
+def raw(record):
+    return {name: record[name].tolist() for name in ('variant_index', 'analysis_index', 'z')}
+
+def resolved(query, record, keep):
+    if keep is not None:
+        record = record.take(keep)
+    rows = list(query.resolve(record, include_variant_info=True))
+    names = list(rows[0]) if rows else []
+    return {name: [row[name] for row in rows] for name in names}
+"
 
 # A Store Release's manifest, read with ogquery's StoreManifest.load(), which refuses a format
 # series ogquery doesn't implement: its identity, as R strings.
@@ -723,4 +741,70 @@ local_read_variants_at <- function(facade, chromosome, position, call = rlang::c
   rows <- do.call(rbind, c(list(lookup_fields()), found))
   rows <- rows[!duplicated(rows$variant_index), , drop = FALSE]
   rows[order(rows$variant_index), , drop = FALSE]
+}
+
+# The Analyses a Store Release holds, `analysis_index` and `analysis_id`, in index order: what a
+# query maps the Analyses it names onto (analyses_held_here()).
+local_read_analysis_ids <- function(facade) {
+  table <- local_read_analyses(facade)
+  data.frame(analysis_index = as.integer(table$analysis_index), analysis_id = table$analysis_id,
+             stringsAsFactors = FALSE)
+}
+
+# A read of Associations through ogquery's facade, the one the Data API makes for the same query:
+# `read` is the facade method (`lookup`, `top_hits`, `phewas` or `range_phewas`) and `args` its
+# arguments. Returns ogquery's Associations record, which only local_record_index() and
+# local_resolve() look into. ogquery's refusals become the API's: an Analysis the release doesn't
+# hold, a top-hit tier it doesn't store, a chromosome no ALID spells. Each is checked before the
+# read, as the API checks it, so these only guard what the checks missed.
+local_read_associations <- function(facade, read, args, call = rlang::caller_env()) {
+  tryCatch(
+    do.call(facade[[read]], args),
+    ogquery.analyses.UnknownAnalysisError = function(e) {
+      og_abort(conditionMessage(e), class = api_error_class("analysis_not_found", 404L),
+               api_error = "analysis_not_found", call = call)
+    },
+    ogquery.top_hits.UnstoredThresholdError = function(e) {
+      og_abort(conditionMessage(e), class = api_error_class("unsupported_threshold", 400L),
+               api_error = "unsupported_threshold", call = call)
+    },
+    ogquery.identity.VariantNormalisationError = function(e) {
+      og_abort(conditionMessage(e), class = api_error_class("invalid_query", 400L),
+               api_error = "invalid_query", call = call)
+    }
+  )
+}
+
+# A record's `variant_index` and `analysis_index` (integers) and `z` (doubles), one per row, which
+# the API's cuts (threshold, rank, Analyses) read before any row is resolved.
+local_record_index <- function(ogquery, record) {
+  raw <- ogquery$columns$raw(record)
+  list(variant_index = as.integer(unlist(raw$variant_index)), analysis_index = as.integer(unlist(raw$analysis_index)),
+       z = as.numeric(unlist(raw$z)))
+}
+
+# Rows `keep` of a record (0-based, in that order; NULL for all), resolved as the API resolves
+# them: a named list with one vector per field of ogquery's row, numbers as numbers, text as text.
+# A field holding both (`eaf` and `n` are "." where a cell has none) is a list.
+local_resolve <- function(ogquery, facade, record, keep = NULL) {
+  if (!is.null(keep)) keep <- as.list(as.integer(keep))
+  ogquery$columns$resolved(facade, record, keep)
+}
+
+# The top-hit tiers a Store Release stores, as the Data API finds them (ogdb-api releases.py): each
+# of ogquery's thresholds whose tier directory the release has.
+local_top_hit_tiers <- function(ogquery, path) {
+  thresholds <- as.numeric(unlist(ogquery$top_hits$TOP_HIT_THRESHOLDS))
+  keys <- vapply(thresholds, function(t) ogquery$top_hits$threshold_key(t), "")
+  thresholds[dir.exists(file.path(path, "data.zarr", ogquery$top_hits$TOP_HIT_GROUP, keys))]
+}
+
+# The |z| at or above which two-sided p <= `threshold` (ogquery's `z_critical()`): the one cut the
+# Top-Hit Index, the Data API and a local query all make.
+local_z_critical <- function(ogquery, threshold) as.numeric(ogquery$stats$z_critical(threshold))
+
+# Whether `chromosome` names one of 1-22, X, Y or MT, as ogquery normalises it: the chromosomes the
+# Data API takes a range on.
+local_primary_chromosome <- function(ogquery, chromosome) {
+  isTRUE(tryCatch(ogquery$identity$is_primary_contig(chromosome), error = function(e) FALSE))
 }

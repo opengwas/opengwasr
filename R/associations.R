@@ -21,7 +21,7 @@
 #' [og_provenance()]. A request the API refuses as too costly (`opengwasr_request_too_large`) is never split
 #' to get round that: see `vignette("large-queries-and-jobs")`.
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()] or [og_local()].
 #' @param variants rsIDs and ALIDs, such as `c("rs1421085", "16:53767042:C:T")`. An ALID must be in
 #'   canonical form (see [og_alid()]); anything else is an `opengwasr_argument` error.
 #' @param analyses Analysis identifiers (see [og_analyses()]).
@@ -46,3 +46,6 @@ og_associations.og_api_source <- function(src, variants, analyses, observed_only
   association_query(src, "api/associations", analyses, observed_only, original_units, releases,
                     variants = variants)
 }
+
+#' @export
+og_associations.og_local_source <- og_associations.og_api_source

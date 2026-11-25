@@ -45,7 +45,7 @@
 #' When `limit` cuts any Analysis's top hits off, you get a warning of class
 #' `opengwasr_truncated`, and [og_provenance()] has `truncated = TRUE`.
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()] or [og_local()].
 #' @param analyses Analysis identifiers (see [og_analyses()]).
 #' @param threshold The largest p-value to return. Each GWAS Store indexes `5e-8`, `5e-6` and
 #'   `5e-4` and refuses a looser one (`opengwasr_unsupported_threshold`).
@@ -85,6 +85,24 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
   check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
   # `limit` applies to each Analysis, so no split changes it; a Job's rows (`limit` x Analyses) must
   # fit the row cap. Clumping (R/clump.R) sets its own Jobs, fetch size and truncation message.
+  association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
+                    body = list(threshold = threshold, limit = as.integer(limit)),
+                    analyses_per_job = tophits_analyses_per_job(limit), order = "api",
+                    truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold),
+                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
+}
+
+# The API method's call into the engine, unchanged, once clumping is refused: a Local Source can't
+# clump yet (#34 replaces this refusal).
+#' @export
+og_tophits.og_local_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
+                                       observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
+                                       kb = NULL, original_units = FALSE, releases = NULL) {
+  check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
+  if (clump) {
+    local_unsupported("A Local Source can't clump top hits yet.",
+                      "Pass `clump = FALSE` for every top hit.")
+  }
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
                     analyses_per_job = tophits_analyses_per_job(limit), order = "api",

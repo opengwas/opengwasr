@@ -85,6 +85,10 @@ _Avoid_: the old API, bare "OpenGWAS" for that service
 Store Releases downloaded to the user's own machine, suited to large queries.
 _Avoid_: offline mode, local files
 
+**GWAS Store directory**:
+The directory holding one GWAS Store's Store Release, one level down, as `og_local()` reads it: the directory there holding a `manifest.json` (hidden directories skipped). Several Store Releases there are refused, never chosen between.
+_Avoid_: store folder, release root
+
 **Job**:
 A query submitted to the API Source that is queued and later collected, rather than answered immediately.
 _Avoid_: request, task

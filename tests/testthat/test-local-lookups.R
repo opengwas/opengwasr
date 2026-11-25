@@ -1,7 +1,7 @@
 # A Local Source answers og_analyses() and the variant lookups (#32), and refuses the verbs that mean
 # nothing for it.
 #
-# Reads use the example Store Releases bundled in inst/releases (helper-local.R) and skip without a
+# Reads use the example Store Releases bundled in inst/stores (helper-local.R) and skip without a
 # Python that has ogquery. Expected values are literals: Analyses from each release's analyses.tsv
 # and manifest.json, read by eye; variants from ogquery's contract answers for the same releases
 # (tests/contract/expected/{dense_ranges,ragged_completed,hybrid_observed}.json, read by eye). The

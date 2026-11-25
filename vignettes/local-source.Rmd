@@ -36,7 +36,7 @@ library(opengwasr)
 
 ## What you need {#local-needs}
 
-- **Store Releases on disk.** Each Store Release is a directory, such as `/data/opengwas/OGS-00011/OGS-00011-v2`. opengwasr doesn't download them for you.
+- **Store Releases on disk.** Each GWAS Store you download is a directory, such as `/data/opengwas/OGS-00011`, holding one Store Release, such as `/data/opengwas/OGS-00011/OGS-00011-v2`. opengwasr doesn't download them for you.
 - **Python, with ogquery.** ogquery is the **Store Reader**, the library every consumer uses to read a Store Release. It is on PyPI (version 0.1.0) and needs only numpy, zarr and numcodecs. It runs on Linux, macOS and Windows, with Python 3.12 to 3.14. opengwasr calls it through reticulate. You never use ogquery by name from R.
 - **Store Release format 0.3.0.** ogquery reads format 0.3.0. A 0.2.x Store Release is refused, with its format named. The hosted Store Releases are being rebuilt at 0.3.0.
 
@@ -90,14 +90,16 @@ reticulate::use_condaenv("ogquery")
 
 ### Checking the setup {#local-check}
 
-`og_local_check()` takes the same `path` as `og_local()`, or a Local Source. It reports the Python opengwasr found and how it was chosen, the reticulate and ogquery versions, and, for each Store Release, whether ogquery can read it. It reports problems rather than stopping on them, so it is where to start when `og_local()` refuses.
+`og_local_check()` takes the same `path` as `og_local()`, or a Local Source. It reports the Python opengwasr found and how it was chosen, the reticulate and ogquery versions, and, for each path, the Store Release it found there and whether ogquery can read it. It reports problems rather than stopping on them, so it is where to start when `og_local()` refuses.
 
-For your own Store Releases, give their paths, such as `og_local_check(c("/data/opengwas/OGS-00011/OGS-00011-v2", "/data/opengwas/OGS-00004/OGS-00004-v1"))`. opengwasr comes with four small example Store Releases, from the Store Reader's own test set, and this vignette uses them:
+For your own Store Releases, give their GWAS Store directories, such as `og_local_check(c("/data/opengwas/OGS-00011", "/data/opengwas/OGS-00004"))`. opengwasr comes with four small example Store Releases, from the Store Reader's own test set, in three GWAS Store directories, and this vignette uses them:
 
 ```{r local-check}
-releases <- system.file("releases", package = "opengwasr")
-og_local_check(file.path(releases, c("dense", "hyb")))
+stores <- system.file("stores", package = "opengwasr")
+og_local_check(file.path(stores, c("dense", "ragged")))
 ```
+
+Under each GWAS Store directory is the Store Release it resolved to.
 
 A Store Release ogquery can't read is listed as `not readable`, with the format versions it reads. Its value is a list, so a script can test it too: `og_local_check(path)$releases$readable`.
 
@@ -113,19 +115,25 @@ Error in `og_local()`:
 
 ## Opening Store Releases {#local-open}
 
-Give `og_local()` the full path of each Store Release you want to query, one element per Store Release, such as `og_local(c("/data/opengwas/OGS-00009/OGS-00009-v2", "/data/opengwas/OGS-00011/OGS-00011-v2"))`. With the example Store Releases:
+Give `og_local()` the directory of each GWAS Store you want to query, one element per GWAS Store, such as `og_local(c("/data/opengwas/OGS-00009", "/data/opengwas/OGS-00011"))`. A GWAS Store directory holds one Store Release, and `og_local()` opens it: it looks one level down, for the directory holding a `manifest.json`, and never deeper. A Store Release's own directory works too, such as `/data/opengwas/OGS-00011/OGS-00011-v2`. With the example Store Releases (`hyb` holds two, so its Store Release `v1` is named by its own directory):
 
 ```{r local-open}
-local <- og_local(file.path(releases, c("dense", "ragged", "hyb")))
+local <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")))
 local
 ```
 
 Each Store Release names itself by its manifest: `<store_id>/<release_id>`, then where it is.
 
-`og_local()` reads no Associations: it checks that each path is a Store Release that ogquery can read. A path that isn't one is refused (`opengwasr_not_store_release`), and so is a Store Release whose format ogquery can't read (`opengwasr_format_unsupported`, naming both format versions). A Local Source holds at most one Store Release of each GWAS Store, so two Store Releases of the same GWAS Store are refused when you create it (`opengwasr_duplicate_store`). `hyb` and `hyb-c` are two Store Releases of GWAS Store `hyb`:
+`og_local()` reads no Associations: it checks that each path is, or holds, a Store Release that ogquery can read. A path with no Store Release, in it or one level down, is refused (`opengwasr_not_store_release`), and so is a Store Release whose format ogquery can't read (`opengwasr_format_unsupported`, naming both format versions). A GWAS Store directory holding several Store Releases is refused too (`opengwasr_several_releases`), listing each, so you can give the one you want:
+
+```{r local-several, error = TRUE}
+og_local(file.path(stores, "hyb"))
+```
+
+A Local Source holds at most one Store Release of each GWAS Store, so two Store Releases of the same GWAS Store are refused when you create it (`opengwasr_duplicate_store`). `hyb/v1` and `hyb/v1c` are two Store Releases of GWAS Store `hyb`:
 
 ```{r local-duplicate, error = TRUE}
-og_local(file.path(releases, c("hyb", "hyb-c")))
+og_local(file.path(stores, "hyb", c("v1", "v1c")))
 ```
 
 ## Changing one line {#local-switch}
@@ -134,13 +142,13 @@ A script written for the API Source runs on the Local Source by changing the lin
 
 ```{r local-switch}
 # src <- og_api()
-src <- og_local(file.path(releases, c("dense", "ragged", "hyb")))
+src <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")))
 
 top <- og_tophits(src, "s:bmi_irn", clump = FALSE, limit = 10)
 head(top[, c("rsid", "alid", "beta", "se", "pval", "association_status")], 4)
 ```
 
-Here `src` is the example Store Releases. With your own, give their paths, such as `og_local("/data/opengwas/OGS-00011/OGS-00011-v2")`, and name your Analyses, such as `"OGS-00011:GCST003116"`. The data frame has the columns of the API Source's, in the same order (see [What the columns mean](opengwasr.html#columns)):
+Here `src` is the example Store Releases. With your own, give their GWAS Store directories, such as `og_local("/data/opengwas/OGS-00011")`, and name your Analyses, such as `"OGS-00011:GCST003116"`. The data frame has the columns of the API Source's, in the same order (see [What the columns mean](opengwasr.html#columns)):
 
 ```{r local-switch-columns}
 names(top)
@@ -283,10 +291,7 @@ TwoSampleMR 0.8.0's data functions take an opengwasr Source as `src`, so a pipel
 
 ```{r local-twosamplemr, eval = FALSE}
 library(TwoSampleMR)
-src <- og_local(c(
-  "/data/opengwas/OGS-00009/OGS-00009-v2",
-  "/data/opengwas/OGS-00011/OGS-00011-v2"
-))
+src <- og_local(c("/data/opengwas/OGS-00009", "/data/opengwas/OGS-00011"))
 
 exposure <- extract_instruments("OGS-00009:ukb-b-19953", src = src)
 outcome <- extract_outcome_data(exposure$SNP, "OGS-00011:GCST003116", src = src)

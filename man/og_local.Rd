@@ -7,26 +7,38 @@
 og_local(path)
 }
 \arguments{
-\item{path}{The full path of each Store Release: a character vector, one element per Store
-Release directory.}
+\item{path}{The directory of each GWAS Store, or of each Store Release: a character vector,
+one element per GWAS Store.}
 }
 \value{
 An \code{og_local_source}. Its \code{releases} is a data frame with one row per Store Release:
-\code{store_id}, \code{release_id}, \code{format_version} and \code{path}.
+\code{store_id}, \code{release_id}, \code{format_version} and \code{path} (the Store Release's own directory).
 }
 \description{
 A Local Source answers queries from Store Releases downloaded to this machine, through
-ogquery, the Store Reader. Give it the full path of each Store Release, one element per Store
-Release: nothing scans a directory. Each Store Release names itself by its manifest
-(\code{store_id}, \code{release_id}, \code{format_version}), and a Local Source holds at most one Store
-Release of each GWAS Store, so no query ever chooses between Store Releases.
+ogquery, the Store Reader. Give it the directory of each GWAS Store, one element per GWAS Store.
+A GWAS Store directory holds one Store Release, one level down: the directory there holding a
+\code{manifest.json}. It is searched one level down and never deeper, so the Dense Component inside a
+Hybrid Store Release (\verb{<release>/dense/manifest.json}) is never taken for a Store Release, and
+hidden directories (whose names start with \code{.}), such as a build in progress, are skipped. A
+Store Release's own directory (the one holding its \code{manifest.json}) works too. One that has lost
+its \code{manifest.json} (it still holds \code{data.zarr} or \code{analyses.tsv}) is refused, never searched
+as a GWAS Store directory. Each Store
+Release names itself by its manifest (\code{store_id}, \code{release_id}, \code{format_version}), and a Local
+Source holds at most one Store Release of each GWAS Store, so no query ever chooses between
+Store Releases.
 }
 \details{
-\code{og_local()} reads no Associations. It checks that each path is a Store Release that the
-installed ogquery can read, and refuses the Source otherwise:
+\code{og_local()} reads no Associations. It checks that each path is, or holds, a Store Release that
+the installed ogquery can read, and refuses the Source otherwise:
 \itemize{
-\item a path that doesn't exist, or isn't a Store Release (no manifest, or one ogquery can't
-parse): \code{opengwasr_not_store_release}, with \code{e$paths} and why each was refused, \code{e$reasons};
+\item a path that doesn't exist, or holds no Store Release (no manifest in it or one level down, or
+one ogquery can't parse): \code{opengwasr_not_store_release}, with \code{e$paths} and why each was
+refused, \code{e$reasons};
+\item a GWAS Store directory holding several Store Releases: \code{opengwasr_several_releases}, with one
+element per Store Release found in \code{e$directory} (the GWAS Store directory given),
+\code{e$store_id}, \code{e$release_id}, \code{e$releases} (\verb{<store_id>/<release_id>}) and \code{e$paths}, so you
+can give the one you want;
 \item a Store Release whose format version ogquery can't read: \code{opengwasr_format_unsupported},
 with \code{e$paths}, each one's version (\code{e$format_version}) and the format series ogquery reads
 (\code{e$readable});
@@ -66,8 +78,9 @@ was found.
 
 \examples{
 \dontshow{if (nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")) withAutoprint(\{ # examplesIf}
-releases <- system.file("releases", package = "opengwasr")
-src <- og_local(file.path(releases, c("dense", "ragged", "hyb")))
+stores <- system.file("stores", package = "opengwasr")
+# GWAS Store directories, and, for hyb, which holds two, a Store Release directory
+src <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")))
 src
 \dontshow{\}) # examplesIf}
 }

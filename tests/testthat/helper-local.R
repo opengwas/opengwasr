@@ -1,15 +1,35 @@
 # Local Sources in tests: the example Store Releases bundled with opengwasr, and the skip.
 #
-# `inst/releases/` holds four of ogquery's contract releases (format 0.3.0; SOURCE there names the
-# commit). Their store_id, release_id and format_version are written in the tests as literals, read
-# from each manifest.json by eye, never through the code under test:
-#   dense   s             r             0.3.0
-#   ragged  residual-rag  comp          0.3.0
-#   hyb     hyb           v1            0.3.0
-#   hyb-c   hyb           v1-completed  0.3.0
+# `inst/stores/` holds four of ogquery's contract releases (format 0.3.0; SOURCE there names the
+# commit), laid out as three GWAS Store directories, each holding its Store Releases one level down.
+# Tests name a Store Release by its name below. Their store_id, release_id and format_version are
+# written in the tests as literals, read from each manifest.json by eye, never through the code
+# under test:
+#   name    directory     store_id      release_id    format_version
+#   dense   dense/r       s             r             0.3.0
+#   ragged  ragged/comp   residual-rag  comp          0.3.0
+#   hyb     hyb/v1        hyb           v1            0.3.0
+#   hyb-c   hyb/v1c       hyb           v1-completed  0.3.0
+example_layout <- c(dense = "dense/r", ragged = "ragged/comp", hyb = "hyb/v1", `hyb-c` = "hyb/v1c")
 
+# The directory of each named example Store Release.
 example_releases <- function(...) {
-  local_path(file.path(system.file("releases", package = "opengwasr", mustWork = TRUE), c(...)))
+  names <- c(...)
+  stopifnot(all(names %in% names(example_layout)))
+  local_path(file.path(system.file("stores", package = "opengwasr", mustWork = TRUE), unname(example_layout[names])))
+}
+
+# The example GWAS Store directories, by name: "dense", "ragged" or "hyb" (which holds two Store
+# Releases).
+example_stores <- function(...) {
+  local_path(file.path(system.file("stores", package = "opengwasr", mustWork = TRUE), c(...)))
+}
+
+# A copy of the named example Store Release in a new temporary directory: the copy's path.
+copy_release <- function(from, env) {
+  dir <- withr::local_tempdir(.local_envir = env)
+  file.copy(example_releases(from), dir, recursive = TRUE)
+  file.path(dir, basename(example_releases(from)))
 }
 
 # One Local Source over dense, ragged and hyb (three GWAS Stores), opened once per test process and
@@ -43,9 +63,7 @@ skip_if_no_local <- function() {
 # A copy of an example Store Release in a temporary directory, its manifest's format_version set to
 # `format_version` (the one edit, made on the JSON text so nothing else changes).
 release_with_format <- function(format_version, from = "dense", env = parent.frame()) {
-  dir <- withr::local_tempdir(.local_envir = env)
-  file.copy(example_releases(from), dir, recursive = TRUE)
-  path <- file.path(dir, from)
+  path <- copy_release(from, env)
   manifest <- file.path(path, "manifest.json")
   text <- readLines(manifest)
   at <- grep('"format_version": "0.3.0"', text, fixed = TRUE)
@@ -105,9 +123,7 @@ automatic_python <- list(python = "/home/me/.cache/R/reticulate/uv/env/bin/pytho
 # `edit(table)` (a data frame of text, every cell as written; "" for none), written back as the
 # same tab-separated text.
 release_with_analyses <- function(edit, from = "dense", env = parent.frame()) {
-  dir <- withr::local_tempdir(.local_envir = env)
-  file.copy(example_releases(from), dir, recursive = TRUE)
-  path <- file.path(dir, from)
+  path <- copy_release(from, env)
   file <- file.path(path, "analyses.tsv")
   table <- utils::read.delim(file, colClasses = "character", na.strings = character(), check.names = FALSE,
                              quote = "")
@@ -118,9 +134,7 @@ release_with_analyses <- function(edit, from = "dense", env = parent.frame()) {
 # A copy of an example Store Release in a temporary directory, without the file or directory at
 # `drop` (relative to the release).
 release_without <- function(drop, from = "ragged", env = parent.frame()) {
-  dir <- withr::local_tempdir(.local_envir = env)
-  file.copy(example_releases(from), dir, recursive = TRUE)
-  path <- file.path(dir, from)
+  path <- copy_release(from, env)
   stopifnot(file.exists(file.path(path, drop)))
   unlink(file.path(path, drop), recursive = TRUE)
   path

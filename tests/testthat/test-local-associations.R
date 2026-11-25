@@ -1,7 +1,7 @@
 # A Local Source answers og_associations(), og_tophits(clump = FALSE), og_phewas() and og_range()
 # (#33): the same calls, columns, order, refusals and provenance as the API Source.
 #
-# Reads use the example Store Releases bundled in inst/releases (helper-local.R) and skip without a
+# Reads use the example Store Releases bundled in inst/stores (helper-local.R) and skip without a
 # Python that has ogquery. Every number is a literal from ogquery's contract answers for the same
 # release (tests/contract/expected/{dense_ranges,ragged_completed,hybrid_observed}.json), read by
 # eye and converted by hand: beta = z * se, and n is the Analysis's sample_size (analyses.tsv). The

@@ -1,15 +1,23 @@
-# Generates the committed PLINK Reference `ref.{bed,bim,fam}` (synthetic: no real people).
+# Generates the PLINK Reference that comes with opengwasr, `ref.{bed,bim,fam}` (synthetic: no real
+# people). The tests and the Local Source vignette both read it, from `system.file("plink", "ref")`.
 #
-#   R_LIBS_USER=<library with genetics.binaRies> Rscript tests/testthat/fixtures/plink/make-reference.R
+#   Rscript inst/plink/make-reference.R      # PLINK 1.9 from genetics.binaRies, else on the PATH
 #
-# 300 individuals, 31 variants. Genotypes come from haplotypes drawn with a shared latent factor per
+# 300 individuals, 36 variants. Genotypes come from haplotypes drawn with a shared latent factor per
 # LD block, so each block's variants are in LD with each other and blocks are independent. The
-# rsIDs of the fake Data API's coronary artery disease and BMI top hits (R/tests fake-server.R) are
-# among the variants, in two blocks on chromosomes 9 and 16; rs10738610 is deliberately left out, so
-# a top hit the reference lacks exists. Tests never read this script's numbers: they decode the
-# `.bed` themselves (helper-plink.R) and compute r and the clumps in plain R.
-.libPaths(c(Sys.getenv("R_LIBS_USER"), .libPaths()))
-plink <- genetics.binaRies::get_plink_binary()
+# rsIDs of the fake Data API's coronary artery disease and BMI top hits (tests/testthat/fake-server.R)
+# are among the variants, in two blocks on chromosomes 9 and 16; rs10738610 is deliberately left out,
+# so a top hit the reference lacks exists. So are the rsIDs of the bundled example Store Releases'
+# `s:bmi_irn` top hits (inst/stores), on chromosomes 1 and 2, appended last so the variants before
+# them keep their genotypes; rs1007 (on X) is left out, for the same reason. Tests never read this
+# script's numbers: they decode the `.bed` themselves (helper-plink.R) and compute r and the clumps
+# in plain R.
+plink <- if (requireNamespace("genetics.binaRies", quietly = TRUE)) {
+  genetics.binaRies::get_plink_binary()
+} else {
+  unname(Sys.which("plink"))
+}
+stopifnot(nzchar(plink))
 set.seed(20261123)
 n <- 300
 
@@ -33,9 +41,16 @@ v <- rbind(
   variant("rs1421085",  16, 53767042, "C", "T", "D", 0.85, 0.40),
   variant("rs1558902",  16, 53767100, "T", "A", "D", 0.85, 0.40),
   variant("rs9939609",  16, 53800000, "A", "T", "D", 0.60, 0.35),
-  variant(sprintf("rs16%02d", 1:10), 16, 60000000 + (1:10) * 200000, "G", "C", paste0("far16", 1:10), 0, 0.3)
+  variant(sprintf("rs16%02d", 1:10), 16, 60000000 + (1:10) * 200000, "G", "C", paste0("far16", 1:10), 0, 0.3),
+  # the example Store Releases' s:bmi_irn top hits: rs5000 and rs1000 in one block, rs1004 alone,
+  # rs1005 and rs1006 in another block on chromosome 2
+  variant("rs1000", 1, 1000, "A", "G", "E", 0.90, 0.40),
+  variant("rs5000", 1, 5000, "C", "G", "E", 0.90, 0.42),
+  variant("rs1004", 1, 9000, "A", "G", "F", 0.00, 0.35),
+  variant("rs1005", 2, 300, "C", "T", "G", 0.85, 0.38),
+  variant("rs1006", 2, 7000, "A", "C", "G", 0.85, 0.36)
 )
-stopifnot(nrow(v) == 31, !anyDuplicated(v$rsid))
+stopifnot(nrow(v) == 36, !anyDuplicated(v$rsid))
 
 latent <- list()
 haplotype <- function(v) {

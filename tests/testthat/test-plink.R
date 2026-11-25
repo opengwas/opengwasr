@@ -166,7 +166,7 @@ test_that("og_tophits() with a PLINK Reference fetches unclumped hits, clumps th
 })
 
 test_that("the warning for top hits the API cut off says clumping saw only the strongest", {
-  ref <- structure(list(path = "ref", plink_bin = "plink"), class = "og_plink_reference")
+  ref <- structure(list(path = "ref", plink_bin = "plink", plink_version = "1.90b6.21"), class = "og_plink_reference")
   contribution <- plink_clump_contribution(list(plink = ref, store = list(ld_store = "ref"), choice = "user"),
                                            list(r2 = 0.2, kb = 100, limit = 10, threshold = 5e-8),
                                            data.frame(id = c("A", "B")), NULL)

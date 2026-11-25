@@ -12,7 +12,7 @@ plink_fixture <- function() {
 # A PLINK Reference over the fixture, or skip the test: nothing here runs without a PLINK binary.
 local_plink_reference <- function() {
   ref <- tryCatch(og_plink_reference(plink_fixture()), opengwasr_plink_not_found = function(e) NULL)
-  if (is.null(ref)) testthat::skip("No PLINK binary found (genetics.binaRies, or plink on the PATH).")
+  if (is.null(ref)) testthat::skip("No PLINK binary found (genetics.binaRies, or plink or plink2 on the PATH).")
   ref
 }
 
@@ -41,16 +41,61 @@ fixture_bim <- function() {
   bim
 }
 
+# r² between two variants as PLINK's --clump computes it (1.9 and 2 alike): from haplotype
+# frequencies estimated by EM from unphased genotypes, not the squared genotype correlation
+# (og_ld_matrix()'s r is that). `x` and `y` count the first allele; people missing either are left out.
+# Of each pair of genotypes the haplotypes are known except in double heterozygotes, which are split
+# between AB/ab and Ab/aB in proportion to the current frequencies until they settle.
+haplotype_r2 <- function(x, y) {
+  keep <- !is.na(x) & !is.na(y)
+  x <- x[keep]
+  y <- y[keep]
+  n <- table(factor(x, 0:2), factor(y, 0:2))  # n[i + 1, j + 1]: people with x = i, y = j
+  # Known haplotype counts: AB, Ab, aB, ab (A, B the counted alleles).
+  known <- c(AB = 2 * n[3, 3] + n[3, 2] + n[2, 3],
+             Ab = 2 * n[3, 1] + n[3, 2] + n[2, 1],
+             aB = 2 * n[1, 3] + n[1, 2] + n[2, 3],
+             ab = 2 * n[1, 1] + n[1, 2] + n[2, 1])
+  dh <- n[2, 2]
+  total <- 2 * length(x)
+  h <- (known + dh / 2) / total
+  for (i in 1:1000) {
+    cis <- if (h[["AB"]] * h[["ab"]] + h[["Ab"]] * h[["aB"]] > 0) h[["AB"]] * h[["ab"]] / (h[["AB"]] * h[["ab"]] + h[["Ab"]] * h[["aB"]]) else 0.5
+    nxt <- (known + dh * c(cis, 1 - cis, 1 - cis, cis)) / total
+    if (max(abs(nxt - h)) < 1e-12) break
+    h <- nxt
+  }
+  p <- h[["AB"]] + h[["Ab"]]
+  q <- h[["AB"]] + h[["aB"]]
+  if (p * (1 - p) * q * (1 - q) == 0) return(NA_real_)
+  (h[["AB"]] - p * q)^2 / (p * (1 - p) * q * (1 - q))
+}
+
+# haplotype_r2() of every pair of the fixture's variants on one chromosome (NA across chromosomes),
+# named by rsID: worked out once per test process.
+fixture_haplotype_r2 <- local({
+  cached <- NULL
+  function() {
+    if (!is.null(cached)) return(cached)
+    d <- fixture_dosage()
+    chr <- fixture_bim()$chr
+    n <- ncol(d)
+    r2 <- matrix(NA_real_, n, n, dimnames = list(colnames(d), colnames(d)))
+    for (i in seq_len(n)) for (j in seq_len(i)) {
+      if (chr[[i]] == chr[[j]]) r2[i, j] <- r2[j, i] <- if (i == j) 1 else haplotype_r2(d[, i], d[, j])
+    }
+    cached <<- r2
+    r2
+  }
+})
+
 # PLINK's clumping rule, greedy and in plain R: the strongest score first, each index variant takes
-# every unclumped variant less than `kb` away on its chromosome (PLINK 1.90 leaves out one exactly `kb` away) whose r^2 with it is above `r2`. Returns the
-# index variants (strongest first) and the size of each clump, itself included. r² here is the
-# squared genotype correlation; PLINK 1.9 and 2 clump by r² from haplotype frequencies, which is close
-# but not equal (test-plink-versions.R has a pair either side of 0.2), so tests using this rule keep
-# their settings away from such pairs.
+# every unclumped variant less than `kb` away on its chromosome (PLINK leaves out one exactly `kb`
+# away) whose r² with it (haplotype_r2(), as PLINK's) is above `r2`. Returns the index variants
+# (strongest first) and the size of each clump, itself included.
 expected_clump <- function(rsids, score, r2, kb) {
-  d <- fixture_dosage()
   bim <- fixture_bim()
-  r_squared <- stats::cor(d[, rsids, drop = FALSE])^2
+  r_squared <- fixture_haplotype_r2()[rsids, rsids, drop = FALSE]
   bp <- bim$bp[match(rsids, bim$rsid)]
   chr <- bim$chr[match(rsids, bim$rsid)]
   taken <- rep(FALSE, length(rsids))
@@ -58,7 +103,7 @@ expected_clump <- function(rsids, score, r2, kb) {
   size <- integer()
   for (i in order(-score)) {
     if (taken[i]) next
-    members <- which(!taken & chr == chr[i] & abs(bp - bp[i]) < kb * 1000 & r_squared[i, ] > r2)
+    members <- which(!taken & chr == chr[i] & abs(bp - bp[i]) < kb * 1000 & !is.na(r_squared[i, ]) & r_squared[i, ] > r2)
     taken[c(i, members)] <- TRUE
     lead <- c(lead, rsids[i])
     size <- c(size, length(unique(c(i, members))))
@@ -94,6 +139,6 @@ plink_references_by_series <- function() {
   refs <- Filter(Negate(is.null), lapply(bins, function(b) {
     tryCatch(og_plink_reference(plink_fixture(), plink_bin = b), error = function(e) NULL)
   }))
-  series <- vapply(refs, function(r) plink_series(r$plink_version), "")
+  series <- vapply(refs, function(r) plink_dialect_of(r$plink_version)$name, "")
   list("1.9" = refs[series == "1.9"][1][[1]], "2" = refs[series == "2"][1][[1]])
 }

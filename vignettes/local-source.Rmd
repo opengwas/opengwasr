@@ -144,17 +144,30 @@ head(top[, c("rsid", "alid", "beta", "se", "pval", "association_status")], 4)
 
 The data frame has the columns of the API Source's, in the same order (see [What the columns mean](opengwasr.html#columns)). The Analyses, the Associations and the numbers agree with the API Source's, because both read the same Store Releases and shape the results with the same code. `og_provenance()` says which Store Release each answer came from.
 
-The other verbs work the same way:
+The other verbs work the same way. On the example Store Releases, the top hits of `s:bmi_irn`, strongest first, with `limit` cutting them off as on the API Source (`opengwasr_truncated`):
 
-```{r local-verbs, eval = FALSE}
-og_analyses(src, "OGS-00011:GCST003116")
-og_associations(src, c("rs1421085", "16:53767042:C:T"), c("OGS-00011:GCST90029007", "OGS-00011:GCST003116"))
-og_phewas(src, "rs1421085", threshold = 1e-50)
-og_range(src, "OGS-00011:GCST003116", chromosome = "9", start = 22090000, end = 22130000)
-og_variants_rsid(src, "rs34159589")
+```{r local-tophits}
+cols <- c("id", "alid", "rsid", "beta", "se", "pval", "association_status")
+top <- og_tophits(local, "s:bmi_irn", clump = FALSE, limit = 5)
+top[, cols]
+og_provenance(top)
 ```
 
-On the example Store Releases, the variant lookups already run. `rs5000` names two variants in one Store Release, and two Store Releases hold a variant at `1:1000`, one of them without an rsID:
+A local result's provenance names the Store Releases read, and no Jobs: a Local Source answers at once. The Associations of variants in Analyses: an rsID stands for every variant it names, here two at `1:5000`. `residual-rag` is a Reference-Completed Store Release, and its Association at `1:1001500:A:G` is an Imputed Association, which `observed_only = TRUE` leaves out:
+
+```{r local-associations}
+og_associations(local, c("rs5000", "1:1001500:A:G"), c("s:bmi_irn", "residual-rag:a"))[, cols]
+og_associations(local, c("rs5000", "1:1001500:A:G"), c("s:bmi_irn", "residual-rag:a"), observed_only = TRUE)[, cols]
+```
+
+A PheWAS of one variant across every Analysis the Local Source holds, and the Associations of an Analysis in a range:
+
+```{r local-phewas-range}
+og_phewas(local, "1:1000:A:G", threshold = 1e-9)[, cols]
+og_range(local, "s:bmi_irn", chromosome = "1", start = 4000, end = 6000)[, cols]
+```
+
+The variant lookups run the same way. `rs5000` names two variants in one Store Release, and two Store Releases hold a variant at `1:1000`, one of them without an rsID:
 
 ```{r local-lookups}
 og_variants_rsid(local, "rs5000")
@@ -220,6 +233,14 @@ Then use `OGS-00009:ukb-b-19953` in every Local Source call.
 ## Clumping {#local-clumping}
 
 `og_tophits()` clumps by default, as with the API Source. The clumping needs LD, and a Local Source doesn't hold LD Stores. You say where the LD comes from with `ld`, which is separate from the Source (see [The `ld` argument](ld.html#ld-argument)).
+
+<!-- #34 replaces this refusal. -->
+
+Clumping on a Local Source isn't available yet: `og_tophits()` refuses it, with an error of class `opengwasr_local_unsupported`, until it is. Pass `clump = FALSE` for every top hit:
+
+```{r local-clump-refused, error = TRUE}
+og_tophits(local, "s:bmi_irn")
+```
 
 ### With an LD Store on the API {#local-clumping-api}
 

@@ -569,9 +569,11 @@ test_that("og_local_check() refuses only bad arguments", {
 
 # The API Source never needs Python ------------------------------------------------------------
 
-test_that("a verb without a Local Source method refuses a Local Source", {
+test_that("anything without a Local Source method refuses a Local Source", {
   src <- structure(list(releases = data.frame()), class = "og_local_source")
-  e <- expect_error(og_tophits(src, "s:a"), class = "opengwasr_local_unsupported")
+  # Every query verb has a Local Source method (#34 gave og_tophits(), og_clump() and og_ld_matrix()
+  # theirs); the one Source check still refuses a Local Source wherever one reaches it.
+  e <- expect_error(check_source(src), class = "opengwasr_local_unsupported")
   expect_s3_class(e, "opengwasr_refusal")
   expect_error(og_tophits("x", "s:a"), class = "opengwasr_argument")
 })

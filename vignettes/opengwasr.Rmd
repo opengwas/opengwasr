@@ -7,11 +7,11 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Associations and LD. Every query function takes a **Source** as its first argument, which says where the query is answered. This vignette uses the API Source, `og_api()`, which queries the OpenGWAS API over the network. A later release adds a Local Source for Store Releases downloaded to your own machine (see [Querying downloaded Store Releases](local-source.html)). Code written against `og_api()` will work with it unchanged.
+opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Associations and LD. Every query function takes a **Source** as its first argument, which says where the query is answered. This vignette uses the API Source, `og_api()`, which queries the OpenGWAS API over the network. A Local Source reads Store Releases downloaded to your own machine instead (see [Sources](#sources)). Its verbs, arguments and columns are the same, but it answers LD (clumping and LD matrices) only when you give it an LD resource.
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, and the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue).
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue), and `sources-local` in [Sources](#sources), which needs Python, ogquery and a PLINK Reference, which this vignette doesn't use (they run in [Querying downloaded Store Releases](local-source.html#local-clumping)).
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
@@ -25,6 +25,36 @@ start_recordings("recordings-opengwasr")
 ```{r library}
 library(opengwasr)
 ```
+
+## Sources {#sources}
+
+A **Source** says two things: where Associations come from, and which **LD resource** answers LD for them (clumping, LD matrices and LD proxies). There are two kinds of Source:
+
+- `og_api()`, the **API Source**, reads the OpenGWAS API over the network.
+- `og_local(gwas = ...)`, a **Local Source**, reads Store Releases you have downloaded (see [Querying downloaded Store Releases](local-source.html)).
+
+An LD resource is one of three kinds, and each can be on the API or on your machine:
+
+| LD resource | On the API | On your machine |
+|---|---|---|
+| **LD Store**: the precomputed LD of one reference panel | `og_api(ld_store = "EUR")`, an LD Store's name or an ancestry code. Available now | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
+| **Genotype Store**: genotypes of one reference panel, from which LD is computed when asked | `og_api(geno_store = ...)`. Coming, when the API serves Genotype Stores | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
+| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK binary if opengwasr can't find it. Available now |
+| None given | `og_api()`: each Analysis's Assigned Ancestry chooses its LD Store | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give an LD resource |
+
+A form that is coming is refused with an error that says so, rather than quietly doing something else.
+
+```{r sources-api}
+src <- og_api()                         # LD: each Analysis's Assigned Ancestry chooses
+src_eur <- og_api(ld_store = "EUR")     # LD: the EUR LD Store
+src_eur
+```
+
+```{r sources-local, eval = FALSE}
+local <- og_local(gwas = "/data/opengwas/OGS-00011", bfile = "/data/ld/1kg/EUR")  # LD: your PLINK Reference
+```
+
+Every verb that needs LD (`og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()`) uses the Source's LD resource. Its `ld` argument overrides it for that one call, such as `og_ld_matrix(src_eur, variants, ld = "AFR")`. [LD operations](ld.html#ld-resource) explains choosing LD in full.
 
 ## Credentials {#credentials}
 

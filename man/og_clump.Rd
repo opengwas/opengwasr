@@ -7,7 +7,8 @@
 og_clump(src, data, ld = NULL, r2 = NULL, kb = NULL)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}. \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}} (which clumps with its PLINK Reference, its
+rsIDs looked up in its Store Releases). \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
 looked up: \code{data} has an \code{rsid} column, so no ALID needs its rsID from the API. A lookup that
 is needed without a Source stops, with class \code{opengwasr_source_required}.}
 
@@ -15,9 +16,11 @@ is needed without a Source stops, with class \code{opengwasr_source_required}.}
 matched by the Analyses' Assigned Ancestry.}
 
 \item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-\code{\link[=og_plink_reference]{og_plink_reference()}} (clumped locally by PLINK), or \code{NULL} to match the Assigned
+\code{\link[=og_plink_reference]{og_plink_reference()}} (clumped locally by PLINK), or \code{NULL} for the Source's LD resource
+(\code{og_api(ld_store = )}, \code{og_local(bfile = )}), else (API Source) to match the Assigned
 Ancestry of the Analyses in \code{data} (refused, with class \code{opengwasr_ld_unmatched}, when they
-differ, when one is Unassigned, or when \code{data} has no \code{id}).}
+differ, when one is Unassigned, or when \code{data} has no \code{id}). A Local Source with neither is
+refused (\code{opengwasr_ld_resource_required}).}
 
 \item{r2}{The r² above which a variant joins an index variant's clump; \code{NULL} for the LD Store's
 \code{t_far}. Required with a PLINK Reference.}
@@ -29,7 +32,7 @@ Reference.}
 The rows of \code{data} whose variant is an index variant, in their order in \code{data}, with
 columns \code{clump_ld}, \code{clump_ld_choice}, \code{clump_r2}, \code{clump_kb} and \code{clump_size} (the variants
 the index variant stands for, itself included), and \code{\link[=og_provenance]{og_provenance()}} attached: \code{ld},
-\code{ld_choice}, \code{absent} and \code{clump}.
+\code{ld_choice}, \code{absent} and \code{clump} (whose \code{clumps} is \code{"computed"}).
 }
 \description{
 \code{og_clump()} clumps a data frame of Associations as one set, such as the top hits of several

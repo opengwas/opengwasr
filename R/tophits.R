@@ -18,7 +18,13 @@
 #' `og_provenance(x)$clump` has each Analysis's `hits`, `absent` and `leads`. Pass `clump = FALSE`
 #' for every top hit.
 #'
-#' With a PLINK Reference in `ld` (see [og_plink_reference()]) the clumping is local: each Analysis's
+#' The LD is the Source's LD resource (`og_api(ld_store = )`, `og_local(bfile = )`) unless `ld`
+#' overrides it for this call. A Local Source with neither is refused (`opengwasr_ld_resource_required`),
+#' naming the LD resources and `clump = FALSE`: Store Releases have no stored Clumps yet, so clumping
+#' is computed on the fly, and `og_provenance(x)$clump$clumps` is `"computed"`.
+#'
+#' With a PLINK Reference in `ld` or as the Source's LD resource (see [og_plink_reference()]) the
+#' clumping is local: each Analysis's
 #' top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
 #' (those not in it are left out, with a message) and clumped by PLINK, and `limit` is then applied
 #' to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an
@@ -53,8 +59,8 @@
 #' @param observed_only Leave out Imputed Associations.
 #' @param clump Clump the top hits to one per independent signal.
 #' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-#'   [og_plink_reference()], or `NULL` to match each Analysis's Assigned Ancestry. Only with
-#'   `clump = TRUE`.
+#'   [og_plink_reference()], or `NULL` for the Source's LD resource, else (API Source) to match each
+#'   Analysis's Assigned Ancestry. Only with `clump = TRUE`. A Local Source takes only a PLINK Reference.
 #' @param r2,kb The r² above which a top hit joins an index variant's clump, and the window in
 #'   kilobases; `NULL` for the LD Store's `t_far` and far window, but required with a PLINK
 #'   Reference. Only with `clump = TRUE`.
@@ -82,7 +88,7 @@ og_tophits <- function(src, analyses, threshold = 5e-8, limit = 1000, observed_o
 og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
                                      observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
                                      kb = NULL, original_units = FALSE, releases = NULL) {
-  check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
+  check_tophits_arguments(src, threshold, limit, clump, ld, r2, kb)
   # `limit` applies to each Analysis, so no split changes it; a Job's rows (`limit` x Analyses) must
   # fit the row cap. Clumping (R/clump.R) sets its own Jobs, fetch size and truncation message.
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
@@ -92,28 +98,16 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
                     spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
 }
 
-# The API method's call into the engine, without clumping, once clumping is refused: a Local Source
-# can't clump yet (#34 replaces this refusal). It can't delegate to the API method: the engine
-# reads the call from the frame of the method UseMethod() dispatched to (method_arguments()).
+# A Local Source clumps on the fly with its LD resource (or `ld`): today a PLINK Reference, read on
+# this machine. Without one it is refused, before any top hit is read (ld_resource()). The same
+# method: the engine reads the call from the frame UseMethod() dispatched to.
 #' @export
-og_tophits.og_local_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
-                                       observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
-                                       kb = NULL, original_units = FALSE, releases = NULL) {
-  check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
-  if (clump) {
-    local_unsupported("A Local Source can't clump top hits yet.",
-                      "Pass `clump = FALSE` for every top hit.")
-  }
-  association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
-                    body = list(threshold = threshold, limit = as.integer(limit)),
-                    analyses_per_job = tophits_analyses_per_job(limit), order = "api",
-                    truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold))
-}
+og_tophits.og_local_source <- og_tophits.og_api_source
 
 # Kept: R argument types and shapes, and `limit`'s range, which the splitter needs to size Jobs.
 # Which thresholds are allowed is the API's to say (`opengwasr_unsupported_threshold`, or
 # `opengwasr_invalid_query` outside 0 to 1).
-check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = rlang::caller_env()) {
+check_tophits_arguments <- function(src, threshold, limit, clump, ld, r2, kb, call = rlang::caller_env()) {
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
   check_threshold_limit(threshold, limit, call)
   if (limit < 1 || limit > max_tophits_per_analysis) {
@@ -124,7 +118,9 @@ check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = 
     bad("`ld`, `r2` and `kb` only apply with `clump = TRUE`.")
   }
   check_clump_settings(r2, kb, call)
-  if (clump) check_plink_settings(ld, r2, kb, call)
+  # The LD clumping uses, the call's or the Source's, is known now: a Local Source without one, and a
+  # PLINK Reference without `r2` and `kb`, are refused before anything is read.
+  if (clump) check_plink_settings(ld_resource(src, ld, call, clumping = TRUE)$ld, r2, kb, call)
 }
 
 # Kept: the R types of `threshold` and `limit` (shared by og_tophits() and og_phewas()); their

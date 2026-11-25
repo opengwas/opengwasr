@@ -60,7 +60,7 @@ Every ieugwasr function that TwoSampleMR calls:
 | `gwasinfo(id)` | `add_metadata()` | `og_analyses(src, ids)` | Metadata keeps the API's names: `sample_size`, `n_cases` and `n_controls` (Associations carry them as `n`, `ncase` and `ncontrol`). There is no `unit`. `sd` is now `original_sd`, with `original_sd_method` saying how it was obtained. |
 | `tophits(id, pval, clump, r2, kb, force_server)` | `extract_instruments()` | `og_tophits(src, analyses, threshold = 5e-8, limit = 1000, clump = TRUE, ld = NULL, r2 = NULL, kb = NULL)` | Still clumped by default, but the default thresholds come from the LD Store (r² about 0.03 within 10,000 kb). r² 0.001 within 10,000 kb is refused. The LD Store matches each Analysis's ancestry, not always EUR. `threshold` can be at most 5e-4. `limit` caps the top hits per Analysis (1,000 by default), with a warning when it cuts any off. `force_server` is gone. |
 | `associations(variants, id, proxies, r2, align_alleles, palindromes, maf_threshold)` | `extract_outcome_data()`, `ldsc_rg()` | `og_associations(src, variants, analyses, observed_only = FALSE)` | No LD proxies: Imputed Associations are included and labelled instead, so `proxies`, `r2`, `align_alleles`, `palindromes` and `maf_threshold` have no equivalent. Variants can be rsIDs or ALIDs. Large queries are split automatically. |
-| `ld_clump(dat, clump_kb, clump_r2, clump_p, pop, bfile, plink_bin)` | `clump_data()` | `og_clump(src, data, ld = NULL, r2 = NULL, kb = NULL)` | Ranks by \|z\|, not p. `pop` becomes `ld = "EUR"`, or the LD Store is matched from the Analyses' ancestry. `clump_r2`/`clump_kb` become `r2`/`kb`, defaulting to the LD Store's own. `bfile` and `plink_bin` become `ld = og_plink_reference(path, plink_bin)`. For `clump_p`, filter `data` before clumping. |
+| `ld_clump(dat, clump_kb, clump_r2, clump_p, pop, bfile, plink_bin)` | `clump_data()` | `og_clump(src, data, ld = NULL, r2 = NULL, kb = NULL)` | Ranks by \|z\|, not p. `pop` becomes the Source's LD resource, `og_api(ld_store = "EUR")`, or `ld = "EUR"` for one call; without either, the LD Store is matched from the Analyses' ancestry. `clump_r2`/`clump_kb` become `r2`/`kb`, defaulting to the LD Store's own. `bfile` and `plink_bin` become a Local Source's LD resource, `og_local(gwas = ..., plink = plink_bin, bfile = bfile)`, or `ld = og_plink_reference(bfile, plink_bin)` for one call. For `clump_p`, filter `data` before clumping. |
 | `ld_matrix(variants, with_alleles, pop)` | `ld_matrix()` | `og_ld_matrix(src, variants, ld = NULL, fill_below_t_far = FALSE)` | Named by ALID, which carries the alleles, so `with_alleles` is gone. Pairs the LD Store doesn't hold are `NA`, not 0; `fill_below_t_far = TRUE` sets the weakly linked ones to 0 ([missing pairs](ld.html#ld-matrix-fill)). More than 500 variants are split automatically. |
 | `ld_reflookup(rsid, pop)` | the help for `clump_data()` and `ld_matrix()` | none | `og_ld_matrix()`, `og_ld_proxies()` and clumping report the variants the LD Store doesn't hold. |
 | `fill_n(d)` | `ldsc_h2()`, `ldsc_rg()` | none needed | Every Association already has `n`, `ncase` and `ncontrol`, with `sample_size_kind`. `og_analyses()` has the same counts under the API's names, `sample_size`, `n_cases` and `n_controls`. |
@@ -73,7 +73,7 @@ Other ieugwasr functions:
 | `api_status()`, `user()` | `og_status(src)`, `og_user(src)` | `og_user()` reports your allowance. |
 | `phewas(variants, pval = 1e-5, batch)` | `og_phewas(src, variants, threshold = 1e-8, releases)` | `variants` are rsIDs and ALIDs, as in ieugwasr; each rsID runs one PheWAS per ALID it names, combined in the order given. The default threshold is 1e-8; pass `threshold = 1e-5` for ieugwasr's. `batch` becomes `releases` (GWAS Store ids). |
 | `variants_rsid()`, `variants_chrpos(chrpos, radius)` | `og_variants_rsid(src, rsids)`, `og_variants_chrpos(src, positions)` | Return ALIDs from the GWAS Stores' own variant tables, not dbSNP records. Positions are on GRCh38 and exact: there is no `radius`. |
-| `ld_clump_local()`, `ld_matrix_local()` | `og_clump()`, `og_ld_matrix()` with `ld = og_plink_reference(path)` | The same functions as for LD Stores. |
+| `ld_clump_local()`, `ld_matrix_local()` | `og_clump()`, `og_ld_matrix()` and `og_tophits()` on `og_local(gwas = ..., plink = plink_bin, bfile = bfile)`, or with `ld = og_plink_reference(bfile, plink_bin)` on either Source | The same functions as for LD Stores. The PLINK Reference is the Local Source's LD resource, so every call uses it without `ld` ([Clumping and LD](local-source.html#local-clumping)). `r2` and `kb` are required: a PLINK Reference has no defaults. |
 | `variants_gene()` | none | The new API has no gene annotation. |
 
 ## What changed scientifically {#what-changed}
@@ -108,7 +108,7 @@ og_associations(src, "rs1421085", "OGS-00011:GCST90624700",
 
 ieugwasr and TwoSampleMR clumped at r² 0.001 within 10,000 kb. The new LD Stores hold every r² only within 3,000 kb. Beyond that, they hold only pairs with r² of at least their `t_far` (about 0.03; 0.063 for AMR), so they can't answer r² 0.001 at 10,000 kb exactly. opengwasr's default is the LD Store's own: within 10,000 kb at its `t_far`. If you ask for 0.001 within 10,000 kb, it refuses, and the error suggests what the LD Store can answer: r² 0.001 within 3,000 kb, or r² of at least `t_far` within 10,000 kb.
 
-Expect different instrument counts from before. Each clumped data frame records the LD Store, r² and window it used (see [clumping provenance](ld.html#clumping-provenance)).
+Expect different instrument counts from before. Each clumped data frame records the LD Store, r² and window it used (see [clumping provenance](ld.html#clumping-provenance)). Store Releases will also carry stored Clumps, made at these defaults when they were built, and the default call will read them; any other `r2`, `kb` or LD is clumped on the fly, and the provenance says which ([Stored Clumps](ld.html#stored-clumps)).
 
 ```{r clumping-defaults}
 unique(exposure[, c("clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
@@ -116,7 +116,7 @@ unique(exposure[, c("clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
 
 ### The LD Store matches the Analysis's ancestry {#ld-by-ancestry}
 
-ieugwasr clumped against European LD unless you set `pop`. opengwasr clumps each Analysis in the LD Store of its Assigned Ancestry, inferred from the Analysis's allele frequencies. An Analysis with no confident ancestry (Unassigned), or a set of Analyses whose ancestries differ, is refused unless you choose the LD with `ld`. There is no fallback to European LD.
+ieugwasr clumped against European LD unless you set `pop`. opengwasr clumps each Analysis in the LD Store of its Assigned Ancestry, inferred from the Analysis's allele frequencies. An Analysis with no confident ancestry (Unassigned), or a set of Analyses whose ancestries differ, is refused unless you choose the LD, for every call with the Source's LD resource (`og_api(ld_store = "EUR")`) or for one call with `ld`. There is no fallback to European LD.
 
 ```{r ld-by-ancestry}
 og_ld_stores(src)[, c("ld_store", "ancestry", "t_far")]

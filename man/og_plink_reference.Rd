@@ -19,7 +19,9 @@ An object of class \code{og_plink_reference}: \code{path} (absolute) and \code{p
 \description{
 \code{og_plink_reference()} names a PLINK binary fileset (\code{.bed}, \code{.bim}, \code{.fam}) on your machine, and
 the PLINK that will read it, to pass as \code{ld} to \code{\link[=og_ld_matrix]{og_ld_matrix()}}, \code{\link[=og_clump]{og_clump()}} and
-\code{\link[=og_tophits]{og_tophits()}}. See \code{vignette("ld")}.
+\code{\link[=og_tophits]{og_tophits()}} for one call, with either Source. A Local Source can also carry one as its LD
+resource, \code{og_local(gwas, plink = , bfile = )}, which builds it with this function. See
+\code{vignette("ld")}.
 }
 \details{
 Variants are matched to the reference by rsID, because PLINK References are usually on GRCh37

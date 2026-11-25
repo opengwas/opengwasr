@@ -13,8 +13,9 @@
 #'
 #' @inheritParams og_ld_matrix
 #' @param src A Source, from [og_api()].
-#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` to match the Assigned
-#'   Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.
+#' @param ld An LD Store's name, an ancestry code (its LD Store), or `NULL` for the Source's LD
+#'   resource (`og_api(ld_store = )`), else to match the Assigned Ancestry of the Associations'
+#'   Analyses. LD Stores only: a PLINK Reference is refused, and so is a Local Source.
 #' @param r2 The smallest r² of a proxy.
 #' @param kb The window, in kilobases either side of the variant.
 #' @return A data frame with [og_provenance()] attached (`ld`, `ld_choice`, `absent`), one row per

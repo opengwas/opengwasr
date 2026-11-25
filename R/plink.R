@@ -1,7 +1,8 @@
 # PLINK References: the user's own PLINK binary fileset as another place LD is read from.
 #
 # `og_plink_reference()` makes one, and every LD function takes it through the same `ld` argument
-# as an LD Store's name (choose_ld_store() in R/ld-stores.R is the one place `ld` is interpreted).
+# as an LD Store's name, or a Local Source carries it as its LD resource (`og_local(bfile = )`):
+# choose_ld_store() in R/ld-stores.R is the one place either is interpreted.
 # This file is the whole of the PLINK side: finding the binary, running it, the two things it is
 # asked (an LD matrix, a clumping), matching variants to the reference by rsID (ADR 0004), and the
 # plan and top-hit assembly of a query that reads one. The other files only branch on a PLINK
@@ -12,7 +13,9 @@
 #'
 #' `og_plink_reference()` names a PLINK binary fileset (`.bed`, `.bim`, `.fam`) on your machine, and
 #' the PLINK that will read it, to pass as `ld` to [og_ld_matrix()], [og_clump()] and
-#' [og_tophits()]. See `vignette("ld")`.
+#' [og_tophits()] for one call, with either Source. A Local Source can also carry one as its LD
+#' resource, `og_local(gwas, plink = , bfile = )`, which builds it with this function. See
+#' `vignette("ld")`.
 #'
 #' Variants are matched to the reference by rsID, because PLINK References are usually on GRCh37
 #' while ALIDs are on GRCh38: a variant with no rsID, or whose rsID isn't in the `.bim`, is left out,
@@ -34,20 +37,29 @@
 #' }
 #' @export
 og_plink_reference <- function(path, plink_bin = NULL) {
+  plink_reference(path, plink_bin)
+}
+
+# og_plink_reference(), for a caller whose own arguments are named otherwise (`og_local(bfile, plink)`):
+# `args` names them for the errors, which carry the one at fault as `arg`.
+plink_reference <- function(path, plink_bin, args = c(path = "path", plink_bin = "plink_bin"),
+                            call = rlang::caller_env()) {
   # Kept: client-side, on the user's own files. The API isn't involved.
   if (!is.character(path) || length(path) != 1 || is.na(path) || !nzchar(path)) {
-    og_abort("`path` must be the prefix of a PLINK fileset, such as \"~/ld/1kg/EUR\".", class = "opengwasr_argument")
+    og_abort(paste0("`", args[["path"]], "` must be the prefix of a PLINK fileset, such as \"~/ld/1kg/EUR\"."),
+             class = "opengwasr_argument", arg = args[["path"]], call = call)
   }
   prefix <- path.expand(path)
   files <- paste0(prefix, c(".bed", ".bim", ".fam"))
   missing <- files[!file.exists(files)]
   if (length(missing) > 0) {
-    og_abort(c(paste0("`path` isn't a PLINK fileset: ", paste(basename(missing), collapse = ", "),
+    og_abort(c(paste0("`", args[["path"]], "` isn't a PLINK fileset: ", paste(basename(missing), collapse = ", "),
                       if (length(missing) == 1) " is" else " are", " missing next to \"", prefix, "\"."),
                i = "Give the prefix of the `.bed`, `.bim` and `.fam` files, without the extension."),
-             class = "opengwasr_plink_reference_missing", files = missing)
+             class = "opengwasr_plink_reference_missing", files = missing, arg = args[["path"]], call = call)
   }
-  structure(list(path = file.path(normalizePath(dirname(prefix)), basename(prefix)), plink_bin = find_plink(plink_bin)),
+  structure(list(path = file.path(normalizePath(dirname(prefix)), basename(prefix)),
+                 plink_bin = find_plink(plink_bin, call, arg = args[["plink_bin"]])),
             class = "og_plink_reference")
 }
 
@@ -64,13 +76,13 @@ print.og_plink_reference <- function(x, ...) {
 
 # The PLINK binary: `plink_bin`, else genetics.binaRies' if it is installed, else the one on PATH.
 # Kept (here and in plink_run()): PLINK runs on this machine; the API isn't involved.
-find_plink <- function(plink_bin, call = rlang::caller_env()) {
+find_plink <- function(plink_bin, call = rlang::caller_env(), arg = "plink_bin") {
   usable <- function(p) is.character(p) && length(p) == 1 && !is.na(p) && nzchar(p) && file.exists(p) &&
     unname(file.access(p, 1)) == 0
   if (!is.null(plink_bin)) {
     if (!usable(plink_bin)) {
-      og_abort(paste0("`plink_bin` isn't an executable file: ", format(plink_bin), "."),
-               class = c("opengwasr_plink_not_found", "opengwasr_argument"), call = call)
+      og_abort(paste0("`", arg, "` isn't an executable file: ", format(plink_bin), "."),
+               class = c("opengwasr_plink_not_found", "opengwasr_argument"), arg = arg, call = call)
     }
     return(normalizePath(plink_bin))
   }
@@ -84,8 +96,8 @@ find_plink <- function(plink_bin, call = rlang::caller_env()) {
   if (usable(found)) return(normalizePath(found))
   og_abort(c("Can't find PLINK, which a PLINK Reference needs.",
              i = "Install the genetics.binaRies package: `remotes::install_github(\"MRCIEU/genetics.binaRies\")`.",
-             i = "Or install PLINK 1.9 (https://www.cog-genomics.org/plink/1.9/) and put it on your `PATH`, or pass its path as `og_plink_reference(path, plink_bin = )`."),
-           class = "opengwasr_plink_not_found", call = call)
+             i = paste0("Or install PLINK 1.9 (https://www.cog-genomics.org/plink/1.9/) and put it on your `PATH`, or pass its path as `", arg, "`.")),
+           class = "opengwasr_plink_not_found", arg = arg, call = call)
 }
 
 # The reference's variants, from its `.bim`: `rsid`, `a1`, `a2`, in file order. Alleles are read as
@@ -108,7 +120,8 @@ plink_run <- function(ref, files, flags, read, call = rlang::caller_env()) {
   on.exit(unlink(dir, recursive = TRUE), add = TRUE)
   for (name in names(files)) writeLines(files[[name]], file.path(dir, name))
   out <- file.path(dir, "out")
-  args <- c("--bfile", ref$path, flags(function(name) file.path(dir, name)), "--out", out)
+  # One thread: PLINK otherwise takes every core, for runs of milliseconds.
+  args <- c("--bfile", ref$path, flags(function(name) file.path(dir, name)), "--threads", "1", "--out", out)
   log <- suppressWarnings(system2(ref$plink_bin, shQuote(args), stdout = TRUE, stderr = TRUE))
   status <- attr(log, "status") %||% 0L
   if (status != 0) {
@@ -225,7 +238,7 @@ ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
   present <- !is.na(map$rsid) & map$rsid %in% plink_bim(ref)$rsid
   inform_plink_binary(ref)
   inform_plink_unmatched(nrow(map), sum(!present))
-  list(alids = kinds$alids, store = chosen$store, choice = chosen$choice, unresolved = character(),
+  list(alids = kinds$alids, store = chosen$store, choice = chosen$choice, from = chosen$from, unresolved = character(),
        jobs = jobs, plink = list(ref = ref, map = map, present = present))
 }
 
@@ -244,7 +257,8 @@ plink_rsids_of <- function(src, alids, deadline, call) {
   list(alid = rows$alid, rsid = rows$rsid, jobs = lookup_jobs(lapply(out, `[[`, "job")))
 }
 
-# A query that reads LD Stores only, given a PLINK Reference.
+# A query that reads LD Stores only, given a PLINK Reference. Only an API Source gets here (a Local
+# Source's such queries refuse first, R/local-source.R), and it holds no PLINK Reference, so it is `ld`.
 refuse_plink <- function(method) {
   og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
              i = "Pass an LD Store's name or an ancestry code in `ld`."),
@@ -262,7 +276,7 @@ ld_query_plink <- function(prep, spec, method) {
   list(requests = list(), releases = NULL, finish = function(results) {
     done <- spec$local(ctx)
     list(value = done$value, jobs = jobs,
-         provenance = c(list(ld = prep$store$ld_store, ld_choice = prep$choice, absent = left_out,
+         provenance = c(list(ld = prep$store$ld_store, ld_choice = prep$choice, ld_from = prep$from, absent = left_out,
                              plink_bin = plink$ref$plink_bin), done$provenance))
   })
 }
@@ -276,9 +290,9 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
   inform_plink_binary(ref)
   if (progress_enabled()) {
     rlang::inform(c(i = paste0("Clumping ", length(info$id), if (length(info$id) == 1) " Analysis" else " Analyses",
-                               " in PLINK Reference ", ref$path, ", as `ld` asks: ",
+                               " in PLINK Reference ", ref$path, ": ",
                                clump_setting_text(clump$r2, clump$kb), ".")),
-                  class = "opengwasr_clumping")
+                  class = "opengwasr_clumping", ld_from = chosen$from)
   }
   most <- max_tophits_per_analysis
   list(
@@ -321,7 +335,7 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
       out <- rows[keep, , drop = FALSE]
       rownames(out) <- NULL
       list(value = clump_columns(out, chosen$store$ld_store, chosen$choice, clump$r2, clump$kb, size[keep]),
-           provenance = list(clump = summary, plink_bin = ref$plink_bin),
+           provenance = list(clump = summary, plink_bin = ref$plink_bin, ld_from = chosen$from),
            # `limit` cut index variants off: provenance says so, on the Jobs of those Analyses.
            truncated = vapply(pieces, function(p) any(info$id[p$scope] %in% too_many), NA))
     }

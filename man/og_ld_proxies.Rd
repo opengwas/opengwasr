@@ -11,8 +11,9 @@ og_ld_proxies(src, variants, ld = NULL, r2 = 0.8, kb = 10000)
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
 
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match the Assigned
-Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.}
+\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} for the Source's LD
+resource (\code{og_api(ld_store = )}), else to match the Assigned Ancestry of the Associations'
+Analyses. LD Stores only: a PLINK Reference is refused, and so is a Local Source.}
 
 \item{r2}{The smallest r² of a proxy.}
 

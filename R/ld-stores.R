@@ -1,8 +1,9 @@
-# LD Stores: what the API serves, and the one owner of choosing one.
+# LD Stores: what the API serves, and the one owner of choosing the LD a call uses.
 #
 # An LD Store holds the LD of one reference panel of one ancestry. Every LD operation (the matrix and
-# proxies here, clumping in R/clump.R) names exactly one, and gets it from `choose_ld_store()`: never
-# write a second chooser.
+# proxies, clumping in R/clump.R) names exactly one LD resource, and gets it from `choose_ld_store()`,
+# which takes it from `ld_resource()`: the call's `ld`, else the Source's LD resource (ADR 0006).
+# Never write a second chooser.
 
 #' List the LD Stores
 #'
@@ -42,9 +43,60 @@ ld_stores <- function(src, call = rlang::caller_env()) {
   stores
 }
 
+#' Which LD resource answers this call (ADR 0006), and where it came from: the call's `ld` if given
+#' (`from = "call"`), else the Source's own (`og_api(ld_store = )`, `og_local(bfile = )`;
+#' `"source"`), else none (`"ancestry"`), which on the API Source means each Analysis's Assigned
+#' Ancestry chooses its LD Store (choose_ld_store()). A Local Source with none is refused: it never
+#' reads the API's LD. The one place this precedence is written; the LD engine, clumping and
+#' choose_ld_store() call it. Given what it returned, it returns that again.
+#' `clumping`: the refusal also offers `clump = FALSE`.
+#' @return `list(ld, from)`, class `og_ld_resource`.
+#' @noRd
+ld_resource <- function(src, ld, call = rlang::caller_env(), clumping = FALSE) {
+  if (inherits(ld, "og_ld_resource")) return(ld)
+  own <- if (is.list(src)) src$ld
+  from <- if (!is.null(ld)) "call" else if (!is.null(own)) "source" else "ancestry"
+  if (from == "ancestry" && inherits(src, "og_local_source")) {
+    og_abort(c(if (clumping) {
+                 paste0("A Local Source with no LD resource can't clump: Store Releases have no stored Clumps yet, ",
+                        "so they would be computed, which needs LD.")
+               } else {
+                 "This needs LD, and this Local Source has no LD resource."
+               },
+               local_ld_forms,
+               i = "Downloaded LD Stores (`ld_store =`) and Genotype Stores (`geno_store =`) can't be read yet.",
+               if (clumping) c(i = "Or pass `clump = FALSE` for every top hit, unclumped.")),
+             class = "opengwasr_ld_resource_required", refusal = TRUE,
+             forms = c("bfile", "ld_plink_reference", "api_two_step"), clump_false = clumping, call = call)
+  }
+  structure(list(ld = ld %||% own, from = from), class = "og_ld_resource")
+}
+
+# The LD a Local Source can use, as a refusal names them (`forms`: "bfile", "ld_plink_reference",
+# "api_two_step"; vignette("local-source"), "Clumping and LD").
+local_ld_forms <- c(
+  i = "Give the Source a PLINK Reference: `og_local(gwas, bfile = \"<prefix>\")`, and `plink =` the PLINK binary if it isn't found.",
+  i = "Or give one to this call: `ld = og_plink_reference(\"<prefix>\")`.",
+  i = "Or, for the API's LD Stores, clump in two steps on the API Source: `og_clump(og_api(), og_tophits(src, ids, clump = FALSE))`."
+)
+
+# An LD resource whose kind opengwasr can't use yet (ADR 0006): refused, saying so, rather than left
+# out of the interface. A Local Source's are also `opengwasr_local_unsupported`. `resource`: the kind
+# ("ld_store", "geno_store"); `forms`: what the advice names, if it names them.
+ld_resource_unavailable <- function(message, advice, resource, local = FALSE, forms = NULL, call = rlang::caller_env()) {
+  og_abort(c(message, advice),
+           class = c("opengwasr_ld_resource_unavailable", if (local) "opengwasr_local_unsupported"),
+           refusal = TRUE, resource = resource, forms = forms, call = call)
+}
+
+# Kept: an R argument's type. One LD Store name or ancestry code, as `ld` and `og_api(ld_store = )`
+# take it; which exist is the API's list to say.
+is_ld_store_value <- function(x) is.character(x) && length(x) == 1 && !is.na(x) && nzchar(x)
+
 #' Choose the one LD Store an LD operation uses.
 #'
-#' @param src The Source.
+#' @param src The Source. Its LD resource stands in for `ld = NULL` (ld_resource()).
+#' @param ld What ld_resource() returned, or the call's `ld` (resolved here by ld_resource()):
 #' @param ld A PLINK Reference from [og_plink_reference()] (`"user"`; `store` is then `list(ld_store =
 #'   <its path>)` and `plink` the reference), an LD Store's name (wins: `"user"`), an ancestry code (that ancestry's LD Store:
 #'   `"ancestry_default"`), or `NULL` (matched from `ancestries`: `"matched"`, or
@@ -60,14 +112,33 @@ ld_stores <- function(src, call = rlang::caller_env()) {
 #' several ancestries. Kept: the API would answer a request that names no LD Store from European LD.
 #' @noRd
 choose_ld_store <- function(src, ld, ancestries = NULL, call = rlang::caller_env()) {
+  resource <- ld_resource(src, ld, call)
+  chosen <- choose_from(src, resource$ld, ancestries, call)
+  chosen$from <- resource$from  # where the LD came from: "call", "source" or "ancestry"
+  chosen
+}
+
+# choose_ld_store() once the LD resource is known (`ld`: a PLINK Reference, an LD Store name or
+# ancestry code, or NULL to match `ancestries`).
+choose_from <- function(src, ld, ancestries, call) {
   # A PLINK Reference is the user's own choice, read locally: no LD Store row, and no API call.
-  # `store$ld_store` is its path, which is what every result records as the LD used.
+  # `store$ld_store` is its path, which is what every result records as the LD used. The Source's
+  # LD resource is the user's choice as much as `ld` is.
   if (is_plink_reference(ld)) {
     return(list(store = list(ld_store = ld$path), choice = "user", plink = ld))
   }
   # Kept: an R argument's type.
-  if (!is.null(ld) && (!is.character(ld) || length(ld) != 1 || is.na(ld) || !nzchar(ld))) {
-    og_abort("`ld` must be one LD Store name or ancestry code, or `NULL`.", class = "opengwasr_argument", call = call)
+  if (!is.null(ld) && !is_ld_store_value(ld)) {
+    og_abort("`ld` must be one LD Store name or ancestry code, a PLINK Reference, or `NULL`.",
+             class = "opengwasr_argument", call = call)
+  }
+  # A Local Source holds no LD Stores, and never asks the API for LD (ADR 0006): an LD Store is named
+  # on the API Source, which the user names (the two steps in `local_ld_forms`).
+  if (inherits(src, "og_local_source")) {
+    ld_resource_unavailable(paste0("A Local Source holds no LD Stores, so it can't use LD Store \"", ld, "\": ",
+                                   "reading downloaded LD Stores isn't available yet, and a local query never calls the API."),
+                            local_ld_forms[c(2, 1, 3)], resource = "ld_store", local = TRUE,
+                            forms = c("ld_plink_reference", "bfile", "api_two_step"), call = call)
   }
   if (inherits(src, "og_no_source")) {
     source_required(call, "An LD Store is named, or chosen by ancestry, from the API's list of LD Stores.")

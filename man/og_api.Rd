@@ -8,7 +8,9 @@ og_api(
   url = getOption("opengwasr.url"),
   timeout = default_timeout(),
   max_in_flight = default_max_in_flight(),
-  caller = NULL
+  caller = NULL,
+  ld_store = NULL,
+  geno_store = NULL
 )
 }
 \arguments{
@@ -25,6 +27,17 @@ user agent of every request this Source makes, so the API's logs can tell which 
 \code{og_api(caller = "TwoSampleMR/0.8.0")} sends \verb{opengwasr/<version> TwoSampleMR/0.8.0}. One
 short string of printable characters (at most 100), \code{name/version} by convention; \code{NULL}
 (the default) adds nothing.}
+
+\item{ld_store}{The Source's LD resource: an LD Store's name, or an ancestry code for that
+ancestry's LD Store, as \code{ld} takes them. Every verb that needs LD (\code{\link[=og_tophits]{og_tophits()}} when it
+clumps, \code{\link[=og_clump]{og_clump()}}, \code{\link[=og_ld_matrix]{og_ld_matrix()}}, \code{\link[=og_ld_proxies]{og_ld_proxies()}}, \code{\link[=og_ld_reflookup]{og_ld_reflookup()}}) uses it, and
+their \code{ld} overrides it for one call. \code{NULL} (the default): each Analysis's Assigned Ancestry
+chooses its LD Store. It is checked against \code{\link[=og_ld_stores]{og_ld_stores()}} when a call first needs it. See
+\code{vignette("ld")}.}
+
+\item{geno_store}{A Genotype Store, from which LD would be computed when asked. Not available
+yet: anything but \code{NULL} is refused (class \code{opengwasr_ld_resource_unavailable}) until the API
+serves Genotype Stores.}
 }
 \value{
 An \code{og_api_source}.
@@ -42,5 +55,6 @@ Data API directly and is for developing opengwasr, not for analyses. The key is 
 \dontrun{
 src <- og_api()
 src
+og_api(ld_store = "EUR")
 }
 }

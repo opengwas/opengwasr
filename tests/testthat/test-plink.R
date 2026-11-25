@@ -278,3 +278,16 @@ test_that("no_source() has the defaults of og_api()", {
   api <- og_api()
   expect_equal(c(ns$timeout, ns$max_in_flight), c(api$timeout, api$max_in_flight))
 })
+
+test_that("PLINK runs on one thread", {
+  skip_on_os("windows")
+  # A stand-in PLINK that prints its arguments, one a line, and fails, so the log carries them.
+  bin <- withr::local_tempfile(fileext = ".sh")
+  writeLines(c("#!/bin/sh", "for a in \"$@\"; do echo \"$a\"; done", "exit 3"), bin)
+  Sys.chmod(bin, "0755")
+  ref <- structure(list(path = plink_fixture(), plink_bin = bin), class = "og_plink_reference")
+  e <- expect_error(plink_run(ref, list(), function(file) c("--r", "square"), identity), class = "opengwasr_plink_failed")
+  at <- match("--threads", e$log)
+  expect_false(is.na(at))
+  expect_equal(e$log[[at + 1]], "1")
+})

@@ -4,15 +4,26 @@
 \alias{og_local}
 \title{Create a Local Source}
 \usage{
-og_local(path)
+og_local(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL)
 }
 \arguments{
-\item{path}{The directory of each GWAS Store, or of each Store Release: a character vector,
+\item{gwas}{The directory of each GWAS Store, or of each Store Release: a character vector,
 one element per GWAS Store.}
+
+\item{plink}{The path of a PLINK 1.9 binary, for \code{bfile}. \code{NULL} finds one as
+\code{\link[=og_plink_reference]{og_plink_reference()}} does: genetics.binaRies, then your \code{PATH}.}
+
+\item{bfile}{A PLINK binary fileset's prefix (without \code{.bed}, \code{.bim} or \code{.fam}): the Source's LD
+resource, a PLINK Reference.}
+
+\item{ld_store}{A downloaded LD Store. Not available yet.}
+
+\item{geno_store}{A downloaded Genotype Store. Not available yet.}
 }
 \value{
 An \code{og_local_source}. Its \code{releases} is a data frame with one row per Store Release:
-\code{store_id}, \code{release_id}, \code{format_version} and \code{path} (the Store Release's own directory).
+\code{store_id}, \code{release_id}, \code{format_version} and \code{path} (the Store Release's own directory). Its
+\code{ld} is its LD resource: an \code{og_plink_reference}, or \code{NULL}.
 }
 \description{
 A Local Source answers queries from Store Releases downloaded to this machine, through
@@ -76,12 +87,39 @@ is one) and \code{e$setting} (the setting that names a Python). \code{\link[=og_
 was found.
 }
 
+\section{LD resource}{
+
+A Local Source carries the LD resource that answers LD for it (ADR 0006; see
+\code{vignette("local-source")}, "Clumping and LD"). Today that is a PLINK Reference: \code{bfile} names a
+PLINK binary fileset, and \code{plink} the PLINK binary that reads it, as \code{\link[=og_plink_reference]{og_plink_reference()}}
+takes them (it checks the fileset and finds PLINK when \code{plink} is \code{NULL}). \code{\link[=og_tophits]{og_tophits()}} then
+clumps on the fly with it (\code{r2} and \code{kb} are required), and \code{\link[=og_clump]{og_clump()}} and \code{\link[=og_ld_matrix]{og_ld_matrix()}}
+read it, each without \code{ld}; a call's \code{ld} overrides it. Without an LD resource, anything that
+needs LD is refused (class \code{opengwasr_ld_resource_required}), naming the LD resources in
+\code{e$forms} (\code{"bfile"}, \code{"ld_plink_reference"} and \code{"api_two_step"}: the API's LD Stores, by
+clumping on an API Source you name, \code{og_clump(og_api(), og_tophits(src, ids, clump = FALSE))})
+and, when clumping, \code{clump = FALSE} (\code{e$clump_false}): a Local Source never calls the API itself.
+An LD Store named in a call's \code{ld} is refused the same way (\code{opengwasr_local_unsupported}).
+
+\code{ld_store} (a downloaded LD Store) and \code{geno_store} (a Genotype Store) are refused until
+opengwasr can read them (classes \code{opengwasr_ld_resource_unavailable} and
+\code{opengwasr_local_unsupported}, with \code{e$resource}). Giving more than one kind of LD resource is
+refused (class \code{opengwasr_ld_resource_mixed}, with \code{e$given}), and so is \code{plink} without \code{bfile}.
+An error about \code{bfile} or \code{plink} names it in \code{e$arg}.
+}
+
 \examples{
 \dontshow{if (nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")) withAutoprint(\{ # examplesIf}
 stores <- system.file("stores", package = "opengwasr")
 # GWAS Store directories, and, for hyb, which holds two, a Store Release directory
 src <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")))
 src
+# With a PLINK Reference as its LD resource, where PLINK is installed:
+bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
+if (!is.null(tryCatch(og_plink_reference(bfile), error = function(e) NULL))) {
+  src <- og_local(file.path(stores, "dense"), bfile = bfile)
+  og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
+}
 \dontshow{\}) # examplesIf}
 }
 \seealso{

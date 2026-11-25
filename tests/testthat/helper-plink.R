@@ -1,10 +1,13 @@
 # PLINK References in tests: the committed fileset, and expectations worked out without PLINK.
 #
-# `fixtures/plink/ref.{bed,bim,fam}` is synthetic (make-reference.R there: 300 people, 31 variants).
-# Every expected number comes from decoding the `.bed` here, in plain R, never from the code under
-# test or from PLINK's own output.
+# `inst/plink/ref.{bed,bim,fam}` is synthetic (make-reference.R there: 300 people, 36 variants), and
+# comes with the package, so the Local Source vignette reads it too. Every expected number comes from
+# decoding the `.bed` here, in plain R, never from the code under test or from PLINK's own output.
 
-plink_fixture <- function() file.path(normalizePath(test_path("fixtures", "plink")), "ref")
+plink_fixture <- function() {
+  dir <- system.file("plink", package = "opengwasr", mustWork = TRUE)
+  file.path(normalizePath(dir), "ref")
+}
 
 # A PLINK Reference over the fixture, or skip the test: nothing here runs without a PLINK binary.
 local_plink_reference <- function() {

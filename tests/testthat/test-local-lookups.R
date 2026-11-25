@@ -7,15 +7,6 @@
 # (tests/contract/expected/{dense_ranges,ragged_completed,hybrid_observed}.json, read by eye). The
 # refusals need no Python: a Local Source object is enough to dispatch on.
 
-# One Local Source over three GWAS Stores, opened once and shared: the tests only read it.
-three <- local({
-  src <- NULL
-  function() {
-    if (is.null(src)) src <<- og_local(example_releases("dense", "ragged", "hyb"))
-    src
-  }
-})
-
 # A Local Source object for the refusals, which never read it.
 unopened <- function() {
   structure(list(releases = data.frame(store_id = "s", release_id = "r", format_version = "0.3.0", path = "/nowhere"),
@@ -39,23 +30,35 @@ test_that("og_analyses() on a Local Source returns the Analyses named, with thei
   expect_identical(x$trait_bp, c(NA, NA, 1020000L))
   expect_identical(x$original_sd, rep(NA_real_, 3))
   expect_identical(x$original_sd_method, rep("declared_standardised", 3))
-  expect_identical(x$completed_against, c(NA, NA, "EUR"))
-  expect_identical(x$n_hits_5e8, c(4L, 8L, 60L))
   # No sample_size_kind in these releases, so no outcome_type (policy.py: "None ... rather than a guess").
   expect_identical(x$outcome_type, rep(NA_character_, 3))
+  # What the catalogue adds is NA, of the catalogue's types.
+  expect_identical(x$status, rep(NA_character_, 3))
+  expect_identical(x$listed, rep(NA_integer_, 3))
+  expect_identical(x$trait_class, rep(NA_character_, 3))
+  expect_identical(x$ancestry_category, rep(NA_character_, 3))
+  expect_identical(x$label_from_source, rep(NA_integer_, 3))
+  # So is a column analyses.tsv lacks.
+  expect_identical(x$maf_threshold, rep(NA_real_, 3))
+  expect_identical(x$source_label, rep(NA_character_, 3))
+  # analyses.tsv's own columns are text, empty as NA.
+  expect_identical(x$completed_against, c(NA, NA, "EUR"))
+  expect_identical(x$n_hits_5e8, c("4", "8", "60"))
 })
 
-test_that("a local Analysis row has the API Source's columns in its order, then the release's own", {
+test_that("a local Analysis row has every API Source column in its order, then the release's own", {
   skip_if_no_local()
   x <- og_analyses(three(), "s:bmi_irn")
   expect_equal(names(x), c(
-    "requested_id", "id", "store_id", "analysis_id",
-    # The API Source's, in its order (fixtures/shapes.json `analysis_row`), where analyses.tsv has them.
-    "analysis_label", "trait_ontology_id", "trait_ontology_label", "tissue", "context", "trait_chr",
-    "trait_bp", "assigned_ancestry", "ancestry_assignment_method", "sample_size_kind",
-    "sample_size_scope", "sample_size", "n_cases", "n_controls", "stored_effect_scale",
-    "original_effect_scale", "original_sd", "original_sd_method", "license", "publication_doi",
-    "publication_pmid", "consortium", "first_author", "outcome_type", "release_id",
+    "requested_id", "id",
+    # The API Source's, in its order (fixtures/shapes.json `analysis_row`, with `id` first).
+    "store_id", "analysis_id", "status", "listed", "analysis_label", "source_label", "source_analysis_id",
+    "trait_ontology_id", "trait_ontology_label", "trait_ontology_mapping_method", "tissue", "context",
+    "trait_chr", "trait_bp", "assigned_ancestry", "ancestry_assignment_method", "source_ancestry_label",
+    "sample_size_kind", "sample_size_scope", "sample_size", "n_cases", "n_controls", "stored_effect_scale",
+    "original_effect_scale", "original_sd", "original_sd_method", "maf_threshold", "info_score_threshold",
+    "license", "publication_doi", "publication_pmid", "consortium", "first_author", "outcome_type",
+    "trait_class", "ancestry_category", "label_from_source", "release_id",
     # analyses.tsv's columns the API Source doesn't return, in the file's order.
     "eaf_scope", "original_sd_dispersion", "completed_against", "completion_median_pearson_r",
     "completion_n_imputed_total", "completion_n_missing_total", "n_missing_se_out_of_range",
@@ -78,6 +81,21 @@ test_that("a bare analysis id names the one Analysis it names in the Local Sourc
   expect_equal(x$id, c("s:bmi_irn", "hyb:trait_a"))
 })
 
+test_that("a value of analyses.tsv the catalogue would refuse is refused, never rounded", {
+  table <- data.frame(analysis_index = c("0", "1"), analysis_id = c("a", "b"), sample_size = c("1000", "1000.5"),
+                      original_sd = c("1.5", ""), stringsAsFactors = FALSE)
+  e <- expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
+  expect_equal(e$column, "sample_size")
+  expect_equal(e$values, "1000.5")
+  table$sample_size <- c("1000", "")
+  table$original_sd <- c("1.5", "Inf")
+  expect_error(local_analysis_rows(table, "s", "r"), class = "opengwasr_invalid_analyses")
+  table$original_sd <- c("1.5", "")
+  rows <- local_analysis_rows(table, "s", "r")
+  expect_identical(rows$sample_size, c(1000L, NA))
+  expect_identical(rows$original_sd, c(1.5, NA))
+})
+
 test_that("an Analysis a Local Source doesn't hold gets the API Source's class", {
   skip_if_no_local()
   e <- expect_error(og_analyses(three(), c("s:bmi_irn", "s:absent", "OGS-00011:GCST003116")),
@@ -92,6 +110,10 @@ test_that("a Local Source refuses a Legacy OpenGWAS id and says to translate it 
                     class = "opengwasr_legacy_id_local")
   expect_s3_class(e, "opengwasr_refusal")
   expect_equal(e$ids, c("ieu-a-2", "ukb-b-19953"))
+  # A bare id the Source holds, in a Store Release not asked for, is no legacy id: it names no
+  # Analysis in the Store Releases asked for.
+  e <- expect_error(og_analyses(three(), "trait_a", releases = "s"), class = "opengwasr_analysis_not_found")
+  expect_equal(e$ids, "trait_a")
 })
 
 test_that("`releases` on a Local Source takes a GWAS Store id or a pin it holds", {
@@ -158,6 +180,9 @@ test_that("og_variants_rsid() on a Local Source returns the API Source's rows", 
   expect_equal(prov$store_releases, c("s/r", "residual-rag/comp", "hyb/v1"))
   expect_equal(prov$total, 4)
   expect_false(prov$truncated)
+  # A Local Source runs no Jobs, so records none.
+  expect_identical(prov$job_ids, character())
+  expect_true(any(grepl("Jobs: none", format(prov), fixed = TRUE)))
 })
 
 test_that("an rsID is matched whole, as the API matches it", {
@@ -185,10 +210,24 @@ test_that("og_variants_chrpos() on a Local Source returns the API Source's rows"
   expect_equal(y$alid[1:2], c("1:5000:A:C", "1:5000:C:G"))
   expect_identical(y$rsid, c("rs5000", "rs5000", NA))
 
-  # A position nothing holds, or that no chromosome spells, has no row.
-  z <- og_variants_chrpos(three(), c("1:4999", "27:5000"), releases = "s")
+  # A position nothing holds, or that isn't `chromosome:position`, has no row.
+  z <- og_variants_chrpos(three(), c("1:4999", "1:x", "nothing"), releases = "s")
   expect_equal(nrow(z), 0)
   expect_equal(names(z), names(empty_lookup()))
+})
+
+test_that("a chromosome ogquery can't normalise is refused, never answered with no rows", {
+  skip_if_no_local()
+  # "27" is a number no chromosome has (UnsupportedChromosome); "NA" and "." say none (MissingChromosome).
+  for (bad in c("27", "NA", ".")) {
+    e <- expect_error(og_variants_chrpos(three(), c("1:5000", paste0(bad, ":5"))), class = "opengwasr_argument")
+    expect_equal(e$chromosomes, bad)
+  }
+  e <- expect_error(og_variants_chrpos(three(), c("27:5", "NA:5")), class = "opengwasr_argument")
+  expect_equal(e$chromosomes, c("27", "NA"))
+  # "Z" is a contig name ogquery accepts (identity.py normalise_chromosome()), which these Store
+  # Releases don't hold: no row, as the API answers.
+  expect_equal(nrow(og_variants_chrpos(three(), "Z:5")), 0)
 })
 
 test_that("rsIDs resolve on a Local Source as on the API, the ones held by none unresolved", {

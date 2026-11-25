@@ -91,7 +91,7 @@ format.og_local_source <- function(x, ...) {
   c(
     "<og_local_source>",
     paste0("\u2022 Store Releases: ", nrow(r)),
-    if (nrow(r)) paste0("\u2022 ", r$store_id, "/", r$release_id, ": ", r$path)
+    if (nrow(r)) paste0("\u2022 ", release_names(r$store_id, r$release_id), ": ", r$path)
   )
 }
 
@@ -176,7 +176,7 @@ format.og_local_check <- function(x, ...) {
   r <- x$releases
   # Each Store Release on two lines, its path and then what was found there: paths are long.
   found <- vapply(seq_len(nrow(r)), function(i) {
-    name <- if (!is.na(r$store_id[[i]])) paste0(r$store_id[[i]], "/", r$release_id[[i]])
+    name <- if (!is.na(r$store_id[[i]])) release_names(r$store_id[[i]], r$release_id[[i]])
     fmt <- if (!is.na(r$format_version[[i]])) paste0("format ", r$format_version[[i]])
     says <- if (r$readable[[i]]) "readable" else paste0("not readable: ", r$reason[[i]])
     label <- paste(c(name, fmt), collapse = ", ")
@@ -202,11 +202,7 @@ print.og_local_check <- print_formatted
 # longer reaches Python (a Source restored from disk in a new session), opened again the way
 # og_local() opened it, refused the same way if it can no longer be read.
 local_release <- function(src, store_id, call = rlang::caller_env()) {
-  path <- src$releases$path[src$releases$store_id == store_id]
-  if (length(path) != 1) {
-    og_abort(paste0("This Local Source holds no Store Release of GWAS Store `", store_id, "`."),
-             class = "opengwasr_internal", call = call)
-  }
+  path <- local_release_path(src, store_id, call)
   release <- get0(path, envir = src$handles, inherits = FALSE)
   if (is.null(release) || local_is_stale(release)) {
     ogquery <- local_ogquery(call)
@@ -218,12 +214,23 @@ local_release <- function(src, store_id, call = rlang::caller_env()) {
   release
 }
 
+# The path of the Store Release of GWAS Store `store_id` this Source holds, which keys what is
+# kept of it in `src$handles`.
+local_release_path <- function(src, store_id, call = rlang::caller_env()) {
+  path <- src$releases$path[src$releases$store_id == store_id]
+  if (length(path) != 1) {
+    og_abort(paste0("This Local Source holds no Store Release of GWAS Store `", store_id, "`."),
+             class = "opengwasr_internal", call = call)
+  }
+  path
+}
+
 # The query facade over a Store Release this Source holds (ogquery's `StoreRelease.query()`), kept
 # beside its handle: making one reads the release's indexes, so it is made once, and again only
 # when it no longer reaches Python.
 local_facade <- function(src, store_id, call = rlang::caller_env()) {
   release <- local_release(src, store_id, call)
-  key <- paste0("query:", src$releases$path[src$releases$store_id == store_id])
+  key <- paste0("query:", local_release_path(src, store_id, call))
   facade <- get0(key, envir = src$handles, inherits = FALSE)
   if (is.null(facade) || local_is_stale(facade)) {
     facade <- local_open_facade(release)
@@ -234,7 +241,7 @@ local_facade <- function(src, store_id, call = rlang::caller_env()) {
 
 # What a Local Source refuses ---------------------------------------------------------------------
 # The verbs with no local meaning (#32, recorded on the epic): a Local Source has no API to ask, no
-# queue, and no LD Store. Queries a Local Source doesn't answer yet refuse through check_source().
+# queue, and no LD Store. A query without a Local Source method refuses through check_source().
 
 local_unsupported <- function(message, advice, call = rlang::caller_env()) {
   og_abort(c(message, i = advice), class = "opengwasr_local_unsupported", refusal = TRUE, call = call)
@@ -255,29 +262,36 @@ og_user.og_local_source <- function(src) {
 # A local query is answered at once, so there is no Job to submit, look at, collect or cancel.
 refuse_local_jobs <- function(src, call = rlang::caller_env()) {
   if (!inherits(src, "og_local_source")) return(invisible())
-  local_unsupported("A Local Source answers a query at once, so it has no Jobs.",
-                    "Call the query function itself, such as `og_tophits(src, ...)`.", call = call)
+  local_unsupported("A Local Source answers each query at once, so it has no Jobs.",
+                    "Call the query function directly, such as `og_variants_rsid(src, ...)` or `og_analyses(src, ...)`.",
+                    call = call)
 }
 
-# Reading downloaded LD Stores is out of scope (epic #2). Clumping (og_clump()) is #34's.
-refuse_local_ld <- function(src, ...) {
-  local_unsupported("A Local Source doesn't read LD Stores.",
-                    paste0("Use the API Source, `og_api()`, as `src` for its LD Stores, ",
-                           "or a PLINK Reference (`og_plink_reference()`) as `ld` with `src = NULL`."),
-                    call = rlang::caller_env())
+# Reading downloaded LD Stores is out of scope (epic #2): each LD operation says what does answer
+# it. Clumping (og_clump()) is #34's.
+ld_stores_on_api <- "Use the API Source, `og_api()`, as `src`: it reads the LD Stores."
+
+#' @export
+og_ld_stores.og_local_source <- function(src) {
+  local_unsupported("A Local Source holds no LD Stores.", ld_stores_on_api)
 }
 
 #' @export
-og_ld_stores.og_local_source <- function(src) refuse_local_ld(src)
+og_ld_matrix.og_local_source <- function(src, variants, ld = NULL, fill_below_t_far = FALSE) {
+  local_unsupported("A Local Source holds no LD Stores.",
+                    paste(ld_stores_on_api, "Or read the LD matrix from a PLINK Reference, with no Source:",
+                          "`og_ld_matrix(NULL, variants, ld = og_plink_reference(path))`."))
+}
 
 #' @export
-og_ld_matrix.og_local_source <- function(src, variants, ld = NULL, fill_below_t_far = FALSE) refuse_local_ld(src)
+og_ld_proxies.og_local_source <- function(src, variants, ld = NULL, r2 = 0.8, kb = 10000) {
+  local_unsupported("A Local Source holds no LD Stores.", ld_stores_on_api)
+}
 
 #' @export
-og_ld_proxies.og_local_source <- function(src, variants, ld = NULL, r2 = 0.8, kb = 10000) refuse_local_ld(src)
-
-#' @export
-og_ld_reflookup.og_local_source <- function(src, variants, ld = NULL) refuse_local_ld(src)
+og_ld_reflookup.og_local_source <- function(src, variants, ld = NULL) {
+  local_unsupported("A Local Source holds no LD Stores.", ld_stores_on_api)
+}
 
 # Paths, before any Python ------------------------------------------------------------------------
 
@@ -407,7 +421,7 @@ duplicate_stores <- function(rows) {
 
 refuse_duplicate_store <- function(rows, store_id, call = rlang::caller_env()) {
   these <- rows[rows$store_id %in% store_id, , drop = FALSE]
-  releases <- paste0(these$store_id, "/", these$release_id)
+  releases <- release_names(these$store_id, these$release_id)
   og_abort(c(paste0("A Local Source holds one Store Release of each GWAS Store, and these are both of GWAS Store `",
                     store_id, "`:"),
              stats::setNames(paste0(releases, ": ", these$path), rep("x", nrow(these))),
@@ -687,8 +701,26 @@ local_read_variants <- function(facade, identifiers) {
   local_variant_frame(facade$variants(as.list(identifiers)))
 }
 
-# The variants at `start` to `end` on `chromosome` (`variants_in_range()`). A chromosome no ALID
-# spells raises ogquery's UnsupportedChromosome.
-local_read_variants_in_range <- function(facade, chromosome, start, end = start) {
-  local_variant_frame(facade$variants_in_range(chromosome, as.integer(start), as.integer(end)))
+# The variants at each `chromosome[i]:position[i]` (`variants_in_range()`, one position each), in
+# variant-index order. ogquery refuses a chromosome it can't normalise, one no ALID spells, such as
+# "27" or "NA" (`VariantNormalisationError`); so does this, naming each, as the API fails the Job.
+local_read_variants_at <- function(facade, chromosome, position, call = rlang::caller_env()) {
+  bad <- character()
+  found <- lapply(seq_along(chromosome), function(i) {
+    tryCatch(local_variant_frame(facade$variants_in_range(chromosome[[i]], position[[i]], position[[i]])),
+             ogquery.identity.VariantNormalisationError = function(e) {
+               bad <<- c(bad, chromosome[[i]])
+               NULL
+             })
+  })
+  if (length(bad) > 0) {
+    bad <- unique(bad)
+    og_abort(c(paste0(if (length(bad) == 1) "No variant can be on chromosome " else "No variant can be on chromosomes ",
+                      some_ids(bad, 10, quote = "`"), "."),
+               i = "Give positions as `chromosome:position`, such as \"16:53767042\" or \"X:2500\"."),
+             class = "opengwasr_argument", chromosomes = bad, call = call)
+  }
+  rows <- do.call(rbind, c(list(lookup_fields()), found))
+  rows <- rows[!duplicated(rows$variant_index), , drop = FALSE]
+  rows[order(rows$variant_index), , drop = FALSE]
 }

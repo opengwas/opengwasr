@@ -21,14 +21,14 @@ local_request <- function(src, path, body, call = rlang::caller_env()) {
   rows <- answer$rows
   rownames(rows) <- NULL
   list(rows = rows, job = list(
-    # A Local Source runs no Job: "local" stands where an API Job's id would be.
-    job_id = "local",
+    # A Local Source runs no Job, so has no Job id: provenance records none (attach_provenance()).
+    job_id = NA_character_,
     existing = FALSE,
     cost_estimate = NA_real_,
     total = answer$total %||% nrow(rows),
     truncated = answer$truncated %||% FALSE,
     metadata = answer$metadata %||% list(),
-    releases = vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), "")
+    releases = release_names(vapply(releases, `[[`, "", "store_id"), vapply(releases, `[[`, "", "release_id"))
   ))
 }
 
@@ -37,8 +37,8 @@ local_request <- function(src, path, body, call = rlang::caller_env()) {
 # was resolved to the Release held by resolve_releases(); a pin is checked here, as the API checks
 # it, so every local read (each request, and the Analyses) checks what it is asked to read.
 local_releases_held <- function(src, releases, call = rlang::caller_env()) {
-  held <- paste0(src$releases$store_id, "/", src$releases$release_id)
-  asked <- vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), "")
+  held <- release_names(src$releases$store_id, src$releases$release_id)
+  asked <- release_names(vapply(releases, `[[`, "", "store_id"), vapply(releases, `[[`, "", "release_id"))
   unknown <- unique(asked[!asked %in% held])
   if (length(unknown) > 0) {
     og_abort(c(paste0("This Local Source holds no Store Release ",
@@ -63,22 +63,19 @@ local_endpoints <- list(
     })
   },
   # `chromosome:position` values (a `chr` prefix allowed) to the variants there, in each Store
-  # Release, as the API (`variants_by_position`): a value that isn't `chromosome:position`, or
-  # whose chromosome no ALID spells, names none.
+  # Release, as the API (`variants_by_position`): a value that isn't `chromosome:position` names
+  # none, and a chromosome no ALID spells is refused (local_read_variants_at()), as the API fails
+  # the Job.
   "api/variants/chrpos" = function(src, body, releases, call) {
     wanted <- sub("^chr", "", as.character(unlist(body$positions)))
-    at <- regmatches(wanted, regexec("^(.+):([0-9]+)$", wanted))
-    at <- unique(Filter(function(m) length(m) == 3, at))
+    at <- unique(Filter(function(m) length(m) == 3, regmatches(wanted, regexec("^(.+):([0-9]+)$", wanted))))
+    # A position past any chromosome's end holds nothing (and isn't an R integer).
+    at <- Filter(function(m) as.numeric(m[[3]]) <= .Machine$integer.max, at)
+    chromosome <- vapply(at, `[[`, "", 2)
+    position <- as.integer(vapply(at, `[[`, "", 3))
     local_variant_lookup(src, releases, call, function(facade) {
-      found <- lapply(at, function(m) {
-        rows <- tryCatch(local_read_variants_in_range(facade, m[[2]], as.numeric(m[[3]])),
-                         ogquery.identity.UnsupportedChromosome = function(e) lookup_fields())
-        rows[paste0(rows$chromosome, ":", rows$position) %in% wanted, , drop = FALSE]
-      })
-      # Every variant once, in variant-index order, as the API answers.
-      rows <- do.call(rbind, c(list(lookup_fields()), found))
-      rows <- rows[!duplicated(rows$variant_index), , drop = FALSE]
-      rows[order(rows$variant_index), , drop = FALSE]
+      rows <- local_read_variants_at(facade, chromosome, position, call)
+      rows[paste0(rows$chromosome, ":", rows$position) %in% wanted, , drop = FALSE]
     })
   }
 )

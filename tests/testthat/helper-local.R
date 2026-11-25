@@ -12,6 +12,16 @@ example_releases <- function(...) {
   local_path(file.path(system.file("releases", package = "opengwasr", mustWork = TRUE), c(...)))
 }
 
+# One Local Source over dense, ragged and hyb (three GWAS Stores), opened once per test process and
+# shared by the test files that only read it. Call it after skip_if_no_local().
+three <- local({
+  src <- NULL
+  function() {
+    if (is.null(src)) src <<- og_local(example_releases("dense", "ragged", "hyb"))
+    src
+  }
+})
+
 # A path as og_local() and og_local_check() store and report it: the one place tests normalise a
 # path, through the package's own normaliser (whose separators test-local-source.R checks with
 # literals), so a test compares like with like on Windows too.

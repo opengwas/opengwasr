@@ -14,7 +14,8 @@ A list of class \code{og_provenance}:
 \itemize{
 \item \code{query}: the call and its arguments, as text; \code{args}: the arguments as a list.
 \item \code{store_releases}: the Store Releases that answered, as \verb{<store_id>/<release_id>}.
-\item \code{job_ids}: the API's Job ids; \code{existing}: whether the API reattached you to a Job it already had.
+\item \code{job_ids}: the API's Job ids (none for what a Local Source answered); \code{existing}: whether the
+API reattached you to a Job it already had.
 \item \code{cost_estimate}: the API's cost estimate for the Jobs, summed.
 \item \code{total}, \code{truncated}: how many Associations matched (what the API counted), and whether \code{limit} cut any off; \code{returned}: the rows of \code{x}.
 \item \code{retrieved}: when the answer was read, as a \code{POSIXct}.
@@ -30,7 +31,8 @@ attribute, and gives the \code{opengwasr_provenance_stale} warning and \code{NUL
 }
 \description{
 \code{og_provenance(x)} says how \code{x} was produced: the call, the Store Releases that answered, the
-Job ids, and the API's counts, including whether \code{limit} cut any off (\code{total}, \code{truncated}).
+Job ids, and the counts, including whether \code{limit} cut any off (\code{total}, \code{truncated}). A Local
+Source runs no Jobs: its answers record no Job ids, and no cost estimate.
 }
 \details{
 It is attached to the data frame a query function returns, and describes exactly those rows. After

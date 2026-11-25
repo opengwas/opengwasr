@@ -50,7 +50,7 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
   # Kept: Store Release ambiguity when no release is pinned; the API has no recency field.
   if (length(several) > 0) {
     candidates <- vapply(Filter(function(b) b$store_id %in% several, serves()),
-                         function(b) paste0(b$store_id, "/", b$release_id), "")
+                         function(b) release_names(b$store_id, b$release_id), "")
     og_abort(
       c(paste0(some_ids(several, length(several), quote = "`"), if (length(several) == 1) " serves" else " serve",
                " more than one Store Release, and the API doesn't say which is latest."),
@@ -61,6 +61,9 @@ resolve_releases <- function(src, releases, call = rlang::caller_env()) {
   }
   out
 }
+
+# Store Releases as `<store_id>/<release_id>`, as pins, provenance and messages name them.
+release_names <- function(store_id, release_id) paste0(store_id, "/", release_id)
 
 # The Store Releases a Source answers from, each `list(store_id, release_id, ...)`: the API's, those
 # /api/batches says it serves; a Local Source's, those it holds (one of each GWAS Store, so the

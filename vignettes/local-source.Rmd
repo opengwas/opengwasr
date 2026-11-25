@@ -167,7 +167,7 @@ og_variants_chrpos(local, "1:1000")
 og_status(local)
 ```
 
-The LD operations, `og_ld_stores()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`, refuse a Local Source as `src` the same way: it holds no LD Stores. Use the API Source for its LD Stores, or a PLINK Reference as `ld` (see [The `ld` argument](ld.html#ld-argument)).
+The LD operations, `og_ld_stores()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`, refuse a Local Source as `src` the same way: it holds no LD Stores. Use the API Source for its LD Stores, or, for an LD matrix, a PLINK Reference as `ld` with no Source, `og_ld_matrix(NULL, variants, ld = og_plink_reference(path))` (see [The `ld` argument](ld.html#ld-argument)).
 
 ## Naming Analyses {#local-names}
 
@@ -178,7 +178,7 @@ og_analyses(local)[, c("id", "analysis_label", "sample_size", "release_id")]
 og_analyses(local, "s:bmi_irn")[, c("requested_id", "id", "stored_effect_scale", "outcome_type")]
 ```
 
-The rows have the API Source's columns, in its order, as far as a Store Release's `analyses.tsv` has them, and then the columns of `analyses.tsv` the API Source doesn't return. The catalogue's own columns (`status`, `listed`, `trait_class`, `ancestry_category` and `label_from_source`) aren't there. `outcome_type` is derived as the catalogue derives it.
+The rows have every column of the API Source's, in its order, read from each Store Release's `analyses.tsv`, and then the columns of `analyses.tsv` the API Source doesn't return. `outcome_type` is derived as the catalogue derives it. The columns the catalogue adds (`status`, `listed`, `trait_class`, `ancestry_category` and `label_from_source`) are `NA` locally, as is any column a Store Release has no value for.
 
 ### Store Releases {#local-releases}
 

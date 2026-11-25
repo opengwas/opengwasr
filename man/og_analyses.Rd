@@ -45,13 +45,17 @@ successor the API named in \code{superseded_by}.
 
 A Local Source (\code{\link[=og_local]{og_local()}}) answers from the \code{analyses.tsv} of each Store Release it holds,
 and names Analyses the same way. It has no catalogue of Legacy OpenGWAS identifiers: an
-identifier that isn't \verb{<store_id>:<analysis_id>} and is no \code{analysis_id} it holds raises
-\code{opengwasr_legacy_id_local} (with the identifiers in \code{ids}); translate it once with
-\code{og_analyses(og_api(), ids)} and use the \code{id} that returns. Its rows have the API Source's
-columns that \code{analyses.tsv} has, in the API Source's order, \code{outcome_type} derived as the
-catalogue derives it, and \code{release_id}, followed by the other columns of \code{analyses.tsv}; the
-catalogue's own columns (\code{status}, \code{listed}, \code{trait_class}, \code{ancestry_category},
-\code{label_from_source}) aren't there.
+identifier that isn't \verb{<store_id>:<analysis_id>} and is no \code{analysis_id} it holds, in any of its
+Store Releases, raises \code{opengwasr_legacy_id_local} (with the identifiers in \code{ids}); translate it
+once with \code{og_analyses(og_api(), ids)} and use the \code{id} that returns.
+
+Its rows have every column of the API Source's, in the same order and of the same types, from
+the Store Release's \code{analyses.tsv}; \code{outcome_type} is derived as the catalogue derives it.
+Columns the catalogue adds are NA locally (\code{status}, \code{listed}, \code{trait_class},
+\code{ancestry_category}, \code{label_from_source}), as is any column the Store Release has no value for.
+The other columns of \code{analyses.tsv} follow, as text. A value of \code{analyses.tsv} the catalogue
+would refuse (a sample size that isn't a whole number, say) raises
+\code{opengwasr_invalid_analyses}, naming the Store Release and the column.
 }
 
 \examples{

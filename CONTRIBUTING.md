@@ -6,14 +6,16 @@
 - **Find or open an issue.** For anything larger than a small fix, discuss it in an issue first.
 - **Read** [GLOSSARY.md](GLOSSARY.md) and [docs/adr/](docs/adr/). Use the glossary's terms in code, documentation and issues. One principle matters above all: opengwasr never silently returns a different scientific answer from the one asked for. An option is either honoured or refused with a clear error.
 
-## How work proceeds
+## How work proceeds: tutorial-driven development
 
-opengwasr is built outside-in (ADR 0005):
+opengwasr is built tutorial-first (ADR 0005). The vignettes say how the package is used. The code is built to make them true, never the other way round.
 
-1. Each epic starts by writing its vignettes, one per user journey, with chunks set to `eval = FALSE`. These are reviewed before implementation begins.
-2. Each implementation ticket names the vignette section it satisfies. It turns those chunks on and adds testthat tests at the Source seam that make the same calls and assert on the results.
-3. Vignettes run offline from httptest2 recordings of the real API. Unit tests run against the fake Data API in `tests/testthat`. Neither touches the network on CRAN or in CI.
-4. Errors are classed conditions, and tests assert on the class, not on the message text. Comparing a condition's message with the API's own message (from `fixtures/errors.json` or the raw API) is allowed: it tests that the message was passed on, not how it is worded. An API error keeps the API's message and takes its class from the API's code; opengwasr checks only what the API can't ([ADR 0002, clarification of 22 November 2026](docs/adr/0002-one-set-of-verbs-dispatching-on-an-explicit-source.md)).
+1. **The tutorial comes first.** Each epic starts by writing its vignettes, one per user journey, with every chunk `eval = FALSE`. They fix the interface users will rely on: function names, arguments, columns, messages and refusals. They are reviewed before any implementation begins.
+2. **Each ticket names the chunks it makes true**, by chunk label. It builds what those chunks need, turns them on (`eval = FALSE` → evaluated), and adds testthat tests at the Source seam that make the same calls and assert on the answers. A chunk that runs proves the code runs as the tutorial says. A test proves the answer is right. A ticket is done when its chunks evaluate in CI and its tests pass.
+3. **When the code and the tutorial disagree, change the tutorial first.** If building a chunk shows that the interface it describes is wrong, change the vignette in its own commit, say why in the pull request, and have it reviewed. Then build to the new chunk. Never change the code's interface and leave the vignette describing the old one.
+4. **Real output, not illustration.** A chunk that evaluates shows the output it produced. Remove any hand-written output for it. `eval = FALSE` stays only on a chunk that can't run in CI, and the vignette's Status block or the chunk's text says why: shell setup, a resource CI lacks (a PLINK binary, a genotype fileset), or behaviour a named later ticket builds. Hand-written output under such a chunk is marked `# illustrative`, and is shaped exactly like what opengwasr returns.
+5. **Offline everywhere.** API vignettes replay httptest2 recordings of the real API. Local Source vignettes read the example Store Releases bundled in the package, and evaluate wherever Python and ogquery are available (in CI, with `RETICULATE_PYTHON`). On CRAN they show the code unevaluated. Unit tests run against the fake Data API in `tests/testthat`. None of these touches the network on CRAN or in CI.
+6. Errors are classed conditions, and tests assert on the class, not on the message text. Comparing a condition's message with the API's own message (from `fixtures/errors.json` or the raw API) is allowed: it tests that the message was passed on, not how it is worded. An API error keeps the API's message and takes its class from the API's code; opengwasr checks only what the API can't ([ADR 0002, clarification of 22 November 2026](docs/adr/0002-one-set-of-verbs-dispatching-on-an-explicit-source.md)).
 
 ## Testing against the fake Data API
 

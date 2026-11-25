@@ -1,62 +1,26 @@
 # PLINK References: the user's own PLINK binary fileset as another place LD is read from.
 #
-# `og_plink_reference()` makes one, and every LD function takes it through the same `ld` argument
-# as an LD Store's name, or a Local Source carries it as its LD resource (`og_local(bfile = )`):
-# choose_ld_store() in R/ld-stores.R is the one place either is interpreted.
+# A Local Source carries one as its LD resource (`og_local(bfile = , plink = )`), which
+# plink_reference() builds: choose_ld_store() in R/ld-stores.R is the one place it is interpreted.
 # This file is the whole of the PLINK side: finding the binary, running it, the two things it is
 # asked (an LD matrix, a clumping), matching variants to the reference by rsID (ADR 0004), and the
 # plan and top-hit assembly of a query that reads one. The other files only branch on a PLINK
-# Reference where `ld` is chosen or its result is handed over. Nothing here calls the API: the LD query engine
-# (R/ld-query.R) and the clumping contribution (R/clump.R) decide what to ask, and they call these.
+# Reference where the LD is chosen or its result is handed over. Nothing here calls the API: the LD
+# query engine (R/ld-query.R) and the clumping contribution (R/clump.R) decide what to ask, and they
+# call these.
+#
+# Variants are matched to the reference by rsID, because PLINK References are usually on GRCh37
+# while ALIDs are on GRCh38. PLINK has no option to rank by |z|, so the variants are ranked by |z| in
+# R and PLINK is given the ranks as p-values (plink_clump()). PLINK 1.9 and PLINK 2 (2.0.0-a.6.0 or
+# later) are each asked for the same thing in their own words (plink_dialects); the version is read
+# once, when the reference is made, and kept on it and in the provenance of what it computes.
 
-#' A PLINK Reference: your own genotypes for local LD
-#'
-#' `og_plink_reference()` names a PLINK binary fileset (`.bed`, `.bim`, `.fam`) on your machine, and
-#' the PLINK that will read it, to pass as `ld` to [og_ld_matrix()], [og_clump()] and
-#' [og_tophits()] for one call, with either Source. A Local Source can also carry one as its LD
-#' resource, `og_local(gwas, plink = , bfile = )`, which builds it with this function. See
-#' `vignette("ld")`.
-#'
-#' Variants are matched to the reference by rsID, because PLINK References are usually on GRCh37
-#' while ALIDs are on GRCh38: a variant with no rsID, or whose rsID isn't in the `.bim`, is left out,
-#' and a message (class `opengwasr_plink_unmatched`, with `count`) says how many. [og_clump()] and
-#' [og_tophits()] need `r2` and `kb`: a PLINK Reference has no recorded defaults. PLINK has no
-#' option to rank by |z|, so the variants are ranked by |z| in R and PLINK is given the ranks as
-#' p-values (rank / (n + 1), the strongest variant the smallest); it clumps with `--clump-p1 1`
-#' and `--clump-p2 1`, so only `r2` and `kb` decide.
-#'
-#' PLINK 1.9 and PLINK 2 (2.0.0-a.6.0 or later) both work, and give the same answer: each is asked for the same thing in
-#' its own words (an LD matrix of r with the reference's allele order kept: `--r square
-#' --keep-allele-order` in 1.9, `--r-unphased square ref-based` in 2; clumping with `--clump`, read
-#' from `.clumped` or `.clumps`). Its version is read once, here (`--version`), and kept on the PLINK
-#' Reference and in the provenance of what it computes (`plink_version`, beside `plink_bin`). A
-#' `plink_bin` that is any other PLINK, such as 1.07 or an earlier PLINK 2, or a program that isn't
-#' PLINK, is refused (class `opengwasr_plink_unsupported`, with `version`, the version found or `NA`,
-#' `supported`, and `suggest`, a supported `"plink"` or `"plink2"` on your `PATH`, or `NULL`).
-#'
-#' @param path The fileset's prefix, without `.bed`, `.bim` or `.fam`.
-#' @param plink_bin The PLINK 1.9 or 2 binary: its path, or a command on your `PATH`, such as
-#'   `"plink2"` (as in a shell, a name without a path separator is a command). `NULL` takes the first
-#'   supported PLINK of the genetics.binaRies package, if it is installed, then `plink`, then
-#'   `plink2`, on your `PATH`, skipping any that isn't supported; if there is none, it stops (class
-#'   `opengwasr_plink_not_found`, with `skipped`: `plink_bin` and `version` of each one skipped) and
-#'   says how to install it.
-#' @return An object of class `og_plink_reference`: `path` (absolute, with forward slashes on every
-#'   platform), `plink_bin` (the binary's absolute path) and `plink_version` (as PLINK reports it,
-#'   such as `"1.90b6.21"` or `"2.0.0-b.1.4"`).
-#' @examples
-#' \dontrun{
-#' ref <- og_plink_reference("~/ld/1kg/EUR")
-#' og_clump(src, top, ld = ref, r2 = 0.001, kb = 10000)
-#' }
-#' @export
-og_plink_reference <- function(path, plink_bin = NULL) {
-  plink_reference(path, plink_bin)
-}
-
-# og_plink_reference(), for a caller whose own arguments are named otherwise (`og_local(bfile, plink)`):
-# `args` names them for the errors, which carry the one at fault as `arg`.
-plink_reference <- function(path, plink_bin, args = c(path = "path", plink_bin = "plink_bin"),
+# The PLINK Reference of `og_local(bfile = , plink = )`: the fileset's prefix `path` and the PLINK
+# `plink_bin`, checked (the fileset exists; PLINK is found, or the one named is supported). `args`
+# names them as the caller does, for the errors, which carry the one at fault as `arg`. Returns an
+# `og_plink_reference`: `path` (absolute, with forward slashes on every platform), `plink_bin` (the
+# binary's absolute path) and `plink_version` (as PLINK reports it).
+plink_reference <- function(path, plink_bin, args = c(path = "bfile", plink_bin = "plink"),
                             call = rlang::caller_env()) {
   # Kept: client-side, on the user's own files. The API isn't involved.
   if (!is.character(path) || length(path) != 1 || is.na(path) || !nzchar(path)) {
@@ -357,9 +321,10 @@ inform_plink_binary <- function(ref) {
 
 is_plink_reference <- function(x) inherits(x, "og_plink_reference")
 
-# A PLINK Reference as `ld`: the variants are matched to it by rsID now, so the message and any
-# refusal come before PLINK runs. An ALID's rsID is its row's `rsid` when `variants` is a data frame
-# of Associations that has one, else the GWAS Stores' variant table says (one lookup by position).
+# A Local Source's PLINK Reference: the variants are matched to it by rsID now, so the message and
+# any refusal come before PLINK runs. An ALID's rsID is its row's `rsid` when `variants` is a data
+# frame of Associations that has one, else the Source's Store Releases' variant table says (one
+# lookup by position); an LD-only Local Source has none, so such ALIDs are refused.
 # `kinds` and `chosen` are what ld_prepare() classified and choose_ld_store() decided. Returns what ld_prepare() does, with `plink = list(ref, map, present)`: `map` has one row per
 # variant given (`alid`, NA for an rsID; `rsid`, NA for none) and `present` says which the reference holds.
 ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
@@ -376,10 +341,7 @@ ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
     lookup_for <- kinds$alids
   }
   if (length(lookup_for) > 0) {
-    if (inherits(src, "og_no_source")) {
-      source_required(call, paste0(big_number(length(lookup_for)), if (length(lookup_for) == 1) " ALID has" else " ALIDs have",
-                                   " no rsID, so its rsID has to be looked up: ", some_ids(lookup_for, 3)))
-    }
+    check_gwas_source(src, call, alids = lookup_for)
     found <- plink_rsids_of(src, lookup_for, deadline, call)
     map$rsid[match(lookup_for, map$alid)] <- found$rsid[match(lookup_for, found$alid)]
     jobs <- found$jobs
@@ -392,7 +354,7 @@ ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
        jobs = jobs, plink = list(ref = ref, map = map, present = present))
 }
 
-# The rsID of each ALID, from the GWAS Stores' variant tables (one lookup by position, in the sole
+# The rsID of each ALID, from the Source's GWAS Stores' variant tables (one lookup by position, in the sole
 # Store Release of each GWAS Store: several is refused, as for any rsID resolution). `rsid` is NA
 # where none holds the ALID or it has no rsID ("." in the API). Also the lookup's Jobs.
 plink_rsids_of <- function(src, alids, deadline, call) {
@@ -405,14 +367,6 @@ plink_rsids_of <- function(src, alids, deadline, call) {
   rows$rsid <- rsid_or_na(rows$rsid)
   rows <- rows[!duplicated(rows$alid) & !is.na(rows$rsid), , drop = FALSE]
   list(alid = rows$alid, rsid = rows$rsid, jobs = lookup_jobs(lapply(out, `[[`, "job")))
-}
-
-# A query that reads LD Stores only, given a PLINK Reference. Only an API Source gets here (a Local
-# Source's such queries refuse first, R/local-source.R), and it holds no PLINK Reference, so it is `ld`.
-refuse_plink <- function(method) {
-  og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
-             i = "Pass an LD Store's name or an ancestry code in `ld`."),
-           class = "opengwasr_argument", call = method)
 }
 
 # The plan of a query over a PLINK Reference: no requests. PLINK runs when the plan is finished,
@@ -452,7 +406,7 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
     truncated = function(ids) {
       truncated_message(analyses_who(ids), most, "top hits", clump$threshold,
                         cut = paste0(", the most the API returns, so clumping saw only the strongest ", big_number(most)),
-                        advice = "Raise the threshold's strictness, or clump on the server with an LD Store in `ld`, which clumps every top hit.")
+                        advice = "Raise the threshold's strictness, or clump on the API Source, whose LD Stores clump every top hit.")
     },
     finish = function(rows, results, pieces, call) {
       in_ref <- !is.na(rows$rsid) & tolower(rows$rsid) %in% plink_bim(ref)$rsid

@@ -69,7 +69,7 @@ Short for OpenGWAS Genotype Store: the published genotypes of one reference pane
 _Avoid_: genotype panel, bfile, LD Store
 
 **LD resource**:
-Where a Source's LD comes from: an LD Store, a Genotype Store or a PLINK Reference, on the API or on the user's machine. A Source carries at most one (`og_api(ld_store = )`, `og_local(bfile = )`); without one, the API Source lets each Analysis's Assigned Ancestry choose its LD Store, and a Local Source has none. A verb's `ld` overrides it for one call.
+Where a Source's LD comes from: an LD Store, a Genotype Store or a PLINK Reference, on the API or on the user's machine. A Source carries at most one (`og_api(ld_store = )`, `og_local(bfile = )`); without one, the API Source lets each Analysis's Assigned Ancestry choose its LD Store, and a Local Source has none. It is chosen only on the Source: other LD for one call is another Source (`og_api(inherit = src, ld_store = )`).
 _Avoid_: LD reference, LD panel, LD source
 
 **Clumps**:
@@ -94,7 +94,7 @@ The OpenGWAS service in production today, which ieugwasr calls, until OpenGWAS r
 _Avoid_: the old API, bare "OpenGWAS" for that service
 
 **Local Source**:
-Store Releases downloaded to the user's own machine, suited to large queries.
+Store Releases downloaded to the user's own machine, suited to large queries. One made with only a PLINK Reference (`og_local(bfile = )`) answers LD only, for data the user already has.
 _Avoid_: offline mode, local files
 
 **GWAS Store directory**:

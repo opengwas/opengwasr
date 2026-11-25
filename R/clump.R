@@ -1,5 +1,5 @@
-# Clumping: one variant per independent signal, in an LD Store or a PLINK Reference: the call's
-# `ld`, else the Source's LD resource (ld_resource(), R/ld-stores.R).
+# Clumping: one variant per independent signal, in an LD Store or a PLINK Reference: the Source's
+# LD resource (ld_resource(), R/ld-stores.R).
 #
 # Two ways in, as ADR 0004's clarification note says. `og_tophits()` clumps on the server
 # (`/api/tophits` with `clump`), one Job per Analysis, through one more contribution to the
@@ -24,25 +24,26 @@
 #' 10,000 kb), which it can always answer exactly. A pair it can't answer exactly is refused by the
 #' API (`opengwasr_ld_refusal`, with `reason`, `t_far`, `near_bp` and `far_bp`).
 #'
-#' With a PLINK Reference as `ld`, PLINK clumps on your machine (see [og_plink_reference()]): `r2`
-#' and `kb` are required (there are no defaults to take, so without them it stops, with class
-#' `opengwasr_plink_settings_required`). Variants are matched by rsID, from `data`'s `rsid` column
-#' if it has one, else the GWAS Stores' variant table; those with no rsID match are left out, with
-#' a message (class `opengwasr_plink_unmatched`, `count`). Provenance's `clump` names the reference's
-#' path as `ld`, and `clump_ld` is the same path.
+#' The LD is the Source's LD resource. On the API Source that is its `ld_store`
+#' (`og_api(ld_store = )`), else the LD Store matching the Assigned Ancestry of the Analyses in
+#' `data` (refused, with class `opengwasr_ld_unmatched`, when they differ, when one is Unassigned, or
+#' when `data` has no `id`). For other LD, pass another Source, such as `og_api(inherit = src,
+#' ld_store = "EUR")`.
 #'
-#' @param src A Source, from [og_api()] or [og_local()] (which clumps with its PLINK Reference, its
-#'   rsIDs looked up in its Store Releases). `NULL` works with a PLINK Reference as `ld` when nothing is
-#'   looked up: `data` has an `rsid` column, so no ALID needs its rsID from the API. A lookup that
-#'   is needed without a Source stops, with class `opengwasr_source_required`.
+#' On a Local Source, PLINK clumps on your machine with its PLINK Reference (`og_local(bfile = )`):
+#' `r2` and `kb` are required (there are no defaults to take, so without them it stops, with class
+#' `opengwasr_plink_settings_required`). Variants are matched by rsID, from `data`'s `rsid` column if
+#' it has one, else the Source's Store Releases' variant table; those with no rsID match are left
+#' out, with a message (class `opengwasr_plink_unmatched`, `count`). An LD-only Local Source
+#' (`og_local(bfile = )` with no `gwas`) has nothing to look an ALID up in, so `data` without an
+#' `rsid` column is refused (class `opengwasr_gwas_store_required`, with the ALIDs in `alids`, and
+#' the ways round in `forms`: see [og_local()]). A Local Source with no LD resource is refused
+#' (`opengwasr_ld_resource_required`). Provenance's
+#' `clump` names the reference's path as `ld`, and `clump_ld` is the same path.
+#'
+#' @param src A Source, from [og_api()] or [og_local()], which carries the LD resource.
 #' @param data A data frame of Associations, with `alid` and `z`, and `id` for the LD Store to be
 #'   matched by the Analyses' Assigned Ancestry.
-#' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-#'   [og_plink_reference()] (clumped locally by PLINK), or `NULL` for the Source's LD resource
-#'   (`og_api(ld_store = )`, `og_local(bfile = )`), else (API Source) to match the Assigned
-#'   Ancestry of the Analyses in `data` (refused, with class `opengwasr_ld_unmatched`, when they
-#'   differ, when one is Unassigned, or when `data` has no `id`). A Local Source with neither is
-#'   refused (`opengwasr_ld_resource_required`).
 #' @param r2 The r² above which a variant joins an index variant's clump; `NULL` for the LD Store's
 #'   `t_far`. Required with a PLINK Reference.
 #' @param kb The window, in kilobases; `NULL` for the LD Store's far window. Required with a PLINK
@@ -59,17 +60,17 @@
 #' table(joint$id)
 #' }
 #' @export
-og_clump <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) UseMethod("og_clump")
+og_clump <- function(src, data, r2 = NULL, kb = NULL) UseMethod("og_clump")
 
 #' @export
-og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
+og_clump.og_api_source <- function(src, data, r2 = NULL, kb = NULL) {
   check_clump_settings(r2, kb)
-  check_plink_settings(ld_resource(src, ld)$ld, r2, kb)
+  check_plink_settings(ld_resource(src)$ld, r2, kb)
   # Kept: an R argument's type (the scores sent are |z|).
   if (!is.data.frame(data) || !is.numeric(data$z)) {
     og_abort("`data` must be a data frame of Associations, with `alid` and `z` columns.", class = "opengwasr_argument")
   }
-  ld_query(src, "api/ld/clump", data, ld, list(
+  ld_query(src, "api/ld/clump", data, list(
     pieces = function(n) list(seq_len(n)),  # one set, one Job
     body = function(alids, store) {
       score <- tapply(abs(data$z), data$alid, max)
@@ -93,11 +94,9 @@ og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
     }))
 }
 
-#' @export
-og_clump.NULL <- og_clump.og_api_source
-
-# A Local Source clumps with its PLINK Reference (or `ld`'s), its rsIDs looked up in its own Store
-# Releases. The same method: the engine reads the call from the frame UseMethod() dispatched to.
+# A Local Source clumps with its PLINK Reference, its rsIDs looked up in its own Store Releases (an
+# LD-only one has none to look in). The same method: the engine reads the call from the frame
+# UseMethod() dispatched to.
 #' @export
 og_clump.og_local_source <- og_clump.og_api_source
 
@@ -150,17 +149,17 @@ clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads, clumps = 
 }
 
 # The contribution (CONTRIBUTING.md) that clumps each Analysis's top hits on the server, one Job and
-# one LD Store per Analysis: `ld` for all, or the one matching its Assigned Ancestry (an Unassigned
-# one is refused first, before any Job runs). Its `finish` adds the clumping columns and provenance
+# one LD Store per Analysis: the Source's for all, or the one matching its Assigned Ancestry (an
+# Unassigned one is refused first, before any Job runs). Its `finish` adds the clumping columns and provenance
 # and warns about top hits the LD Store doesn't hold.
 clump_contribution <- function(src, clump, info, call) {
-  # The call's `ld`, else the Source's LD resource; with neither, each Analysis's Assigned Ancestry.
-  resource <- ld_resource(src, clump$ld, call, clumping = TRUE)
+  # The Source's LD resource; with none, each Analysis's Assigned Ancestry.
+  resource <- ld_resource(src, call, clumping = TRUE)
   if (is_plink_reference(resource$ld)) {
-    return(plink_clump_contribution(choose_ld_store(src, resource, call = call), clump, info, call))
+    return(plink_clump_contribution(choose_ld_store(src, call = call), clump, info, call))
   }
   ancestry <- stats::setNames(as.character(info$assigned_ancestry), info$id)
-  # One group per ancestry when matching, else one for all ("call" or "source").
+  # One group per ancestry when matching, else one for all ("source").
   group <- if (resource$from == "ancestry") ancestry else rep(resource$from, length(ancestry))
   groups <- unique(group)
   groups <- groups[order(!is.na(groups))]  # Unassigned first: refused before anything else is chosen
@@ -168,7 +167,7 @@ clump_contribution <- function(src, clump, info, call) {
                     stringsAsFactors = FALSE)
   for (g in groups) {
     members <- which(group %in% g)
-    chosen <- tryCatch(choose_ld_store(src, resource, ancestry[members], call),
+    chosen <- tryCatch(choose_ld_store(src, ancestry[members], call),
                        opengwasr_ld_unmatched = function(e) {
                          advice <- c(i = "Or pass `clump = FALSE` for unclumped top hits.")
                          e$message <- paste0(e$message, "\n", rlang::format_error_bullets(advice))
@@ -210,27 +209,25 @@ clump_contribution <- function(src, clump, info, call) {
 
 # What is about to be clumped, where and how: one message per LD Store chosen, with progress on
 # (`opengwasr.progress`), so scripts stay quiet. `group` is the Assigned Ancestry matched, or where
-# the LD came from ("call", "source"); the message carries `ld_from`.
+# the LD came from ("source"); the message carries `ld_from`.
 inform_clumping <- function(ids, chosen, group, settings) {
   if (!progress_enabled()) return(invisible())
   who <- if (length(ids) == 1) ids else paste0(length(ids), " Analyses (", some_ids(ids, 3), ")")
   their <- if (length(ids) == 1) "its" else "their"
   how <- switch(chosen$choice,
                 matched = paste0("matched to ", their, " Assigned Ancestry (", group, ")"),
-                # `ld` (or the Source's LD resource) named an ancestry, or the Assigned Ancestry has
-                # several LD Stores and one is declared its default.
+                # The Source's LD resource named an ancestry, or the Assigned Ancestry has several
+                # LD Stores and one is declared its default.
                 ancestry_default = if (chosen$from != "ancestry") {
-                  paste0("the default LD Store of ancestry ", chosen$store$ancestry, ", as ", asked_by(chosen$from), " asks")
+                  paste0("the default LD Store of ancestry ", chosen$store$ancestry, ", as the Source's LD resource asks")
                 } else {
                   paste0("the declared default LD Store of ", their, " Assigned Ancestry (", group, ")")
                 },
-                user = paste0("as ", asked_by(chosen$from), " names it"))
+                user = "as the Source's LD resource names it")
   rlang::inform(c(i = paste0("Clumping ", who, " in LD Store ", chosen$store$ld_store, ", ", how, ": ",
                              clump_setting_text(settings$r2, settings$kb), ".")),
                 class = "opengwasr_clumping", ld_from = chosen$from)
 }
-
-asked_by <- function(from) if (identical(from, "source")) "the Source's LD resource" else "`ld`"
 
 clump_setting_text <- function(r2, kb) {
   paste0("r\u00b2 ", signif(r2, 3), " within ", big_number(kb), " kb")

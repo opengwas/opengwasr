@@ -26,7 +26,7 @@ local_ready <- nzchar(Sys.getenv("RETICULATE_PYTHON")) &&
   requireNamespace("reticulate", quietly = TRUE) &&
   reticulate::py_module_available("ogquery")
 plink_ready <- local_ready && !inherits(
-  tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
+  tryCatch(opengwasr::og_local(bfile = file.path(system.file("plink", package = "opengwasr"), "ref")),
            error = identity),
   "error")
 ```
@@ -40,7 +40,7 @@ library(opengwasr)
 A **Source** says two things: where Associations come from, and which **LD resource** answers LD for them (clumping, LD matrices and LD proxies). There are two kinds of Source:
 
 - `og_api()`, the **API Source**, reads the OpenGWAS API over the network.
-- `og_local(gwas = ...)`, a **Local Source**, reads Store Releases you have downloaded (see [Querying downloaded Store Releases](local-source.html)).
+- `og_local(gwas = ...)`, a **Local Source**, reads Store Releases you have downloaded (see [Querying downloaded Store Releases](local-source.html)). `og_local(bfile = ...)` alone is a Local Source with LD only, from your own PLINK Reference.
 
 An LD resource is one of three kinds, and each can be on the API or on your machine:
 
@@ -48,7 +48,7 @@ An LD resource is one of three kinds, and each can be on the API or on your mach
 |---|---|---|
 | **LD Store**: the precomputed LD of one reference panel | `og_api(ld_store = "EUR")`, an LD Store's name or an ancestry code. Available now | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
 | **Genotype Store**: genotypes of one reference panel, from which LD is computed when asked | `og_api(geno_store = ...)`. Coming, when the API serves Genotype Stores | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
-| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: pass one to a single call as `ld = og_plink_reference(path)` | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
+| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: the API doesn't read your files | `og_local(gwas = ..., bfile = prefix)`, or `og_local(bfile = prefix)` alone for LD only, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
 | None given | `og_api()`: each Analysis's Assigned Ancestry chooses its LD Store | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give an LD resource |
 
 A form that is coming is refused with an error that says so, rather than quietly doing something else.
@@ -73,7 +73,9 @@ local <- og_local(gwas = file.path(stores, "dense"), bfile = bfile)   # LD: your
 local
 ```
 
-Every verb that needs LD (`og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`) uses the Source's LD resource. Its `ld` argument overrides it for that one call, such as `og_ld_matrix(src_eur, variants, ld = "AFR")`. [LD operations](ld.html#ld-resource) explains choosing LD in full.
+Every verb that needs LD (`og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`) uses the Source's LD resource; no verb takes an LD argument. For other LD in one call, make a Source like yours with other LD: `inherit =` keeps everything you don't give, such as `og_ld_matrix(og_api(inherit = src_eur, ld_store = "AFR"), variants)`, or `og_local(inherit = local, bfile = ...)`.
+
+A Source's LD lives where the Source does. To take Associations from one place and LD from another, fetch with one Source and clump with the other, such as `og_clump(og_local(bfile = ...), og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)` for top hits from the API clumped with your PLINK Reference (`limit = 10000` fetches them all; the default, 1,000, would cut them off before clumping) ([Associations from one place, LD from another](ld.html#mixing)). [LD operations](ld.html#ld-resource) explains choosing LD in full.
 
 ## Credentials {#credentials}
 

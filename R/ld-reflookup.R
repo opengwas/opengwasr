@@ -3,8 +3,7 @@
 #' `og_ld_reflookup()` says whether each of `variants` is held by an LD Store, so you can check
 #' instruments before clumping or building an LD matrix. See `vignette("ld")`.
 #'
-#' `variants` and `ld` are as for [og_ld_proxies()]; an LD Store can only be named, not a PLINK
-#' Reference. An rsID stands for every ALID it names, one row each; an rsID no GWAS Store holds has
+#' `variants` and the LD Store are as for [og_ld_proxies()]; a Local Source is refused. An rsID stands for every ALID it names, one row each; an rsID no GWAS Store holds has
 #' one row with `alid` `NA` and `present` `FALSE`. A variant the LD Store doesn't hold is a row, not
 #' a warning. One Job takes at most 10,000 variants; more are split.
 #'
@@ -14,15 +13,15 @@
 #'   without an `rsid` column) and `present`.
 #' @examples
 #' \dontrun{
-#' src <- og_api()
-#' og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085"), ld = "EUR")
+#' src <- og_api(ld_store = "EUR")
+#' og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085"))
 #' }
 #' @export
-og_ld_reflookup <- function(src, variants, ld = NULL) UseMethod("og_ld_reflookup")
+og_ld_reflookup <- function(src, variants) UseMethod("og_ld_reflookup")
 
 #' @export
-og_ld_reflookup.og_api_source <- function(src, variants, ld = NULL) {
-  ld_query(src, "api/ld/reflookup", variants, ld, list(
+og_ld_reflookup.og_api_source <- function(src, variants) {
+  ld_query(src, "api/ld/reflookup", variants, list(
     pieces = function(n) dim_chunks(split_dim(n, job_limits()$ld_reflookup)),
     absence_is_answer = TRUE,
     assemble = ld_reflookup_assemble))

@@ -63,14 +63,14 @@ A query that returns Associations is a thin spec over one engine, `association_q
 
 ```r
 og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
-                                     observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
-                                     kb = NULL, original_units = FALSE, releases = NULL) {
-  check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
+                                     observed_only = FALSE, clump = TRUE, r2 = NULL, kb = NULL,
+                                     original_units = FALSE, releases = NULL) {
+  check_tophits_arguments(src, threshold, limit, clump, r2, kb)
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
                     analyses_per_job = tophits_analyses_per_job(limit), order = "api",
                     truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold),
-                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
+                    spec = list(clump = if (clump) list(r2 = r2, kb = kb, limit = limit, threshold = threshold)))
 }
 ```
 
@@ -81,7 +81,7 @@ What the method can say:
 - `analyses_per_job`: fewer Analyses per Job than the API's limit, for example when each Analysis may return many rows.
 - `order`: `"position"` (the default: Analyses in the order asked, then chromosome, position, ALID), `"api"` (the API's own order within each Analysis: top hits, strongest first) or `"jobs"` (rows as the Jobs returned them, for a query that names no Analyses).
 - `truncated`: the endpoint cuts rows off at a `limit`. Each Job must then report `total` and `truncated`, and the engine checks both against the rows it read; without it, a Job's `total` is its rows. When a Job was cut off, the engine warns (`opengwasr_truncated`) with the message `truncated(ids)` gives; build it with `truncated_message()`.
-- `spec`: one list for what a few queries add, never more named arguments. `all_analyses = TRUE` lets `analyses` be `NULL` (every Analysis of the Store Releases; metadata is looked up once, for the Analyses in the result, in `finish`: the one thing a `finish` may look up, against the pinned Store Releases; an error there is the API's). `one_variant = TRUE` sends one ALID per Job as `variant`. `interval = list(chromosome, start, end, limit)` cuts a range into windows. `clump = list(ld, r2, kb, limit, threshold)` clumps each Analysis's top hits, on the server in its LD Store or, with a PLINK Reference, on this machine. `og_phewas()` (`all_analyses`, `one_variant`), `og_range()` (`interval`) and `og_tophits()` (`clump`) are each a few lines over it.
+- `spec`: one list for what a few queries add, never more named arguments. `all_analyses = TRUE` lets `analyses` be `NULL` (every Analysis of the Store Releases; metadata is looked up once, for the Analyses in the result, in `finish`: the one thing a `finish` may look up, against the pinned Store Releases; an error there is the API's). `one_variant = TRUE` sends one ALID per Job as `variant`. `interval = list(chromosome, start, end, limit)` cuts a range into windows. `clump = list(r2, kb, limit, threshold)` clumps each Analysis's top hits with the Source's LD resource (no verb takes an LD argument: ADR 0006, clarification of 25 November 2026), on the server in its LD Store or, with a Local Source's PLINK Reference, on this machine. `og_phewas()` (`all_analyses`, `one_variant`), `og_range()` (`interval`) and `og_tophits()` (`clump`) are each a few lines over it.
 
 Inside the engine every part of a request is a **contribution**, a list the engine reads the same way whatever made it, so the next spec field adds a contribution, not a branch:
 
@@ -93,12 +93,12 @@ Inside the engine every part of a request is a **contribution**, a list the engi
 
 Provenance records the method's own arguments as the user gave them, read from its frame. So call the engine directly from the method, and don't reassign an argument before the call. An argument the method gains is recorded automatically.
 
-An LD operation (`og_ld_matrix()`, `og_ld_proxies()`, `og_ld_reflookup()`, `og_clump()`) is a thin spec over the LD engine, `ld_query(src, path, variants, ld, spec)` in `R/ld-query.R`. Its `spec`:
+An LD operation (`og_ld_matrix()`, `og_ld_proxies()`, `og_ld_reflookup()`, `og_clump()`) is a thin spec over the LD engine, `ld_query(src, path, variants, spec)` in `R/ld-query.R`. The LD is the Source's (`ld_resource()`). Its `spec`:
 
 - `pieces(n)`: how `n` ALIDs split into Jobs, a list of index vectors, each one Job;
 - `body`: its fields, the same in every Job, or `function(alids, store)` of a piece's ALIDs and the LD Store's row of `og_ld_stores()` (clumping's scores and default `r2`);
 - `assemble(results, ctx)`: its value from the Jobs' `list(rows, job)`, in piece order;
-- optionally `provenance(results, ctx)` (further provenance fields: clumping's `clump`), `absence_is_answer = TRUE` (the answer is which variants the LD Store holds, so absent variants are rows, not a warning) and `local(ctx)`, how it reads a PLINK Reference, returning `list(value, provenance)`; a query without `local` refuses a PLINK Reference.
+- optionally `provenance(results, ctx)` (further provenance fields: clumping's `clump`), `absence_is_answer = TRUE` (the answer is which variants the LD Store holds, so absent variants are rows, not a warning) and `local(ctx)`, how it reads a Local Source's PLINK Reference, returning `list(value, provenance)`; a query without `local` has a Local Source method that refuses.
 
 `ctx` has `alids`, `absent`, `store`, `choice`, `variants` (what the user passed), `rsid_map` (`rsid` and `alid` of each rsID resolved) and `unresolved`; `local` gets `matched` (`alid` and `rsid` of each variant the reference holds) and `plink` instead of the Jobs' parts. The LD engine chooses the LD Store (`choose_ld_store()`), resolves rsIDs and warns about absent variants.
 

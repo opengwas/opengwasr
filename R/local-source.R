@@ -77,16 +77,40 @@
 #'
 #' @section LD resource:
 #' A Local Source carries the LD resource that answers LD for it (ADR 0006; see
-#' `vignette("local-source")`, "Clumping and LD"). Today that is a PLINK Reference: `bfile` names a
-#' PLINK binary fileset, and `plink` the PLINK binary that reads it, as [og_plink_reference()]
-#' takes them (it checks the fileset and finds PLINK when `plink` is `NULL`). [og_tophits()] then
-#' clumps on the fly with it (`r2` and `kb` are required), and [og_clump()] and [og_ld_matrix()]
-#' read it, each without `ld`; a call's `ld` overrides it. Without an LD resource, anything that
-#' needs LD is refused (class `opengwasr_ld_resource_required`), naming the LD resources in
-#' `e$forms` (`"bfile"`, `"ld_plink_reference"` and `"api_two_step"`: the API's LD Stores, by
-#' clumping on an API Source you name, `og_clump(og_api(), og_tophits(src, ids, clump = FALSE))`)
-#' and, when clumping, `clump = FALSE` (`e$clump_false`): a Local Source never calls the API itself.
-#' An LD Store named in a call's `ld` is refused the same way (`opengwasr_local_unsupported`).
+#' `vignette("local-source")`, "Clumping and LD"), and the LD is chosen there and nowhere else. Today
+#' that is a **PLINK Reference**: `bfile` names a PLINK binary fileset (`.bed`, `.bim`, `.fam`) on
+#' your machine, and `plink` the PLINK binary that reads it. `og_local()` checks the fileset (class
+#' `opengwasr_plink_reference_missing`, with `e$files`) and finds PLINK. [og_tophits()] then clumps on
+#' the fly with it (`r2` and `kb` are required: a PLINK Reference has no recorded defaults, class
+#' `opengwasr_plink_settings_required`), and [og_clump()] and [og_ld_matrix()] read it. Without an LD
+#' resource, anything that needs LD is refused (class `opengwasr_ld_resource_required`), naming the
+#' LD resources in `e$forms` (`"bfile"` and `"api_two_step"`: the API's LD Stores, by clumping on an
+#' API Source you name, `og_clump(og_api(), og_tophits(src, ids, clump = FALSE))`) and, when
+#' clumping, `clump = FALSE` (`e$clump_false`): a Local Source never calls the API itself.
+#'
+#' Variants are matched to a PLINK Reference by rsID, because PLINK References are usually on GRCh37
+#' while ALIDs are on GRCh38: from a data frame's `rsid` column, else looked up in the Source's Store
+#' Releases. A variant with no rsID, or whose rsID isn't in the `.bim`, is left out, and a message
+#' (class `opengwasr_plink_unmatched`, with `count`) says how many. PLINK 1.9 and PLINK 2
+#' (2.0.0-a.6.0 or later) both work, and give the same answer: each is asked for the same thing in its
+#' own words (an LD matrix of r with the reference's allele order kept: `--r square
+#' --keep-allele-order` in 1.9, `--r-unphased square ref-based` in 2; clumping with `--clump`, read
+#' from `.clumped` or `.clumps`). Its version is read once, here (`--version`), and kept on the PLINK
+#' Reference ([og_ld_resource()]) and in the provenance of what it computes (`plink_version`, beside
+#' `plink_bin`). A `plink` that is any other PLINK, such as 1.07 or an earlier PLINK 2, or a program
+#' that isn't PLINK, is refused (class `opengwasr_plink_unsupported`, with `version`, the version
+#' found or `NA`, `supported`, and `suggest`, a supported `"plink"` or `"plink2"` on your `PATH`, or
+#' `NULL`).
+#'
+#' **An LD-only Local Source.** `og_local(bfile = )` with no `gwas` holds no Store Releases and
+#' needs no Python. It answers [og_clump()] and [og_ld_matrix()] for data you already have, such as
+#' top hits from the API Source, when PLINK can match the variants by rsID: a data frame with an
+#' `rsid` column, or rsIDs. ALIDs would need a GWAS Store to look up their rsIDs, so they are refused
+#' (class `opengwasr_gwas_store_required`, with the ALIDs in `e$alids`), naming the ways round in
+#' `e$forms`: `"gwas"` (`og_local(gwas = , bfile = )`), `"rsid_column"` (a data frame with an `rsid`
+#' column) and `"api_rsids"` (their rsIDs looked up first with `og_variants_chrpos(og_api(),
+#' positions)`). Every verb that reads Associations or Analyses refuses it with the same class, and
+#' `e$forms` `"gwas"`.
 #'
 #' `ld_store` (a downloaded LD Store) and `geno_store` (a Genotype Store) are refused until
 #' opengwasr can read them (classes `opengwasr_ld_resource_unavailable` and
@@ -94,18 +118,37 @@
 #' refused (class `opengwasr_ld_resource_mixed`, with `e$given`), and so is `plink` without `bfile`.
 #' An error about `bfile` or `plink` names it in `e$arg`.
 #'
+#' @section Inheriting:
+#' `og_local(inherit = src, ...)` builds a Local Source like `src`: every argument given replaces the
+#' inherited one, and the rest come from `src`. Without `gwas`, its Store Releases are `src`'s, not
+#' opened again. Giving any of `plink`, `bfile`, `ld_store` and `geno_store` replaces `src`'s LD
+#' resource whole, never mixed with it: `og_local(inherit = src, bfile = ref)` gives `src`'s Store
+#' Releases a PLINK Reference, and `og_local(inherit = src, bfile = NULL)` drops it. The one exception
+#' is `plink` alone: `og_local(inherit = src, plink = "plink2")` keeps `src`'s PLINK Reference's
+#' fileset and changes the PLINK that reads it (`plink = NULL` finds one again). `og_local(inherit =
+#' src, gwas = NULL)` drops the Store Releases and keeps the LD resource: an LD-only Local Source. What is given is
+#' checked as for any other Local Source. Anything but a Local Source as `inherit` is refused (class
+#' `opengwasr_argument`).
+#'
 #' @param gwas The directory of each GWAS Store, or of each Store Release: a character vector,
-#'   one element per GWAS Store.
+#'   one element per GWAS Store. `NULL` (the default) for none: an LD-only Local Source, which needs
+#'   `bfile`. A Local Source with neither Store Releases nor an LD resource is refused (class
+#'   `opengwasr_argument`).
 #' @param plink The PLINK 1.9 or 2 binary, for `bfile`: its path, or a command on your `PATH`, such
-#'   as `"plink2"`. `NULL` finds one as [og_plink_reference()] does: genetics.binaRies, then `plink`,
-#'   then `plink2`, on your `PATH`.
+#'   as `"plink2"` (as in a shell, a name without a path separator is a command). `NULL` takes the
+#'   first supported PLINK of the genetics.binaRies package, if it is installed, then `plink`, then
+#'   `plink2`, on your `PATH`, skipping any that isn't supported; if there is none, it stops (class
+#'   `opengwasr_plink_not_found`, with `skipped`: `plink_bin` and `version` of each one skipped) and
+#'   says how to install it.
 #' @param bfile A PLINK binary fileset's prefix (without `.bed`, `.bim` or `.fam`): the Source's LD
 #'   resource, a PLINK Reference.
 #' @param ld_store A downloaded LD Store. Not available yet.
 #' @param geno_store A downloaded Genotype Store. Not available yet.
+#' @param inherit A Local Source to build this one like, as described under "Inheriting".
 #' @return An `og_local_source`. Its `releases` is a data frame with one row per Store Release:
-#'   `store_id`, `release_id`, `format_version` and `path` (the Store Release's own directory). Its
-#'   `ld` is its LD resource: an `og_plink_reference`, or `NULL`.
+#'   `store_id`, `release_id`, `format_version` and `path` (the Store Release's own directory), with no
+#'   rows for an LD-only Local Source. Its LD resource is read with [og_ld_resource()]: an
+#'   `og_plink_reference`, or `NULL`.
 #' @seealso [og_local_check()], [og_api()].
 #' @examplesIf nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")
 #' stores <- system.file("stores", package = "opengwasr")
@@ -114,14 +157,39 @@
 #' src
 #' # With a PLINK Reference as its LD resource, where PLINK is installed:
 #' bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
-#' if (!is.null(tryCatch(og_plink_reference(bfile), error = function(e) NULL))) {
-#'   src <- og_local(file.path(stores, "dense"), bfile = bfile)
+#' ld_only <- tryCatch(og_local(bfile = bfile), error = function(e) NULL)
+#' if (!is.null(ld_only)) {
+#'   og_ld_matrix(ld_only, c("rs5000", "rs1000"))
+#'   src <- og_local(inherit = src, bfile = bfile)
 #'   og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
 #' }
 #' @export
-og_local <- function(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL) {
-  # The LD resource first: it needs no Python, so a refusal costs nothing.
-  ld <- local_ld_resource(plink, bfile, ld_store, geno_store)
+og_local <- function(gwas = NULL, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL,
+                     inherit = NULL) {
+  if (!is.null(inherit)) check_inherit(inherit, "og_local_source", "og_local")
+  # The LD resource first: it needs no Python, so a refusal costs nothing. Inherited unless any LD
+  # argument is given, which replaces it whole; `plink` alone keeps the inherited PLINK Reference's
+  # fileset, and changes the PLINK that reads it.
+  ld_given <- !missing(plink) || !missing(bfile) || !missing(ld_store) || !missing(geno_store)
+  plink_only <- !missing(plink) && missing(bfile) && missing(ld_store) && missing(geno_store)
+  inherited <- if (!is.null(inherit)) og_ld_resource(inherit)
+  ld <- if (!is.null(inherit) && !ld_given) {
+    inherited
+  } else if (plink_only && is_plink_reference(inherited)) {
+    local_ld_resource(plink, inherited$path, NULL, NULL)
+  } else {
+    local_ld_resource(plink, bfile, ld_store, geno_store)
+  }
+  if (!is.null(inherit) && missing(gwas)) {
+    # The inherited Store Releases, as opened: nothing is read again.
+    return(new_local_source(inherit$releases, inherit$handles, ld))
+  }
+  if (is.null(gwas)) {
+    # An LD-only Local Source: no Store Releases, and no Python.
+    rows <- data.frame(store_id = character(), release_id = character(), format_version = character(),
+                       path = character(), stringsAsFactors = FALSE)
+    return(new_local_source(rows, new.env(parent = emptyenv()), ld))
+  }
   gwas <- check_release_paths(gwas, arg = "gwas")
   ogquery <- local_ogquery()
   found <- lapply(gwas, find_release, ogquery = ogquery)
@@ -134,8 +202,19 @@ og_local <- function(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_sto
 
   handles <- new.env(parent = emptyenv())
   for (i in seq_along(found)) assign(rows$path[[i]], found[[i]]$release, envir = handles)
+  new_local_source(rows[c("store_id", "release_id", "format_version", "path")], handles, ld)
+}
+
+# The Local Source: its Store Releases (`releases`, opened in `handles`) and its LD resource. One with
+# neither would answer nothing, and is refused.
+new_local_source <- function(releases, handles, ld, call = rlang::caller_env()) {
+  if (nrow(releases) == 0 && is.null(ld)) {
+    og_abort(c("A Local Source needs Store Releases (`gwas`), a PLINK Reference (`bfile`), or both.",
+               i = "For example `og_local(\"/data/opengwas/OGS-00011\")`, or `og_local(bfile = \"/data/ld/1kg/EUR\")` for LD only."),
+             class = "opengwasr_argument", arg = "gwas", call = call)
+  }
   structure(
-    list(releases = rows[c("store_id", "release_id", "format_version", "path")], handles = handles,
+    list(releases = releases, handles = handles,
          # A local query waits for nothing: the deadline a call sets (local_query()) is never reached.
          timeout = Inf,
          # The Source's LD resource (ADR 0006): read by og_ld_resource() (R/ld-stores.R), never elsewhere.
@@ -149,7 +228,7 @@ format.og_local_source <- function(x, ...) {
   r <- x$releases
   c(
     "<og_local_source>",
-    paste0("\u2022 Store Releases: ", nrow(r)),
+    paste0("\u2022 Store Releases: ", if (nrow(r)) nrow(r) else "none (LD only)"),
     if (nrow(r)) paste0("\u2022 ", release_names(r$store_id, r$release_id), ": ", r$path),
     if (is.null(ref <- og_ld_resource(x))) {
       "\u2022 LD resource: none"
@@ -160,7 +239,7 @@ format.og_local_source <- function(x, ...) {
 }
 
 # The LD resource of `og_local()` (ADR 0006): a PLINK Reference from `bfile` (and `plink`), built by
-# plink_reference(), which checks both and names them; the kinds that can't be read yet are refused,
+# plink_reference(), which checks both and names them as `og_local()` does; the kinds that can't be read yet are refused,
 # as is more than one kind (`given`: "plink", "ld_store", "geno_store").
 local_ld_resource <- function(plink, bfile, ld_store, geno_store, call = rlang::caller_env()) {
   given <- c(plink = !is.null(plink) || !is.null(bfile), ld_store = !is.null(ld_store), geno_store = !is.null(geno_store))
@@ -168,10 +247,10 @@ local_ld_resource <- function(plink, bfile, ld_store, geno_store, call = rlang::
     named <- c(plink = "`plink`/`bfile` (a PLINK Reference)", ld_store = "`ld_store` (an LD Store)",
                geno_store = "`geno_store` (a Genotype Store)")[given]
     og_abort(c(paste0("A Local Source carries one LD resource, but ", paste(named, collapse = " and "), " were given."),
-               i = "Give one of them; a call's `ld` can use another for that call."),
+               i = "Give one of them: a Source carries one LD resource, and other LD is another Source."),
              class = c("opengwasr_ld_resource_mixed", "opengwasr_argument"), given = names(given)[given], call = call)
   }
-  instead <- c(i = "Give a PLINK Reference instead: `og_local(gwas, bfile = \"<prefix>\")`.")
+  instead <- c(i = "Give a PLINK Reference instead: `og_local(gwas, bfile = \"<prefix>\")`, or `og_local(inherit = src, bfile = \"<prefix>\")`.")
   if (given[["ld_store"]]) {
     ld_resource_unavailable("Reading a downloaded LD Store isn't available yet.", instead,
                             resource = "ld_store", local = TRUE, call = call)
@@ -188,7 +267,7 @@ local_ld_resource <- function(plink, bfile, ld_store, geno_store, call = rlang::
     }
     return(NULL)
   }
-  plink_reference(bfile, plink, args = c(path = "bfile", plink_bin = "plink"), call = call)
+  plink_reference(bfile, plink, call = call)
 }
 
 # print() for the Local Source's objects: their format(), one line each.
@@ -231,15 +310,23 @@ print.og_local_source <- print_formatted
 #'   * `duplicates`, the GWAS Stores given more than one Store Release;
 #'   * `unavailable`, the `opengwasr_local_unavailable` condition [og_local()] would raise, or
 #'     `NULL`;
-#'   * `problems`, all of that as sentences, for printing.
+#'   * `problems`, all of that as sentences, for printing;
+#'   * `ld`, the Local Source's PLINK Reference (as [og_ld_resource()] gives it), or `NULL` (paths
+#'     given, or none).
 #'
-#'   Missing values are `NA`.
+#'   Missing values are `NA`. An LD-only Local Source (`og_local(bfile = )`) has no Store Releases,
+#'   so no Python is looked for: `releases` has no rows, `python`, `ogquery` and `reads` are `NA`, and
+#'   it reports its PLINK Reference (its fileset, and the PLINK binary and version).
 #' @examplesIf nzchar(Sys.getenv("RETICULATE_PYTHON")) && rlang::is_installed("reticulate")
 #' stores <- system.file("stores", package = "opengwasr")
 #' og_local_check(file.path(stores, c("dense", "hyb")))
 #' @export
 og_local_check <- function(path) {
+  ld <- NULL
   if (inherits(path, "og_local_source")) {
+    ld <- og_ld_resource(path)
+    # An LD-only Local Source holds no Store Releases, so there is no Python to report.
+    if (nrow(path$releases) == 0) return(ld_only_check(ld))
     path <- path$releases$path
   } else {
     path <- check_release_paths(path, exist = FALSE, arg = "path")
@@ -276,14 +363,38 @@ og_local_check <- function(path) {
          reads = info$reads,
          releases = rows[c("path", "release_path", "store_id", "release_id", "format_version", "readable",
                            "problem", "reason")],
-         duplicates = duplicates, unavailable = unavailable, problems = unname(problems)),
+         duplicates = duplicates, unavailable = unavailable, problems = unname(problems), ld = ld),
     class = "og_local_check"
   )
+}
+
+# og_local_check() of an LD-only Local Source: its PLINK Reference, and nothing that needs Python.
+ld_only_check <- function(ld) {
+  releases <- data.frame(path = character(), release_path = character(), store_id = character(),
+                         release_id = character(), format_version = character(), readable = logical(),
+                         problem = character(), reason = character(), stringsAsFactors = FALSE)
+  structure(
+    list(python = NA_character_, chosen_by = NA_character_, reticulate = local_reticulate_version(),
+         ogquery = NA_character_, ogquery_required = ogquery_required, ogquery_in_range = NA,
+         reads = NA_character_, releases = releases, duplicates = character(), unavailable = NULL,
+         problems = character(), ld = ld),
+    class = "og_local_check"
+  )
+}
+
+# The lines of a PLINK Reference in og_local_check()'s report.
+plink_check_lines <- function(ld) {
+  if (is.null(ld)) return(character())
+  c(paste0("PLINK Reference: ", ld$path), plink_binary_line(ld))
 }
 
 #' @export
 format.og_local_check <- function(x, ...) {
   r <- x$releases
+  # An LD-only Local Source: no Store Releases, and no Python to need.
+  if (nrow(r) == 0 && !is.null(x$ld)) {
+    return(c("<og_local_check>", "LD only: a PLINK Reference, which needs no Python.", "", plink_check_lines(x$ld)))
+  }
   # Each Store Release on two lines, its path and then what was found there: paths are long.
   found <- vapply(seq_len(nrow(r)), function(i) {
     name <- if (!is.na(r$store_id[[i]])) release_names(r$store_id[[i]], r$release_id[[i]])
@@ -311,6 +422,7 @@ format.og_local_check <- function(x, ...) {
     "",
     "Store Releases:",
     lines,
+    if (!is.null(x$ld)) c("", plink_check_lines(x$ld)),
     if (length(x$problems)) c("", paste0("! ", x$problems))
   )
 }
@@ -392,6 +504,31 @@ local_unsupported <- function(message, advice, call = rlang::caller_env()) {
   og_abort(c(message, i = advice), class = "opengwasr_local_unsupported", refusal = TRUE, call = call)
 }
 
+# An LD-only Local Source (`og_local(bfile = )`, #43) holds no Store Releases: every verb that reads
+# them refuses it (resolve_releases(), the one place every such verb names its Store Releases, and
+# og_tophits() before its clumping checks), and so does matching ALIDs to a PLINK Reference, which
+# looks their rsIDs up there (`alids`, those that needed it). Any other Source passes.
+check_gwas_source <- function(src, call = rlang::caller_env(), alids = NULL) {
+  if (!inherits(src, "og_local_source") || nrow(src$releases) > 0) return(invisible())
+  what <- if (is.null(alids)) {
+    "This Local Source holds no Store Releases: it was made with only a PLINK Reference (`og_local(bfile = )`), for LD."
+  } else {
+    paste0("This Local Source holds no Store Releases to look up the rsIDs of ",
+           big_number(length(alids)), if (length(alids) == 1) " ALID" else " ALIDs",
+           " (", some_ids(alids, 3), "), which its PLINK Reference matches by rsID.")
+  }
+  # `forms`: the ways round, as the error names them (vignette("ld"), "An LD-only Local Source").
+  og_abort(c(what,
+             i = "Give it the Store Releases too: `og_local(gwas = , bfile = )`, or `og_local(inherit = src, gwas = )`.",
+             if (!is.null(alids)) {
+               c(i = "Or pass a data frame with an `rsid` column, such as top hits or Associations, or rsIDs.",
+                 i = paste0("Or look the rsIDs up on the API first: `og_variants_chrpos(og_api(), positions)` gives each ALID's ",
+                            "`rsid`, for `positions` its \"chromosome:position\"."))
+             }),
+           class = "opengwasr_gwas_store_required", refusal = TRUE, alids = alids,
+           forms = if (is.null(alids)) "gwas" else c("gwas", "rsid_column", "api_rsids"), arg = "gwas", call = call)
+}
+
 #' @export
 og_status.og_local_source <- function(src) {
   local_unsupported("A Local Source has no API whose status to report.",
@@ -423,13 +560,13 @@ og_ld_stores.og_local_source <- function(src) {
 }
 
 #' @export
-og_ld_proxies.og_local_source <- function(src, variants, ld = NULL, r2 = 0.8, kb = 10000) {
+og_ld_proxies.og_local_source <- function(src, variants, r2 = 0.8, kb = 10000) {
   local_unsupported("`og_ld_proxies()` reads LD Stores only, and a Local Source can't read one yet, nor a PLINK Reference for this.",
                     ld_stores_on_api)
 }
 
 #' @export
-og_ld_reflookup.og_local_source <- function(src, variants, ld = NULL) {
+og_ld_reflookup.og_local_source <- function(src, variants) {
   local_unsupported("`og_ld_reflookup()` reads LD Stores only, and a Local Source can't read one yet, nor a PLINK Reference for this.",
                     ld_stores_on_api)
 }

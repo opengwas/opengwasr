@@ -29,7 +29,6 @@ reference:
   - og_ld_proxies
   - og_ld_reflookup
   - og_clump
-  - og_plink_reference
 - title: Your own data
   contents:
   - og_alid

@@ -15,7 +15,7 @@ This vignette follows one journey: set up Python, open your Store Releases, run 
 >
 > - `local-python-hpc-shell`, `local-python-conda-shell` and `local-python-conda`: they set up a Python environment on your machine.
 > - `local-translate` and `local-ld-api`: they call the OpenGWAS API, and this vignette never touches the network.
-> - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever PLINK 1.9 or 2 is found (`plink_ready`: genetics.binaRies, or `plink` or `plink2` on the `PATH`), as in CI; without one their code is shown unevaluated.
+> - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-inherit`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever PLINK 1.9 or 2 is found (`plink_ready`: genetics.binaRies, or `plink` or `plink2` on the `PATH`), as in CI; without one their code is shown unevaluated.
 > - `local-stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39).
 > - `local-twosamplemr`: it needs TwoSampleMR 0.8.0 (#36), which opengwasr doesn't depend on, and full-size Store Releases.
 >
@@ -32,7 +32,7 @@ knitr::opts_chunk$set(eval = local_ready)
 # The chunks that clump or read LD with the bundled PLINK Reference also need PLINK 1.9 or 2
 # (genetics.binaRies, or plink or plink2 on the PATH), as in CI. Without one, their code is shown unevaluated.
 plink_ready <- local_ready && !inherits(
-  tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
+  tryCatch(opengwasr::og_local(bfile = file.path(system.file("plink", package = "opengwasr"), "ref")),
            error = identity),
   "error")
 ```
@@ -109,6 +109,8 @@ og_local_check(file.path(stores, c("dense", "ragged")))
 ```
 
 Under each GWAS Store directory is the Store Release it resolved to.
+
+For a Local Source with a PLINK Reference, it also reports the PLINK Reference: its fileset, and the PLINK binary and its version. An LD-only Local Source, `og_local(bfile = )`, has no Store Releases, so that is all it reports, and it needs no Python.
 
 A Store Release ogquery can't read is listed as `not readable`, with the format versions it reads. Its value is a list, so a script can test it too: `og_local_check(path)$releases$readable`.
 
@@ -268,19 +270,29 @@ A Source carries an **LD resource**, which answers LD for its Associations (see 
 
 | LD resource | On your machine |
 |---|---|
-| **PLINK Reference** | `og_local(gwas = ..., bfile = prefix)`, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
+| **PLINK Reference** | `og_local(gwas = ..., bfile = prefix)`, or `og_local(bfile = prefix)` alone for LD only, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can't find it. Available now |
 | **LD Store** | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
 | **Genotype Store** | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
 | None given | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give one |
 
 A form that is coming is refused (`opengwasr_local_unsupported`), and so is giving two kinds at once.
 
+The LD is chosen on the Source, and only there: no verb takes an LD argument. A Source's LD lives where the Source does, so a Local Source's LD is on your machine. To use LD from elsewhere, fetch with one Source and clump with the other ([Associations from one place, LD from another](ld.html#mixing)):
+
+| Associations | LD | How |
+|---|---|---|
+| Local | PLINK | `og_tophits(og_local(gwas = ..., bfile = ...), ids, r2 = , kb = )` ([below](#local-clumping-plink)) |
+| Local | API | `og_clump(og_api(), og_tophits(local, ids, clump = FALSE, limit = 10000))` ([below](#local-ld-api)) |
+| API | PLINK | `og_clump(og_local(bfile = ...), og_tophits(og_api(), ids, clump = FALSE, limit = 10000), r2 = , kb = )` ([Using a PLINK Reference](ld.html#plink-reference)) |
+
+`limit = 10000` (the most) fetches every top hit to clump: its default, 1,000, would cut them off before clumping, with an `opengwasr_truncated` warning.
+
 ### Clumping top hits {#local-clumping-tophits}
 
 `og_tophits()` clumps by default (`clump = TRUE`), as with the API Source; `clump = FALSE` gives every top hit, unclumped.
 
 - **Stored Clumps.** Store Releases will carry Clumps made when each release was built: its 5e-8 top hits, clumped with each ancestry's default LD resource and its `r2` and `kb`. The default call, `og_tophits(src, ids)`, will read them, so it needs no LD resource at all, on either Source. They are used only when your request matches that configuration exactly, never when it is merely close. Today's Store Releases don't have stored Clumps yet.
-- **Clumping on the fly.** Until a Store Release has them, `clump = TRUE` clumps on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly, with the Source's LD resource or `ld`.
+- **Clumping on the fly.** Until a Store Release has them, `clump = TRUE` clumps on the fly, with the Source's LD resource. Any other `threshold`, `r2`, `kb` or LD resource is always clumped on the fly, with the Source's LD resource.
 - **Provenance says which.** `og_provenance(x)$clump` records the LD resource, `r2` and `kb` used, and in `clumps` whether the Clumps were `"stored"` or `"computed"`.
 
 So today, a Local Source with no LD resource can't clump. It stops (class `opengwasr_ld_resource_required`), names the LD resources you can give it, and offers `clump = FALSE`:
@@ -344,23 +356,24 @@ round(m, 3)
 
 The matrix is named `<rsid>_<allele>_<allele>`, with the PLINK Reference's alleles; the sign of r refers to the first one. rsIDs work as well as ALIDs, and need no lookup.
 
-### Overriding the LD for one call {#local-ld-override}
+### Other LD for the same Store Releases {#local-ld-inherit}
 
-Each verb's `ld` overrides the Source's LD resource for one call. With a PLINK Reference as `ld`, a Local Source with no LD resource of its own can clump or read an LD matrix:
+Other LD is another Source. `og_local(inherit = )` makes one like the Source you have: it keeps its Store Releases, and the LD you give replaces its LD resource. Here `local`, which has no LD resource, gets the PLINK Reference:
 
-```{r local-ld-override, eval = plink_ready}
-ref <- og_plink_reference(bfile)
-og_ld_matrix(local, c("rs5000", "rs1000"), ld = ref)
+```{r local-ld-inherit, eval = plink_ready}
+with_ld <- og_local(inherit = local, bfile = bfile)
+with_ld
+og_ld_matrix(with_ld, c("rs5000", "rs1000"))
 ```
 
-`ld` can't name one of the API's LD Stores on a Local Source: a Local Source holds none, and a local query never calls the API. Use the two steps below instead.
+`local` itself is unchanged. Any LD argument you give replaces the inherited LD resource as a whole, never mixed with it, except `plink` alone, which keeps the fileset and changes the PLINK that reads it (`og_local(inherit = with_ld, plink = "plink2")`): `og_local(inherit = with_ld, ld_store = path)` is refused because downloaded LD Stores can't be read yet, not because the Source would then have two. A Local Source holds none of the API's LD Stores, and a local query never calls the API: use the two steps below for them.
 
 ### LD from the API's LD Stores {#local-ld-api}
 
 To clump Associations from your Store Releases with LD from the API's LD Stores, do it in two steps, naming the API Source yourself: read the top hits unclumped from your Store Releases, then clump them with `og_clump()` on the API Source. This needs your OpenGWAS token (see [Credentials](opengwasr.html#credentials)). Nothing goes to the API unless you write `og_api()`.
 
 ```{r local-ld-api, eval = FALSE}
-hits <- og_tophits(local, "OGS-00011:GCST003116", clump = FALSE)
+hits <- og_tophits(local, "OGS-00011:GCST003116", clump = FALSE, limit = 10000)
 cad <- og_clump(og_api(), hits)                  # the LD Store matching the Analysis's Assigned Ancestry
 cad <- og_clump(og_api(ld_store = "EUR"), hits)  # or the EUR LD Store
 ```

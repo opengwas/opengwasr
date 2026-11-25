@@ -32,3 +32,18 @@ The API's LD resources come from a registry. Each has an `OGL-` id and is specif
 - **Letting `og_local()` hold LD Stores beside GWAS Stores**, detected by manifest. It mixes what a Source answers with where its LD comes from.
 - **A Local Source silently using the API's LD.** A local query would make network calls and need a token.
 - **Choosing stored Clumps whenever they are "close enough".** That is a silently different answer.
+
+**Clarification, 25 November 2026 (LD only on the Source; opengwas/opengwasr#43).** The owner amended "one place, one override": LD is chosen on the Source, and only there. The verbs lose `ld` (`og_tophits()`, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()`, `og_ld_reflookup()`); they keep `r2`, `kb`, `threshold` and `fill_below_t_far`. The owner waived epic #2's "no verb changes signature" rule for it. A Source's LD resource lives where the Source does: `og_api()` answers LD from the API's LD Stores, and `og_local()` from resources on the user's machine. To mix locations, the user fetches with one Source and clumps with the other, through `og_clump()` on data already fetched:
+
+| Associations | LD | How |
+|---|---|---|
+| API | API | `og_tophits(og_api(), ids)` (ancestry-matched), or `og_api(ld_store = "EUR")` |
+| Local | PLINK | `og_tophits(og_local(gwas = , bfile = ), ids, r2 = , kb = )` |
+| Local | API | `og_clump(og_api(), og_tophits(local, ids, clump = FALSE))` |
+| API | PLINK | `og_clump(og_local(bfile = ), og_tophits(og_api(), ids, clump = FALSE), r2 = , kb = )` |
+
+- **`og_local(bfile = )` alone is an LD-only Local Source.** `gwas` becomes optional. Such a Source answers `og_clump()` and `og_ld_matrix()` for variants PLINK can match by rsID (a `rsid` column, or rsIDs). ALIDs need a GWAS Store to look up their rsIDs, so they are refused, naming `og_local(gwas = , bfile = )`. Every verb that reads Associations refuses the Source too. It is the one PLINK path with no API, replacing `src = NULL` with `ld = og_plink_reference()`.
+- **Other LD for one call is another Source.** `inherit =` on both constructors builds a Source like an existing one: every argument given replaces the inherited one, and the rest (URL, key, timeout, `max_in_flight`, GWAS Store Releases) are kept. Any LD argument given replaces the inherited LD resource whole, never mixed with it, except `plink` alone, which keeps the inherited PLINK Reference's `bfile` and changes the binary. `inherit` must be the same kind of Source. The constructors' own validation applies, so there is no separate copy-and-modify function.
+- **`og_plink_reference()` is no longer exported.** The Local Source builds its PLINK Reference from `bfile` and `plink`, and `og_ld_resource()` still returns it. Provenance's `ld_from` is `"source"` or `"ancestry"`; `"call"` is gone.
+
+The paragraph on the ieugwasr local functions now reads: `ld_clump_local()` and `ld_matrix_local()` map onto `og_clump(og_local(bfile = , plink = ), data, r2 = , kb = )` and `og_ld_matrix(og_local(bfile = ), variants)`, or onto `og_local(gwas = , bfile = )` for the user's own Store Releases.

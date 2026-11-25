@@ -17,21 +17,28 @@
 #'   `og_api(caller = "TwoSampleMR/0.8.0")` sends `opengwasr/<version> TwoSampleMR/0.8.0`. One
 #'   short string of printable characters (at most 100), `name/version` by convention; `NULL`
 #'   (the default) adds nothing.
-#' @param ld_store The Source's LD resource: an LD Store's name, or an ancestry code for that
-#'   ancestry's LD Store, as `ld` takes them. Every verb that needs LD ([og_tophits()] when it
-#'   clumps, [og_clump()], [og_ld_matrix()], [og_ld_proxies()], [og_ld_reflookup()]) uses it, and
-#'   their `ld` overrides it for one call. `NULL` (the default): each Analysis's Assigned Ancestry
-#'   chooses its LD Store. It is checked against [og_ld_stores()] when a call first needs it. See
-#'   `vignette("ld")`.
+#' @param ld_store The Source's LD resource: an LD Store's name, such as `"hgdp1kgp-v2-EUR-k10"`, or
+#'   an ancestry code, such as `"EUR"`, for that ancestry's LD Store (an exact name wins). Every verb
+#'   that needs LD ([og_tophits()] when it clumps, [og_clump()], [og_ld_matrix()], [og_ld_proxies()],
+#'   [og_ld_reflookup()]) uses it: the LD is chosen on the Source, and nowhere else. `NULL` (the
+#'   default): each Analysis's Assigned Ancestry chooses its LD Store. It is checked against
+#'   [og_ld_stores()] when a call first needs it. See `vignette("ld")`.
 #' @param geno_store A Genotype Store, from which LD would be computed when asked. Not available
 #'   yet: anything but `NULL` is refused (class `opengwasr_ld_resource_unavailable`) until the API
 #'   serves Genotype Stores.
+#' @param inherit An API Source to build this one like: every argument given replaces the inherited
+#'   one, and the rest (`url` and the key it was made with, `timeout`, `max_in_flight`, `caller`, and
+#'   the LD resource) come from `inherit`. Giving `ld_store` or `geno_store` replaces the inherited LD
+#'   resource whole. So other LD for one call is `og_api(inherit = src, ld_store = "AFR")`. The
+#'   arguments are checked as for any other Source. Anything but an API Source is refused (class
+#'   `opengwasr_argument`).
 #' @return An `og_api_source`.
 #' @examples
 #' \dontrun{
 #' src <- og_api()
 #' src
 #' og_api(ld_store = "EUR")
+#' og_api(inherit = src, ld_store = "AFR")  # src's URL, key, timeout; AFR LD
 #' }
 #' @export
 og_api <- function(url = getOption("opengwasr.url"),
@@ -39,7 +46,16 @@ og_api <- function(url = getOption("opengwasr.url"),
                    max_in_flight = default_max_in_flight(),
                    caller = NULL,
                    ld_store = NULL,
-                   geno_store = NULL) {
+                   geno_store = NULL,
+                   inherit = NULL) {
+  # What isn't given comes from `inherit`; then everything is checked as for any other Source.
+  if (!is.null(inherit)) {
+    check_inherit(inherit, "og_api_source", "og_api")
+    if (missing(timeout)) timeout <- inherit$timeout
+    if (missing(max_in_flight)) max_in_flight <- inherit$max_in_flight
+    if (missing(caller)) caller <- inherit$caller
+    if (missing(ld_store) && missing(geno_store)) ld_store <- og_ld_resource(inherit)
+  }
   # The LD resource first: a refusal needs no credentials.
   if (!is.null(geno_store)) {
     ld_resource_unavailable("A Genotype Store on the API isn't available yet: the API doesn't serve Genotype Stores.",
@@ -49,10 +65,15 @@ og_api <- function(url = getOption("opengwasr.url"),
   # Which names and ancestries exist is the API's list to say, when a call needs it.
   if (!is.null(ld_store) && !is_ld_store_value(ld_store)) {
     og_abort(c("`ld_store` must be one LD Store name or ancestry code, such as \"EUR\", or `NULL`.",
-               if (is_plink_reference(ld_store)) c(i = "A PLINK Reference is given to one call, as `ld`, or to a Local Source, `og_local(gwas, bfile = )`.")),
+               if (is_plink_reference(ld_store)) c(i = "A PLINK Reference is a Local Source's LD resource: `og_local(bfile = )`.")),
              class = "opengwasr_argument")
   }
-  creds <- api_credentials(url)
+  # The key the inherited Source was made with, unless another URL is given.
+  creds <- if (!is.null(inherit) && missing(url)) {
+    c(list(url = inherit$url, scheme = inherit$signed_in_with), inherit$credentials())
+  } else {
+    api_credentials(url)
+  }
   # Kept: it goes into a header, so it has to be one printable line.
   if (!is.null(caller) && (!is.character(caller) || length(caller) != 1 || is.na(caller) ||
                            !grepl("^[[:print:]]{1,100}$", caller) || grepl("[^ -~]", caller))) {
@@ -107,34 +128,31 @@ print.og_api_source <- function(x, ...) {
   invisible(x)
 }
 
-# The defaults of og_api()'s `timeout` and `max_in_flight`: read here, once, for the Source and for
-# no_source() alike.
+# The defaults of og_api()'s `timeout` and `max_in_flight`: read here, once.
 default_timeout <- function() getOption("opengwasr.timeout", 3600)
 default_max_in_flight <- function() getOption("opengwasr.max_in_flight", 4)
 
-# What a query runs on when the user gave `src = NULL`: a PLINK Reference needs no API when nothing
-# is looked up (ALID -> rsID is the one lookup it can need). It has the Source's timeout and
-# concurrency, and no URL or credentials; the first request any code path makes (api_response() is
-# where every request goes) stops with `opengwasr_source_required`, so nothing is looked up without
-# a Source.
-no_source <- function() {
-  structure(list(url = NULL, timeout = default_timeout(), max_in_flight = as.integer(default_max_in_flight())),
-            class = "og_no_source")
+# `inherit` of a constructor (`fn`, "og_api" or "og_local"): a Source of the same kind (`class`).
+# Kept: an R argument's type.
+check_inherit <- function(inherit, class, fn, call = rlang::caller_env()) {
+  if (inherits(inherit, class)) return(invisible())
+  kind <- c(og_api_source = "an API Source, from `og_api()`", og_local_source = "a Local Source, from `og_local()`")
+  got <- if (is_source(inherit)) kind[[class(inherit)[[1]]]] else paste0("a ", class(inherit)[[1]])
+  og_abort(c(paste0("`inherit` must be ", kind[[class]], ", not ", got, "."),
+             i = paste0("`", fn, "(inherit = )` builds a Source like another of the same kind.")),
+           class = "opengwasr_argument", arg = "inherit", call = call)
 }
 
-# `what`: what needed the API, when the caller knows ("3 ALIDs have no rsID: ...").
-source_required <- function(call, what = NULL) {
-  og_abort(c("This needs the OpenGWAS API, but no Source was given (`src = NULL`).",
-             if (!is.null(what)) c(x = what),
-             i = "Pass a Source from `og_api()`.",
-             i = paste0("`src = NULL` is for a PLINK Reference when nothing is looked up: ",
-                        "variants given as rsIDs, or as a data frame with an `rsid` column.")),
+# With no Source at all (`src = NULL`).
+source_required <- function(call) {
+  og_abort(c("This needs a Source, but none was given (`src = NULL`).",
+             i = "Pass a Source from `og_api()`, or from `og_local()` for Store Releases or a PLINK Reference on this machine.",
+             i = "For LD from a PLINK Reference alone, with no API: `og_local(bfile = \"<prefix>\")`."),
            class = "opengwasr_source_required", call = call)
 }
 
 #' Every query function takes a Source. `src = NULL` (and anything else that isn't one) gets a
-#' classed error instead of R's "no applicable method"; `og_clump()` and `og_ld_matrix()` have their
-#' own `NULL` methods, for a PLINK Reference.
+#' classed error instead of R's "no applicable method".
 #'
 #' @param src Whatever the caller passed.
 #' @param ... Ignored.

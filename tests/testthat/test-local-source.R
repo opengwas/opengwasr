@@ -427,7 +427,8 @@ test_that("the uv cache advice names the uv reticulate uses, and its cache", {
   withr::local_envvar(RETICULATE_UV = "managed")
   cache <- tools::R_user_dir("reticulate", "cache")
   expect_equal(local_uv_cache_clean(),
-               paste0(normalise_path(file.path(cache, "uv", "bin", "uv"), resolve = FALSE),
+               paste0(normalise_path(file.path(cache, "uv", "bin", if (on_windows()) "uv.exe" else "uv"),
+                                     resolve = FALSE),
                       " cache clean ogquery --cache-dir ",
                       normalise_path(file.path(cache, "uv", "cache"), resolve = FALSE)))
 })

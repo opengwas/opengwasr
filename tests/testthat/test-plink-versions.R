@@ -1,7 +1,8 @@
-# PLINK 1.9 and PLINK 2 (#41): the binary named by path or command, the automatic search, the
-# version read once and kept, other versions refused, and the two giving the same answer. The
-# stand-in PLINKs are shell scripts, so those tests skip on Windows; the equivalence test needs both
-# real binaries (CI's ubuntu release job finds PLINK 2, and OPENGWASR_TEST_PLINK1 names PLINK 1.9).
+# PLINK 1.9 and PLINK 2 (#41): the binary named by path or command (`og_local(bfile = , plink = )`),
+# the automatic search, the version read once and kept, other versions refused, and the two giving
+# the same answer. The stand-in PLINKs are shell scripts, so those tests skip on Windows; the
+# equivalence test needs both real binaries (CI's ubuntu release job finds PLINK 2, and
+# OPENGWASR_TEST_PLINK1 names PLINK 1.9).
 
 withr::local_options(opengwasr.progress = FALSE)
 
@@ -10,32 +11,32 @@ test_that("`plink_bin` is a path or a command on the PATH, and the version it re
   dir <- withr::local_tempdir()
   bin <- fake_plink(dir, "plink2", plink2_banner)
   withr::local_envvar(PATH = paste(dir, Sys.getenv("PATH"), sep = .Platform$path.sep))
-  ref <- og_plink_reference(plink_fixture(), plink_bin = "plink2")
+  ref <- plink_reference_with("plink2")
   expect_s3_class(ref, "og_plink_reference")
   expect_equal(ref$plink_bin, bin)
   expect_equal(ref$plink_version, "2.0.0-b.1.4")
-  expect_equal(og_plink_reference(plink_fixture(), plink_bin = bin)$plink_bin, bin)
+  expect_equal(plink_reference_with(bin)$plink_bin, bin)
   expect_true(paste0("  PLINK 2.0.0-b.1.4: ", bin) %in% format(ref))
   # A command that isn't on the PATH, a directory, or nothing executable: not found, naming the argument.
-  e <- expect_error(og_plink_reference(plink_fixture(), plink_bin = "no-such-plink-here"), class = "opengwasr_plink_not_found")
+  e <- expect_error(og_local(bfile = plink_fixture(), plink = "no-such-plink-here"), class = "opengwasr_plink_not_found")
   expect_s3_class(e, "opengwasr_argument")
-  expect_equal(e$arg, "plink_bin")
-  expect_equal(expect_error(og_plink_reference(plink_fixture(), plink_bin = dir), class = "opengwasr_plink_not_found")$arg, "plink_bin")
-  # og_local() names its own argument.
+  expect_equal(e$arg, "plink")
+  expect_equal(expect_error(og_local(bfile = plink_fixture(), plink = dir), class = "opengwasr_plink_not_found")$arg, "plink")
+  # With Store Releases too, the same argument.
   e <- expect_error(og_local(example_releases("dense"), bfile = plink_fixture(), plink = "no-such-plink-here"),
                     class = "opengwasr_plink_not_found")
   expect_equal(e$arg, "plink")
 })
 
-test_that("og_local(plink = <command>) holds the PLINK Reference og_plink_reference() builds", {
+test_that("og_local(gwas, plink = <command>) holds the PLINK Reference og_local(bfile, plink) builds", {
   skip_on_os("windows")
   skip_if_no_local()
   dir <- withr::local_tempdir()
   bin <- fake_plink(dir, "plink2", plink2_banner)
   withr::local_envvar(PATH = paste(dir, Sys.getenv("PATH"), sep = .Platform$path.sep))
   src <- og_local(gwas = example_releases("dense"), plink = "plink2", bfile = plink_fixture())
-  expect_equal(src$ld$plink_bin, bin)
-  expect_equal(src$ld$plink_version, "2.0.0-b.1.4")
+  expect_equal(og_ld_resource(src)$plink_bin, bin)
+  expect_equal(og_ld_resource(src)$plink_version, "2.0.0-b.1.4")
   expect_true(paste0("  PLINK 2.0.0-b.1.4: ", bin) %in% format(src))
 })
 
@@ -47,15 +48,15 @@ test_that("a name without a path separator is a command, even with a file or dir
   here <- withr::local_tempdir()
   withr::local_dir(here)
   dir.create("plink")  # a `plink/` directory in the working directory
-  expect_equal(og_plink_reference(plink_fixture(), plink_bin = "plink")$plink_bin, bin)
+  expect_equal(plink_reference_with("plink")$plink_bin, bin)
   # With a separator it is a path: here, the directory, which isn't PLINK.
-  e <- expect_error(og_plink_reference(plink_fixture(), plink_bin = "./plink"), class = "opengwasr_plink_not_found")
-  expect_equal(e$arg, "plink_bin")
+  e <- expect_error(og_local(bfile = plink_fixture(), plink = "./plink"), class = "opengwasr_plink_not_found")
+  expect_equal(e$arg, "plink")
   # A file named like the command, here, doesn't win over the PATH either.
   unlink("plink", recursive = TRUE)
   fake_plink(here, "plink2", plink2_banner)
-  e <- expect_error(og_plink_reference(plink_fixture(), plink_bin = "plink2"), class = "opengwasr_plink_not_found")
-  expect_equal(og_plink_reference(plink_fixture(), plink_bin = "./plink2")$plink_version, "2.0.0-b.1.4")
+  e <- expect_error(og_local(bfile = plink_fixture(), plink = "plink2"), class = "opengwasr_plink_not_found")
+  expect_equal(plink_reference_with("./plink2")$plink_version, "2.0.0-b.1.4")
 })
 
 test_that("with nothing given, PLINK is the first supported of genetics.binaRies', `plink`, then `plink2` on the PATH", {
@@ -63,17 +64,17 @@ test_that("with nothing given, PLINK is the first supported of genetics.binaRies
   dir <- withr::local_tempdir()
   withr::local_envvar(PATH = dir)  # only the stand-ins
   local_mocked_bindings(packaged_plink = function() NULL)
-  e <- expect_error(og_plink_reference(plink_fixture()), class = "opengwasr_plink_not_found")
+  e <- expect_error(og_local(bfile = plink_fixture()), class = "opengwasr_plink_not_found")
   expect_equal(nrow(e$skipped), 0)
   two <- fake_plink(dir, "plink2", plink2_banner)
-  expect_equal(og_plink_reference(plink_fixture())$plink_bin, two)
+  expect_equal(og_ld_resource(og_local(bfile = plink_fixture()))$plink_bin, two)
   one <- fake_plink(dir, "plink", plink19_banner)
-  ref <- og_plink_reference(plink_fixture())
+  ref <- og_ld_resource(og_local(bfile = plink_fixture()))
   expect_equal(ref$plink_bin, one)
   expect_equal(ref$plink_version, "1.90b6.21")
   packaged <- fake_plink(withr::local_tempdir(), "plink", plink19_banner)
   local_mocked_bindings(packaged_plink = function() packaged)
-  expect_equal(og_plink_reference(plink_fixture())$plink_bin, packaged)
+  expect_equal(og_ld_resource(og_local(bfile = plink_fixture()))$plink_bin, packaged)
 })
 
 test_that("the search skips a `plink` that isn't a supported PLINK, and lists what it skipped when none is", {
@@ -85,26 +86,26 @@ test_that("the search skips a `plink` that isn't a supported PLINK, and lists wh
   old <- fake_plink(withr::local_tempdir(), "plink", c("@-------@", "|        PLINK!       |     v1.07      |   10/Aug/2009     |"))
   local_mocked_bindings(packaged_plink = function() old)
   two <- fake_plink(dir, "plink2", plink2_banner)
-  ref <- og_plink_reference(plink_fixture())
+  ref <- og_ld_resource(og_local(bfile = plink_fixture()))
   expect_equal(ref$plink_bin, two)
   expect_equal(ref$plink_version, "2.0.0-b.1.4")
   # A PLINK 2 build before 2.0.0-a.6.0 is skipped too: none left.
   fake_plink(dir, "plink2", "PLINK v2.00a5.12LM 64-bit Intel (25 Jun 2024)")
-  e <- expect_error(og_plink_reference(plink_fixture()), class = "opengwasr_plink_not_found")
+  e <- expect_error(og_local(bfile = plink_fixture()), class = "opengwasr_plink_not_found")
   expect_false(inherits(e, "opengwasr_argument"))
   expect_equal(e$skipped$plink_bin, c(old, putty, two))
   expect_equal(e$skipped$version, c("1.07", NA, "2.00a5.12LM"))
   expect_equal(e$supported, c("1.9", "2 (2.0.0-a.6.0 or later)"))
 })
 
-test_that("the version is read once, when the PLINK Reference is made, not by each query", {
+test_that("the version is read once, when the Source is made, not by each query", {
   skip_on_os("windows")
   dir <- withr::local_tempdir()
   bin <- fake_plink(dir, "plink", plink19_banner)
-  ref <- og_plink_reference(plink_fixture(), plink_bin = bin)
+  ref <- plink_reference_with(bin)
   expect_length(readLines(paste0(bin, ".calls")), 1)
   # The stand-in fails anything but --version: PLINK ran, and --version didn't run again.
-  expect_error(og_ld_matrix(NULL, c("rs4977574", "rs2891168"), ld = ref), class = "opengwasr_plink_failed")
+  expect_error(og_ld_matrix(ld_source_of(ref), c("rs4977574", "rs2891168")), class = "opengwasr_plink_failed")
   expect_length(readLines(paste0(bin, ".calls")), 1)
 })
 
@@ -115,10 +116,10 @@ test_that("a PLINK Reference made without a version (before #41) has it read on 
   ref <- structure(list(path = plink_fixture(), plink_bin = bin), class = "og_plink_reference")
   expect_equal(plink_dialect(ref)$name, "1.9")
   # Through a query: read once, then PLINK runs (the stand-in fails it).
-  expect_error(og_ld_matrix(NULL, c("rs4977574", "rs2891168"), ld = ref), class = "opengwasr_plink_failed")
+  expect_error(og_ld_matrix(ld_source_of(ref), c("rs4977574", "rs2891168")), class = "opengwasr_plink_failed")
   expect_length(readLines(paste0(bin, ".calls")), 2)
   ref$plink_bin <- fake_plink(dir, "old", "PLINK v1.07")
-  e <- expect_error(og_ld_matrix(NULL, c("rs4977574", "rs2891168"), ld = ref), class = "opengwasr_plink_unsupported")
+  e <- expect_error(og_ld_matrix(ld_source_of(ref), c("rs4977574", "rs2891168")), class = "opengwasr_plink_unsupported")
   expect_equal(e$version, "1.07")
   expect_error(plink_dialect(ref), class = "opengwasr_plink_unsupported")
 })
@@ -139,17 +140,17 @@ test_that("a PLINK named that isn't a supported one is refused, suggesting a sup
                 list(name = "silent", banner = character(), version = NA_character_))
   for (case in cases) {
     bin <- fake_plink(dir, case$name, case$banner)
-    e <- expect_error(og_plink_reference(plink_fixture(), plink_bin = bin), class = "opengwasr_plink_unsupported")
+    e <- expect_error(og_local(bfile = plink_fixture(), plink = bin), class = "opengwasr_plink_unsupported")
     expect_equal(e$version, case$version)
     expect_equal(e$supported, c("1.9", "2 (2.0.0-a.6.0 or later)"))
-    expect_equal(e$arg, "plink_bin")
+    expect_equal(e$arg, "plink")
     expect_null(e$suggest)
   }
   # With a supported plink2 on the PATH, the refusal suggests it.
   fake_plink(dir, "plink2", plink2_banner)
-  e <- expect_error(og_plink_reference(plink_fixture(), plink_bin = file.path(dir, "plink107")), class = "opengwasr_plink_unsupported")
+  e <- expect_error(og_local(bfile = plink_fixture(), plink = file.path(dir, "plink107")), class = "opengwasr_plink_unsupported")
   expect_equal(e$suggest, "plink2")
-  # Through og_local(), the argument is `plink`.
+  # With Store Releases too, the argument is `plink`.
   e <- expect_error(og_local(example_releases("dense"), bfile = plink_fixture(), plink = file.path(dir, "plink3")),
                     class = "opengwasr_plink_unsupported")
   expect_equal(e$arg, "plink")
@@ -166,11 +167,11 @@ test_that("PLINK 2's semantic versions are compared from 2.0.0-a.6.0", {
 test_that("the found PLINK's version is on the PLINK Reference and in provenance", {
   ref <- local_plink_reference()
   expect_false(is.null(plink_dialect_of(ref$plink_version)))
-  m <- og_ld_matrix(NULL, c("rs4977574", "rs2891168"), ld = ref)
+  m <- og_ld_matrix(ld_source_of(ref), c("rs4977574", "rs2891168"))
   expect_equal(og_provenance(m)$plink_version, ref$plink_version)
   expect_equal(og_provenance(m)$plink_bin, ref$plink_bin)
   data <- data.frame(alid = c("9:22098575:A:G", "9:22098620:A:G"), rsid = c("rs4977574", "rs2891168"), z = c(9, 6), id = "x")
-  out <- og_clump(NULL, data, ld = ref, r2 = 0.2, kb = 100)
+  out <- og_clump(ld_source_of(ref), data, r2 = 0.2, kb = 100)
   expect_equal(og_provenance(out)$plink_version, ref$plink_version)
 })
 
@@ -195,7 +196,7 @@ test_that("PLINK 1.9 and PLINK 2 each give PLINK's clumps, and the same LD matri
     for (r2 in c(0.001, 0.2, 0.99)) for (kb in c(0.045, 0.046, 10000)) {
       want <- expected_clump(rsids, strength, r2, kb)
       for (ref in refs) {
-        out <- og_clump(NULL, data, ld = ref, r2 = r2, kb = kb)
+        out <- og_clump(ld_source_of(ref), data, r2 = r2, kb = kb)
         what <- paste("PLINK", ref$plink_version, "at r2", r2, "kb", kb)
         expect_equal(out$rsid, rsids[rsids %in% want$lead], label = paste("index variants,", what))
         expect_equal(out$clump_size, want$size[match(out$rsid, want$lead)], label = paste("clump sizes,", what))
@@ -203,8 +204,8 @@ test_that("PLINK 1.9 and PLINK 2 each give PLINK's clumps, and the same LD matri
     }
   }
   skip_if(length(refs) < 2, "Needs both PLINK 1.9 and PLINK 2 (OPENGWASR_TEST_PLINK1, OPENGWASR_TEST_PLINK2, or on the PATH).")
-  m1 <- og_ld_matrix(NULL, rsids, ld = refs[["1.9"]])
-  m2 <- og_ld_matrix(NULL, rsids, ld = refs[["2"]])
+  m1 <- og_ld_matrix(ld_source_of(refs[["1.9"]]), rsids)
+  m2 <- og_ld_matrix(ld_source_of(refs[["2"]]), rsids)
   expect_equal(dimnames(m2), dimnames(m1))
   expect_equal(dim(m1), c(length(rsids), length(rsids)))
   expect_equal(is.na(unclass(m2)), is.na(unclass(m1)), ignore_attr = TRUE)
@@ -225,7 +226,7 @@ test_that("clumping uses r² from haplotype frequencies, which decides a pair ei
   skip_if(length(refs) == 0, "No PLINK binary found.")
   data <- data.frame(alid = c("9:22098575:A:G", "9:22110000:A:G"), rsid = c("rs4977574", "rs9002"), z = c(9, 3), id = "x")
   for (ref in refs) {
-    out <- og_clump(NULL, data, ld = ref, r2 = 0.2, kb = 100)
+    out <- og_clump(ld_source_of(ref), data, r2 = 0.2, kb = 100)
     expect_equal(out$rsid, want$lead)
     expect_equal(out$clump_size, want$size)
   }

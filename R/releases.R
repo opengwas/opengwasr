@@ -15,6 +15,7 @@
 #' @return The list of `list(store_id, release_id)` the API takes in `releases`.
 #' @noRd
 resolve_releases <- function(src, releases, call = rlang::caller_env()) {
+  check_gwas_source(src, call)  # an LD-only Local Source holds none
   # Kept: an R argument's type.
   if (!is.null(releases) &&
       (!is.character(releases) || length(releases) == 0 || anyNA(releases) || any(!nzchar(releases)))) {

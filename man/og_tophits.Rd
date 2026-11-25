@@ -11,7 +11,6 @@ og_tophits(
   limit = 1000,
   observed_only = FALSE,
   clump = TRUE,
-  ld = NULL,
   r2 = NULL,
   kb = NULL,
   original_units = FALSE,
@@ -31,10 +30,6 @@ og_tophits(
 \item{observed_only}{Leave out Imputed Associations.}
 
 \item{clump}{Clump the top hits to one per independent signal.}
-
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} for the Source's LD resource, else (API Source) to match each
-Analysis's Assigned Ancestry. Only with \code{clump = TRUE}. A Local Source takes only a PLINK Reference.}
 
 \item{r2, kb}{The r² above which a top hit joins an index variant's clump, and the window in
 kilobases; \code{NULL} for the LD Store's \code{t_far} and far window, but required with a PLINK
@@ -59,9 +54,9 @@ Returns each Analysis's Associations at or below a p-value \code{threshold}, str
 \details{
 By default (\code{clump = TRUE}) the top hits are clumped on the API, one index variant per
 independent signal (see \code{vignette("ld")}): every top hit at \code{threshold} is clumped, and \code{limit}
-then caps the index variants. Each Analysis is clumped in the LD Store matching its Assigned
-Ancestry, or in the one \code{ld} names; an Unassigned Analysis is refused (\code{opengwasr_ld_unmatched})
-unless \code{ld} is given, before any Job runs. The Jobs, one per Analysis, are submitted grouped by
+then caps the index variants. Each Analysis is clumped in the Source's LD Store
+(\code{og_api(ld_store = )}), or, if it has none, in the LD Store matching its Assigned Ancestry; an
+Unassigned Analysis is then refused (\code{opengwasr_ld_unmatched}), before any Job runs. The Jobs, one per Analysis, are submitted grouped by
 LD Store; with progress on (option \code{opengwasr.progress}), a message of class
 \code{opengwasr_clumping} says which LD Store each Analysis is clumped in. \code{r2} and \code{kb} default to the LD Store's Far Threshold
 (\code{t_far}) and its far window (\code{far_bp}, 10,000 kb), and are always sent. A pair the LD Store can't
@@ -71,18 +66,20 @@ Clumped rows add \code{clump_ld}, \code{clump_ld_choice}, \code{clump_r2}, \code
 \code{og_provenance(x)$clump} has each Analysis's \code{hits}, \code{absent} and \code{leads}. Pass \code{clump = FALSE}
 for every top hit.
 
-The LD is the Source's LD resource (\code{og_api(ld_store = )}, \code{og_local(bfile = )}) unless \code{ld}
-overrides it for this call. A Local Source with neither is refused (\code{opengwasr_ld_resource_required}),
-naming the LD resources and \code{clump = FALSE}: Store Releases have no stored Clumps yet, so clumping
-is computed on the fly, and \code{og_provenance(x)$clump$clumps} is \code{"computed"}.
+The LD is the Source's LD resource (\code{og_api(ld_store = )}, \code{og_local(bfile = )}), and nothing
+else: for other LD, pass another Source, such as \code{og_api(inherit = src, ld_store = "EUR")}. A
+Local Source with none is refused (\code{opengwasr_ld_resource_required}), naming the LD resources and
+\code{clump = FALSE}: Store Releases have no stored Clumps yet, so clumping is computed on the fly, and
+\code{og_provenance(x)$clump$clumps} is \code{"computed"}. An LD-only Local Source (\code{og_local(bfile = )}
+with no \code{gwas}) holds no Associations, so it is refused (\code{opengwasr_gwas_store_required}).
 
-With a PLINK Reference in \code{ld} or as the Source's LD resource (see \code{\link[=og_plink_reference]{og_plink_reference()}}) the
+With a PLINK Reference as a Local Source's LD resource (\code{og_local(gwas = , bfile = )}) the
 clumping is local: each Analysis's
 top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
 (those not in it are left out, with a message) and clumped by PLINK, and \code{limit} is then applied
 to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an
-\code{opengwasr_truncated} warning that clumping saw only the strongest; clumping on the server (an LD
-Store in \code{ld}) has no such cap. \code{og_provenance(x)$clump} names the reference's path and the \code{r2}
+\code{opengwasr_truncated} warning that clumping saw only the strongest; clumping on the server (an
+API Source's LD Store) has no such cap. \code{og_provenance(x)$clump} names the reference's path and the \code{r2}
 and \code{kb}.
 
 The columns are those the vignette section "What the columns mean" lists: the Analysis \code{id}, the variant, \code{beta} (\code{z * se}), \code{se}, \code{z}, \code{pval}, \code{effect_scale}

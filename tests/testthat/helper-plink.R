@@ -6,15 +6,30 @@
 
 plink_fixture <- function() {
   dir <- system.file("plink", package = "opengwasr", mustWork = TRUE)
-  file.path(normalise_path(dir), "ref")  # as og_plink_reference() normalises it
+  file.path(normalise_path(dir), "ref")  # as og_local(bfile = ) normalises it
 }
 
-# A PLINK Reference over the fixture, or skip the test: nothing here runs without a PLINK binary.
-local_plink_reference <- function() {
-  ref <- tryCatch(og_plink_reference(plink_fixture()), opengwasr_plink_not_found = function(e) NULL)
-  if (is.null(ref)) testthat::skip("No PLINK binary found (genetics.binaRies, or plink or plink2 on the PATH).")
-  ref
+# An LD-only Local Source over the fixture (`og_local(bfile = )`, which needs no Python), or skip the
+# test: nothing here runs without a PLINK binary.
+local_plink_source <- function() {
+  src <- tryCatch(og_local(bfile = plink_fixture()), opengwasr_plink_not_found = function(e) NULL)
+  if (is.null(src)) testthat::skip("No PLINK binary found (genetics.binaRies, or plink or plink2 on the PATH).")
+  src
 }
+
+# Its PLINK Reference, as og_ld_resource() gives it, or skip the test.
+local_plink_reference <- function() og_ld_resource(local_plink_source())
+
+# An LD-only Local Source carrying `ref` as it is: one built by hand (without a version, say), or one
+# of plink_references_by_series().
+ld_source_of <- function(ref) {
+  new_local_source(data.frame(store_id = character(), release_id = character(), format_version = character(),
+                              path = character(), stringsAsFactors = FALSE),
+                   new.env(parent = emptyenv()), ref)
+}
+
+# A PLINK Reference over the fixture with `plink_bin`, as `og_local(bfile = , plink = )` builds it.
+plink_reference_with <- function(plink_bin) og_ld_resource(og_local(bfile = plink_fixture(), plink = plink_bin))
 
 # The fixture's genotypes as A1-allele counts (a people x variants matrix named by rsID), read from
 # the `.bed` by its documented layout: 3 magic bytes, then per variant 2 bits a person, low bits
@@ -137,7 +152,7 @@ plink_references_by_series <- function() {
   bins <- c(Sys.getenv(c("OPENGWASR_TEST_PLINK1", "OPENGWASR_TEST_PLINK2")), found, unname(Sys.which(c("plink", "plink2"))))
   bins <- unique(bins[nzchar(bins)])
   refs <- Filter(Negate(is.null), lapply(bins, function(b) {
-    tryCatch(og_plink_reference(plink_fixture(), plink_bin = b), error = function(e) NULL)
+    tryCatch(plink_reference_with(b), error = function(e) NULL)
   }))
   series <- vapply(refs, function(r) plink_dialect_of(r$plink_version)$name, "")
   list("1.9" = refs[series == "1.9"][1][[1]], "2" = refs[series == "2"][1][[1]])

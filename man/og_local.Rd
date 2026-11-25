@@ -4,15 +4,27 @@
 \alias{og_local}
 \title{Create a Local Source}
 \usage{
-og_local(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL)
+og_local(
+  gwas = NULL,
+  plink = NULL,
+  bfile = NULL,
+  ld_store = NULL,
+  geno_store = NULL,
+  inherit = NULL
+)
 }
 \arguments{
 \item{gwas}{The directory of each GWAS Store, or of each Store Release: a character vector,
-one element per GWAS Store.}
+one element per GWAS Store. \code{NULL} (the default) for none: an LD-only Local Source, which needs
+\code{bfile}. A Local Source with neither Store Releases nor an LD resource is refused (class
+\code{opengwasr_argument}).}
 
 \item{plink}{The PLINK 1.9 or 2 binary, for \code{bfile}: its path, or a command on your \code{PATH}, such
-as \code{"plink2"}. \code{NULL} finds one as \code{\link[=og_plink_reference]{og_plink_reference()}} does: genetics.binaRies, then \code{plink},
-then \code{plink2}, on your \code{PATH}.}
+as \code{"plink2"} (as in a shell, a name without a path separator is a command). \code{NULL} takes the
+first supported PLINK of the genetics.binaRies package, if it is installed, then \code{plink}, then
+\code{plink2}, on your \code{PATH}, skipping any that isn't supported; if there is none, it stops (class
+\code{opengwasr_plink_not_found}, with \code{skipped}: \code{plink_bin} and \code{version} of each one skipped) and
+says how to install it.}
 
 \item{bfile}{A PLINK binary fileset's prefix (without \code{.bed}, \code{.bim} or \code{.fam}): the Source's LD
 resource, a PLINK Reference.}
@@ -20,11 +32,14 @@ resource, a PLINK Reference.}
 \item{ld_store}{A downloaded LD Store. Not available yet.}
 
 \item{geno_store}{A downloaded Genotype Store. Not available yet.}
+
+\item{inherit}{A Local Source to build this one like, as described under "Inheriting".}
 }
 \value{
 An \code{og_local_source}. Its \code{releases} is a data frame with one row per Store Release:
-\code{store_id}, \code{release_id}, \code{format_version} and \code{path} (the Store Release's own directory). Its
-\code{ld} is its LD resource: an \code{og_plink_reference}, or \code{NULL}.
+\code{store_id}, \code{release_id}, \code{format_version} and \code{path} (the Store Release's own directory), with no
+rows for an LD-only Local Source. Its LD resource is read with \code{\link[=og_ld_resource]{og_ld_resource()}}: an
+\code{og_plink_reference}, or \code{NULL}.
 }
 \description{
 A Local Source answers queries from Store Releases downloaded to this machine, through
@@ -98,22 +113,52 @@ was found.
 \section{LD resource}{
 
 A Local Source carries the LD resource that answers LD for it (ADR 0006; see
-\code{vignette("local-source")}, "Clumping and LD"). Today that is a PLINK Reference: \code{bfile} names a
-PLINK binary fileset, and \code{plink} the PLINK binary that reads it, as \code{\link[=og_plink_reference]{og_plink_reference()}}
-takes them (it checks the fileset and finds PLINK when \code{plink} is \code{NULL}). \code{\link[=og_tophits]{og_tophits()}} then
-clumps on the fly with it (\code{r2} and \code{kb} are required), and \code{\link[=og_clump]{og_clump()}} and \code{\link[=og_ld_matrix]{og_ld_matrix()}}
-read it, each without \code{ld}; a call's \code{ld} overrides it. Without an LD resource, anything that
-needs LD is refused (class \code{opengwasr_ld_resource_required}), naming the LD resources in
-\code{e$forms} (\code{"bfile"}, \code{"ld_plink_reference"} and \code{"api_two_step"}: the API's LD Stores, by
-clumping on an API Source you name, \code{og_clump(og_api(), og_tophits(src, ids, clump = FALSE))})
-and, when clumping, \code{clump = FALSE} (\code{e$clump_false}): a Local Source never calls the API itself.
-An LD Store named in a call's \code{ld} is refused the same way (\code{opengwasr_local_unsupported}).
+\code{vignette("local-source")}, "Clumping and LD"), and the LD is chosen there and nowhere else. Today
+that is a \strong{PLINK Reference}: \code{bfile} names a PLINK binary fileset (\code{.bed}, \code{.bim}, \code{.fam}) on
+your machine, and \code{plink} the PLINK binary that reads it. \code{og_local()} checks the fileset (class
+\code{opengwasr_plink_reference_missing}, with \code{e$files}) and finds PLINK. \code{\link[=og_tophits]{og_tophits()}} then clumps on
+the fly with it (\code{r2} and \code{kb} are required: a PLINK Reference has no recorded defaults, class
+\code{opengwasr_plink_settings_required}), and \code{\link[=og_clump]{og_clump()}} and \code{\link[=og_ld_matrix]{og_ld_matrix()}} read it. Without an LD
+resource, anything that needs LD is refused (class \code{opengwasr_ld_resource_required}), naming the
+LD resources in \code{e$forms} (\code{"bfile"} and \code{"api_two_step"}: the API's LD Stores, by clumping on an
+API Source you name, \code{og_clump(og_api(), og_tophits(src, ids, clump = FALSE))}) and, when
+clumping, \code{clump = FALSE} (\code{e$clump_false}): a Local Source never calls the API itself.
+
+Variants are matched to a PLINK Reference by rsID, because PLINK References are usually on GRCh37
+while ALIDs are on GRCh38: from a data frame's \code{rsid} column, else looked up in the Source's Store
+Releases. A variant with no rsID, or whose rsID isn't in the \code{.bim}, is left out, and a message
+(class \code{opengwasr_plink_unmatched}, with \code{count}) says how many. PLINK 1.9 and PLINK 2
+(2.0.0-a.6.0 or later) both work, and give the same answer: each is asked for the same thing in its
+own words (an LD matrix of r with the reference's allele order kept: \verb{--r square --keep-allele-order} in 1.9, \verb{--r-unphased square ref-based} in 2; clumping with \code{--clump}, read
+from \code{.clumped} or \code{.clumps}). Its version is read once, here (\code{--version}), and kept on the PLINK
+Reference (\code{\link[=og_ld_resource]{og_ld_resource()}}) and in the provenance of what it computes (\code{plink_version}, beside
+\code{plink_bin}). A \code{plink} that is any other PLINK, such as 1.07 or an earlier PLINK 2, or a program
+that isn't PLINK, is refused (class \code{opengwasr_plink_unsupported}, with \code{version}, the version
+found or \code{NA}, \code{supported}, and \code{suggest}, a supported \code{"plink"} or \code{"plink2"} on your \code{PATH}, or
+\code{NULL}).
+
+\strong{An LD-only Local Source.} \code{og_local(bfile = )} with no \code{gwas} holds no Store Releases and
+needs no Python. It answers \code{\link[=og_clump]{og_clump()}} and \code{\link[=og_ld_matrix]{og_ld_matrix()}} for data you already have, such as
+top hits from the API Source, when PLINK can match the variants by rsID: a data frame with an
+\code{rsid} column, or rsIDs. ALIDs would need a GWAS Store to look up their rsIDs, so they are refused
+(class \code{opengwasr_gwas_store_required}, with the ALIDs in \code{e$alids}), naming \code{og_local(gwas = , bfile = )}. Every verb that reads Associations or Analyses refuses it with the same class.
 
 \code{ld_store} (a downloaded LD Store) and \code{geno_store} (a Genotype Store) are refused until
 opengwasr can read them (classes \code{opengwasr_ld_resource_unavailable} and
 \code{opengwasr_local_unsupported}, with \code{e$resource}). Giving more than one kind of LD resource is
 refused (class \code{opengwasr_ld_resource_mixed}, with \code{e$given}), and so is \code{plink} without \code{bfile}.
 An error about \code{bfile} or \code{plink} names it in \code{e$arg}.
+}
+
+\section{Inheriting}{
+
+\code{og_local(inherit = src, ...)} builds a Local Source like \code{src}: every argument given replaces the
+inherited one, and the rest come from \code{src}. Without \code{gwas}, its Store Releases are \code{src}'s, not
+opened again. Giving any of \code{plink}, \code{bfile}, \code{ld_store} and \code{geno_store} replaces \code{src}'s LD
+resource whole, never mixed with it: \code{og_local(inherit = src, bfile = ref)} gives \code{src}'s Store
+Releases a PLINK Reference, and \code{og_local(inherit = src, bfile = NULL)} drops it. What is given is
+checked as for any other Local Source. Anything but a Local Source as \code{inherit} is refused (class
+\code{opengwasr_argument}).
 }
 
 \examples{
@@ -124,8 +169,10 @@ src <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hy
 src
 # With a PLINK Reference as its LD resource, where PLINK is installed:
 bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
-if (!is.null(tryCatch(og_plink_reference(bfile), error = function(e) NULL))) {
-  src <- og_local(file.path(stores, "dense"), bfile = bfile)
+ld_only <- tryCatch(og_local(bfile = bfile), error = function(e) NULL)
+if (!is.null(ld_only)) {
+  og_ld_matrix(ld_only, c("rs5000", "rs1000"))
+  src <- og_local(inherit = src, bfile = bfile)
   og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
 }
 \dontshow{\}) # examplesIf}

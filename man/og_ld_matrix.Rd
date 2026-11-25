@@ -4,21 +4,12 @@
 \alias{og_ld_matrix}
 \title{LD matrices}
 \usage{
-og_ld_matrix(src, variants, ld = NULL, fill_below_t_far = FALSE)
+og_ld_matrix(src, variants, fill_below_t_far = FALSE)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}} (which reads its PLINK Reference, its rsIDs
-looked up in its Store Releases). \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
-looked up: \code{variants} are rsIDs, or a data frame with an \code{rsid} column. A lookup that is needed
-without a Source stops, with class \code{opengwasr_source_required}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}}, which carries the LD resource.}
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
-
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} for the Source's LD resource (\code{og_api(ld_store = )},
-\code{og_local(bfile = )}), else (API Source) to match the Assigned Ancestry of the Associations'
-Analyses (refused for Unassigned or mixed ancestries, and for variants given without
-Analyses). A Local Source with neither is refused (\code{opengwasr_ld_resource_required}).}
 
 \item{fill_below_t_far}{Set pairs below the Far Threshold to 0, as above.}
 }
@@ -34,7 +25,7 @@ an LD Store. See \code{vignette("ld")}.
 The matrix is named by ALID, on both dimensions; the sign of r refers to the first allele in each
 name. \code{variants} are ALIDs or rsIDs (an rsID stands for every ALID it names), or a data frame of
 Associations, whose \code{alid} column names the variants and whose Analyses' Assigned Ancestry chooses
-the LD Store when \code{ld} is \code{NULL}. A variant the LD Store doesn't hold is left out of the matrix,
+the LD Store when the Source has no LD resource. A variant the LD Store doesn't hold is left out of the matrix,
 with a warning of class \code{opengwasr_ld_absent_variants} (\code{count}, \code{ids}); they are in
 \code{og_provenance(m)$absent}.
 
@@ -46,11 +37,19 @@ With \code{fill_below_t_far = TRUE}, a pair of variants on one chromosome, withi
 \code{far_bp} of each other, that it doesn't hold (so its r² is below the LD Store's Far Threshold)
 is set to 0. Pairs further apart, or on different chromosomes, stay \code{NA}.
 
-With a PLINK Reference as \code{ld} (see \code{\link[=og_plink_reference]{og_plink_reference()}}), PLINK computes the matrix on your
-machine. Variants are matched to the reference by rsID (an ALID by its \code{rsid} column, if
-\code{variants} is a data frame that has one, else by the GWAS Stores' variant table); those with no
-rsID, or not in the reference, are left out, with a message (class \code{opengwasr_plink_unmatched},
-\code{count}). The matrix holds every pair, in the order of \code{variants}, and is named
+The LD is the Source's LD resource: on the API Source its \code{ld_store} (\code{og_api(ld_store = )}), else
+the LD Store matching the Assigned Ancestry of the Associations' Analyses (refused for Unassigned
+or mixed ancestries, and for variants given without Analyses). For other LD, pass another Source,
+such as \code{og_api(inherit = src, ld_store = "EUR")}.
+
+On a Local Source, PLINK computes the matrix on your machine from its PLINK Reference
+(\code{og_local(bfile = )}). Variants are matched to the reference by rsID (an ALID by its \code{rsid}
+column, if \code{variants} is a data frame that has one, else by the Source's Store Releases' variant
+table); those with no rsID, or not in the reference, are left out, with a message (class
+\code{opengwasr_plink_unmatched}, \code{count}). An LD-only Local Source (\code{og_local(bfile = )} with no
+\code{gwas}) has nothing to look an ALID up in, so ALIDs without an \code{rsid} column are refused (class
+\code{opengwasr_gwas_store_required}, with the ALIDs in \code{alids}). A Local Source with no LD resource is
+refused (\code{opengwasr_ld_resource_required}). The matrix holds every pair, in the order of \code{variants}, and is named
 \verb{<rsid>_<allele>_<allele>} with the reference's alleles: the sign of r refers to the first one.
 \code{fill_below_t_far} doesn't apply. Provenance's \code{ld} is the reference's path.
 
@@ -60,8 +59,8 @@ refused by opengwasr (\code{opengwasr_ld_unmatched}, with the LD Stores in \code
 }
 \examples{
 \dontrun{
-src <- og_api()
-m <- og_ld_matrix(src, c("16:53772541:A:G", "16:53767042:C:T"), ld = "EUR")
+src <- og_api(ld_store = "EUR")
+m <- og_ld_matrix(src, c("16:53772541:A:G", "16:53767042:C:T"))
 og_provenance(m)$ld
 }
 }

@@ -23,8 +23,9 @@ API reattached you to a Job it already had.
 for \code{\link[=og_clump]{og_clump()}}'s one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
 (the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants),
 and \code{clumps}: \code{"computed"} (clumped on the fly, as every clumping is today) or, once Store
-Releases carry them, \code{"stored"}. \code{ld_from} says where the LD came from: \code{"call"} (\code{ld}),
-\code{"source"} (the Source's LD resource) or \code{"ancestry"} (each Analysis's Assigned Ancestry).
+Releases carry them, \code{"stored"}. \code{ld_from} says where the LD came from: \code{"source"} (the
+Source's LD resource) or \code{"ancestry"} (each Analysis's Assigned Ancestry, on an API Source with
+none).
 \item LD results: \code{ld}, \code{ld_choice}, \code{ld_from} (as above) and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
 }
 

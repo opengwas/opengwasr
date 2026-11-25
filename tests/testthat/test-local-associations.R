@@ -147,12 +147,20 @@ test_that("a local threshold reads the indexed tier at or above it, and refuses 
   e <- expect_error(og_tophits(three(), "s:bmi_irn", threshold = 1e-3, clump = FALSE),
                     class = "opengwasr_unsupported_threshold")
   expect_s3_class(e, "opengwasr_refusal")
-  expect_equal(e$indexed_thresholds, c(5e-8, 5e-6, 5e-4))
-  expect_error(og_tophits(three(), "s:bmi_irn", threshold = 1, clump = FALSE), class = "opengwasr_invalid_query")
+  # A list, as the API Source carries the API's body field.
+  expect_identical(e$indexed_thresholds, list(5e-8, 5e-6, 5e-4))
+  # A threshold outside (0, 1) is refused as the API's body model refuses it (ogdb-api schemas.py:225,
+  # errors.py:56-64): `invalid_request`.
+  e <- expect_error(og_tophits(three(), "s:bmi_irn", threshold = 1, clump = FALSE), class = "opengwasr_invalid_request")
+  expect_identical(e$api_error, "invalid_request")
+  # The API's message, never reworded (ADR 0002); what was wrong is in `reason`.
+  expect_identical(conditionMessage(e), "Malformed request")
+  expect_match(e$reason, "threshold")
   # A Hybrid release's own tiers (its overflow's, ogquery facade.py:785) are found too.
   e <- expect_error(og_tophits(three(), "hyb:trait_a", threshold = 1e-3, clump = FALSE),
                     class = "opengwasr_unsupported_threshold")
-  expect_equal(e$indexed_thresholds, c(5e-8, 5e-6, 5e-4))
+  # A list, as the API Source carries the API's body field.
+  expect_identical(e$indexed_thresholds, list(5e-8, 5e-6, 5e-4))
 })
 
 test_that("observed_only = TRUE leaves out a local Imputed top hit", {
@@ -228,8 +236,27 @@ test_that("a local range takes observed_only, and refuses a chromosome the API r
   expect_equal(all$association_status, "imputed")
   expect_equal(nrow(og_range(three(), "residual-rag:a", chromosome = "1", start = 1001500, end = 1001500,
                              observed_only = TRUE)), 0)
-  expect_error(og_range(three(), "s:bmi_irn", chromosome = "27", start = 1, end = 10), class = "opengwasr_invalid_query")
-  expect_error(og_range(three(), "s:bmi_irn", chromosome = "Z", start = 1, end = 10), class = "opengwasr_invalid_query")
+  # A chromosome other than 1-22, X, Y or MT is refused as the API's body model refuses it
+  # (ogdb-api schemas.py:35-44 and 166, errors.py:56-64): `invalid_request`.
+  e <- expect_error(og_range(three(), "s:bmi_irn", chromosome = "27", start = 1, end = 10), class = "opengwasr_invalid_request")
+  expect_identical(e$api_error, "invalid_request")
+  expect_identical(conditionMessage(e), "Malformed request")
+  expect_match(e$reason, "chromosome '27'", fixed = TRUE)
+  expect_error(og_range(three(), "s:bmi_irn", chromosome = "Z", start = 1, end = 10), class = "opengwasr_invalid_request")
+})
+
+test_that("a local PheWAS threshold or limit out of range is refused as the API's body model refuses it", {
+  skip_if_no_local()
+  # ogdb-api schemas.py:192-194 (threshold in (0, 1], limit 1-10,000), refused before anything else
+  # with 400 invalid_request "Malformed request" (main.py:773-784, errors.py:56-64).
+  e <- expect_error(og_phewas(three(), "1:9000:A:G", limit = 0), class = "opengwasr_invalid_request")
+  expect_identical(e$api_error, "invalid_request")
+  expect_identical(conditionMessage(e), "Malformed request")
+  expect_match(e$reason, "limit")
+  e <- expect_error(og_phewas(three(), "1:9000:A:G", threshold = 0), class = "opengwasr_invalid_request")
+  expect_identical(e$api_error, "invalid_request")
+  expect_identical(conditionMessage(e), "Malformed request")
+  expect_match(e$reason, "threshold")
 })
 
 # What the API refuses, refused the same way ------------------------------------------------------

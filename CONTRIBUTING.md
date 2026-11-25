@@ -30,6 +30,33 @@ Test files run in parallel (`Config/testthat/parallel: true`), so a file must no
 
 If an assertion can't pass in-process, it is a transport test: move it to socket mode, don't weaken it. Live tests and the vignettes' httptest2 replays are unaffected.
 
+### Parity with the real Data API
+
+`test-parity.R` checks that the API Source and a Local Source return the same data frame for each query of a golden set, and that each returns what the real Data API would return. Three files in `tests/testthat/fixtures/parity/` hold it:
+
+- **`queries.json`, the golden set.** Each query is an opengwasr call (`verb`, `args`) over a source set of the example Store Releases in `inst/stores` (`source`). It also lists the Data API requests the API Source makes for that call (`requests`): their endpoints and bodies, recorded once from opengwasr's own requests and checked by hand.
+- **`generate.py`, the generator.** It answers every request as the real Data API would. It follows ogdb-api's own code, citing its lines, and reads the releases through ogquery's public API. It never calls opengwasr.
+- **`answers.json`, its output.** The header names the ogquery version, the ogdb-api commit and the bundle the answers came from.
+
+`local_fake_api(parity = "<source set>")` serves those answers. A request without a generated answer gets a 500 that names it.
+
+Regenerate the answers from the package root, with a Python that has ogquery:
+
+```sh
+python -I tests/testthat/fixtures/parity/generate.py
+```
+
+Regenerate them, and review the diff, whenever any of these change:
+
+- the golden set;
+- the example Store Releases;
+- the ogquery version;
+- the ogdb-api commit the generator follows. Update `OGDB_API_COMMIT` and the cited lines first.
+
+When opengwasr's requests for a golden query change, the parity tests fail with the fake's 500. Record the new request in `queries.json`, check that its body is what the call means, and regenerate.
+
+A parity failure is a defect in one of the two Sources, or a change in the real API. It is never something to adjust in the fake. When something is known to differ, `test-parity.R` lists it under "Known differences", with the issue that resolves it.
+
 ## Adding a query
 
 A query that returns Associations is a thin spec over one engine, `association_query()` in `R/association-query.R`. The engine owns the pipeline: the call's deadline, Store Releases and Analyses, the original-units check, rsID resolution, splitting into Jobs and running them (or only submitting them, under `og_submit()`), combining the pieces, the Jobs' row counts and truncation, shaping the columns, ordering and provenance. A query method checks the arguments only it has, then calls the engine with its endpoint and what is specific to it. It never re-implements a step of that pipeline. `og_tophits()` is the model:

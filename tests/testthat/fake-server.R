@@ -361,11 +361,65 @@ fake_variants <- function() {
        variant("18:60161902:C:T", "rs6567160"))
 }
 
-# 1 to 22, then X, Y and MT, as the API orders genome positions.
+# 1 to 22, then X, Y and MT, then any other name, as the API orders genome positions
+# (ogdb-api ordering.py `chromosome_rank`).
 fake_chromosome_rank <- function(chromosome) {
   rank <- suppressWarnings(as.numeric(chromosome))
-  if (is.na(rank)) rank <- c(X = 23, Y = 24, MT = 25)[[chromosome]]
-  rank
+  if (!is.na(rank) && rank %in% 1:22) return(rank)
+  c(X = 23, Y = 24, MT = 25)[chromosome] %|na|% 100
+}
+`%|na|%` <- function(x, y) if (is.na(x)) y else unname(x)
+
+# The real Data API's rules the fake's Job routes follow (ogdb-api at 9d36e76; test-parity.R tests
+# each against the API's own literals).
+
+# Rows in the API's one order (ordering.py `row_key`, planner.py:258, query_operations.py:168): GWAS
+# Store, Store Release and Analysis, then genome order (chromosome, position, ALID). With
+# `strongest`, |z| descending (a missing z last) before genome order: top hits
+# (query_operations.py:202).
+fake_api_order <- function(rows, strongest = FALSE) {
+  if (length(rows) < 2) return(rows)
+  field <- function(name) vapply(rows, function(r) as.character(r[[name]] %||% ""), "")
+  strength <- vapply(rows, function(r) fake_strength(r$z), 0)
+  order <- order(field("store_id"), field("release_id"), field("analysis_id"),
+                 if (strongest) -strength else rep(0, length(rows)),
+                 vapply(rows, function(r) fake_chromosome_rank(r$chromosome), 0),
+                 vapply(rows, function(r) as.numeric(r$position), 0), field("alid"), method = "radix")
+  rows[order]
+}
+
+# |z|, a missing one -1 (top_hits.py `strength`).
+fake_strength <- function(z) {
+  z <- suppressWarnings(as.numeric(z))
+  if (is.na(z)) -1 else abs(z)
+}
+
+# Whether a row's two-sided p is at most `threshold`, as the API cuts it (top_hits.py `significant`
+# and `at_threshold`): |z| >= z_critical(threshold), a missing z never; a threshold of 1 keeps every
+# row (PheWAS only: top hits refuse 1).
+fake_clears <- function(row, threshold) {
+  threshold >= 1 || fake_strength(row$z) >= fake_z_critical(threshold)
+}
+
+# ogquery stats.py `z_critical`: -qnorm(threshold / 2).
+fake_z_critical <- function(threshold) -stats::qnorm(threshold / 2)
+
+# The top-hit tiers every Store Release of the fake stores (ogquery's TOP_HIT_THRESHOLDS, which
+# every real Store Release holds).
+fake_top_hit_tiers <- c(5e-8, 5e-6, 5e-4)
+
+# Each Association once (planner.py:259-266): of rows with the same GWAS Store, Store Release,
+# Analysis and ALID, the first. The fake holds no two that differ, which the API would refuse.
+fake_distinct <- function(rows) {
+  key <- vapply(rows, function(r) paste(r$store_id, r$release_id, r$analysis_id, r$alid), "")
+  rows[!duplicated(key)]
+}
+
+# Whether a range's chromosome is one of 1-22, X, Y or MT (schemas.py `check_chromosome`, with
+# ogquery's `normalise_chromosome`: a `chr` prefix, 23-26 and M are aliases).
+fake_primary_chromosome <- function(chromosome) {
+  text <- toupper(sub("^chr", "", trimws(chromosome), ignore.case = TRUE))
+  text %in% c(as.character(1:22), "X", "Y", "MT", "23", "24", "25", "26", "M")
 }
 
 # Associations of the variants above, per Analysis, as the API's result rows. The numbers are
@@ -389,7 +443,10 @@ fake_associations <- function() {
       cad("18:60161902:C:T", "rs6567160", 0.25, 5.5, 0.01, -7.5, "observed"),
       # The variants of `fake_tophits()`'s BMI hits, for the vignette's BMI-to-CAD workflow.
       cad("16:53767042:A:C", "rs1558902", 0.4, 2, 0.01, -1.4, "imputed"),
-      cad("16:53800000:A:G", "rs9939609", 0.3, 4, 0.01, -4.2, "observed")
+      cad("16:53800000:A:G", "rs9939609", 0.3, 4, 0.01, -4.2, "observed"),
+      # A missing Association of a Reference-Completed release: no statistics (NaN, which the fake
+      # writes "NaN"; the real API writes NaN, which isn't JSON: opengwas/ogdb-api#193) and EAF ".".
+      cad("21:5000:A:G", "rs999025", ".", NaN, NaN, NaN, "missing")
     ),
     "OGS-00011:GCST90029007" = list(
       bmi("5:75701728:A:AAAAT", "rs34159589", 0.37, -12, 0.002, -33, "imputed"),
@@ -597,7 +654,18 @@ fake_api <- function(world = fake_world()) {
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     if (parity_job(req, res, "/api/tophits", body)) return()
     threshold <- body$threshold %||% 5e-8
-    if (threshold > 5e-4) return(fail(req, res, "unsupported_threshold"))
+    # Each Store Release's tiers are checked when the Job is submitted (query_operations.py:101-112):
+    # none at or above the threshold is refused, naming the first such release's GWAS Store.
+    if (!any(fake_top_hit_tiers >= threshold)) {
+      store <- body$releases[[1]]$store_id %||% "configured"
+      message <- paste0("threshold must be at most ", formatC(max(fake_top_hit_tiers), format = "g"),
+                        ", the loosest p-value the Top-Hit Index of ", store, " holds")
+      return(fail(req, res, "unsupported_threshold", edit = function(b) {
+        b$message <- b$detail$message <- message
+        b$indexed_thresholds <- b$detail$indexed_thresholds <- as.list(fake_top_hit_tiers)
+        b
+      }))
+    }
     limit <- body$limit %||% 1000L
     ids <- unlist(body$analyses)
     # Clumped (`clump`): every hit at the threshold is clumped in the LD Store (by default EUR, r^2
@@ -614,10 +682,12 @@ fake_api <- function(world = fake_world()) {
     }
     rows <- list()
     truncated <- FALSE
-    for (id in ids) {
+    for (id in unique(ids)) {
       hits <- world$tophits[[id]] %||% list()
       hits <- Filter(function(h) h$association_status == "observed" || !isTRUE(body$observed_only), hits)
-      hits <- Filter(function(h) 10^h$log10_p <= threshold || h$log10_p < -300, hits)
+      hits <- Filter(function(h) fake_clears(h, threshold), hits)
+      # Each Analysis's strongest first, ties in genome order, before `limit` (top_hits.py:18-37).
+      hits <- fake_api_order(hits, strongest = TRUE)
       if (!is.null(clump)) {
         held <- Filter(function(h) fake_ld_holds(h$alid), hits)
         alids <- vapply(held, function(h) h$alid, "")
@@ -631,6 +701,7 @@ fake_api <- function(world = fake_world()) {
       if (length(hits) > limit) truncated <- TRUE
       rows <- c(rows, utils::head(hits, limit))
     }
+    if (is.null(clump)) rows <- fake_api_order(rows, strongest = TRUE)
     metadata <- list(threshold = threshold, observed_only = isTRUE(body$observed_only),
                      total = length(rows), truncated = truncated)
     if (!is.null(clump)) {
@@ -640,7 +711,7 @@ fake_api <- function(world = fake_world()) {
     submit_job(req, res, "/api/tophits", body, rows, metadata)
   })
   # Variants in Analyses. `variants` are rsIDs or ALIDs, as the API takes them; an rsID stands for
-  # every ALID it names. Rows come in the order of the Analyses asked for, then genome position .
+  # every ALID it names. Rows come in the API's order (fake_api_order()), each Association once.
   app$post("/api/associations", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
@@ -653,13 +724,13 @@ fake_api <- function(world = fake_world()) {
     # no rows (and the tests that look at the submitted body see ALIDs only).
     alids <- unlist(body$variants)
     rows <- list()
-    for (id in unlist(body$analyses %||% body$ids)) {
+    for (id in unique(unlist(body$analyses %||% body$ids))) {
       hits <- Filter(function(h) h$alid %in% alids, world$associations[[id]] %||% list())
       # The API's own default is to leave Imputed Associations out.
       hits <- Filter(function(h) h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE), hits)
-      rows <- c(rows, hits[order(vapply(hits, function(h) fake_chromosome_rank(h$chromosome) * 1e9 + h$position, 0))])
+      rows <- c(rows, hits)
     }
-    submit_job(req, res, "/api/associations", body, rows, NULL)
+    submit_job(req, res, "/api/associations", body, fake_distinct(fake_api_order(rows)), NULL)
   })
   # rsIDs to the variants they name, in each Store Release asked for; one row per ALID, so a
   # multiallelic rsID gives several. An rsID no variant table holds gives no row.
@@ -794,7 +865,8 @@ fake_api <- function(world = fake_world()) {
   })
   # One variant across Analyses (`variant` is an ALID: opengwasr resolves rsIDs itself). The rows are
   # the variant's Associations in the Analyses of the Store Releases asked for (or of `analyses`) at
-  # p <= `threshold`, strongest first, at most `limit`; `total` counts those that pass.
+  # p <= `threshold` (fake_clears()), at most `limit`, in the API's order; `total` counts those that
+  # pass.
   app$post("/api/phewas", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
@@ -803,23 +875,33 @@ fake_api <- function(world = fake_world()) {
     problems <- body_problems(req, body, "/api/phewas")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     if (parity_job(req, res, "/api/phewas", body)) return()
-    wanted <- vapply(body$releases, function(r) paste0(r$store_id, "/", r$release_id), "")
-    held <- world$associations[unlist(body$analyses) %||% names(world$associations)]
-    rows <- list()
-    for (id in names(held)) {
-      rows <- c(rows, Filter(function(h) {
-        h$alid == body$variant && paste0(h$store_id, "/", h$release_id) %in% wanted &&
-          10^h$log10_p <= (body$threshold %||% 1e-8) &&
-          (h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE))
-      }, held[[id]]))
-    }
+    threshold <- body$threshold %||% 1e-8
     limit <- body$limit %||% 1000L
-    submit_job(req, res, "/api/phewas", body, utils::head(rows, limit),
-               list(threshold = body$threshold %||% 1e-8, observed_only = isTRUE(body$observed_only %||% TRUE),
-                    total = length(rows), returned = min(length(rows), limit), truncated = length(rows) > limit))
+    held <- world$associations[unique(unlist(body$analyses)) %||% names(world$associations)]
+    # Store Release by Store Release (query_operations.py:155-172): its Associations of the variant
+    # at the threshold, counted into `total`, its first `limit` kept; then all of them in the API's
+    # order, cut to `limit`.
+    total <- 0L
+    rows <- list()
+    for (release in body$releases) {
+      found <- list()
+      for (id in names(held)) {
+        found <- c(found, Filter(function(h) {
+          h$alid == body$variant && identical(h$store_id, release$store_id) && identical(h$release_id, release$release_id) &&
+            fake_clears(h, threshold) && (h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE))
+        }, held[[id]]))
+      }
+      total <- total + length(found)
+      rows <- c(rows, utils::head(found, limit))
+    }
+    rows <- utils::head(fake_api_order(rows), limit)
+    submit_job(req, res, "/api/phewas", body, rows,
+               list(variant = body$variant, threshold = threshold, observed_only = isTRUE(body$observed_only %||% TRUE),
+                    total = total, returned = length(rows), truncated = total > length(rows)))
   })
-  # Every Association in a window of one chromosome, in the Analyses asked for, Analysis by Analysis in
-  # genome order. A window over 10 Mb is refused as the API refuses it, unless limits are lifted.
+  # Every Association in a window of one chromosome, in the Analyses asked for, in the API's order. A
+  # chromosome other than 1-22, X, Y or MT, and a window over 10 Mb, are refused as the API refuses
+  # them (the window unless limits are lifted).
   app$post("/api/associations/range", function(req, res) {
     if (!authorised(req, res) || !needs_user(req, res)) return()
     world <- req$app$locals$world
@@ -828,15 +910,19 @@ fake_api <- function(world = fake_world()) {
     problems <- body_problems(req, body, "/api/associations/range")
     if (length(problems) > 0) return(fail(req, res, "invalid_request", problems = problems))
     if (parity_job(req, res, "/api/associations/range", body)) return()
+    # The chromosome is checked with the body, before anything else: refused as a malformed request.
+    if (!fake_primary_chromosome(body$chromosome)) {
+      return(fail(req, res, "invalid_request", problems = "chromosome is not one of 1-22, X, Y or MT"))
+    }
     if (!isTRUE(world$mode$lift_limits) && body$end - body$start + 1 > 1e7) return(fail(req, res, "request_too_large"))
     rows <- list()
-    for (id in unlist(body$analyses %||% body$ids)) {
+    for (id in unique(unlist(body$analyses %||% body$ids))) {
       hits <- Filter(function(h) h$chromosome == body$chromosome && h$position >= body$start && h$position <= body$end &&
                        (h$association_status == "observed" || !isTRUE(body$observed_only %||% TRUE)),
                      c(world$associations[[id]], world$ranges[[id]]))
-      rows <- c(rows, hits[order(vapply(hits, function(h) h$position, 0))])
+      rows <- c(rows, hits)
     }
-    submit_job(req, res, "/api/associations/range", body, rows, NULL)
+    submit_job(req, res, "/api/associations/range", body, fake_distinct(fake_api_order(rows)), NULL)
   })
   # Positions (`chromosome:position`, a `chr` prefix optional) to the variants there, in each Store
   # Release asked for: one row per ALID, so a position holding two alleles gives several.

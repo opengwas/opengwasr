@@ -41,6 +41,15 @@
 #    label_from_source) are NA on a Local Source (#32's ruling): compared only on the shared
 #    columns, and those five asserted NA. A Local Source's further analyses.tsv columns follow
 #    the API's and aren't compared.
+#  * Capabilities. The bundled copies of the example releases lack variants.tsv.gz, which
+#    ogdb-api's `_capabilities` (releases.py:137-171) requires for variant lookups and PheWAS. The
+#    bundle's own releases have it, so the generator takes every capability as present.
+#  * A request the API's body model refuses. The API's per-endpoint routes validate the body as
+#    its model before anything else, so a range chromosome other than 1-22, X, Y or MT (and a
+#    threshold or limit out of range) is 400 `invalid_request`, "Malformed request" (ogdb-api
+#    main.py:773-784, errors.py:56-64). A Local Source refuses these with `opengwasr_invalid_query`
+#    (local_invalid_query() in R/local-request.R). The golden query range-chromosome-refused
+#    asserts the difference (`local_refusal_differs`) until that is fixed: reported on #35.
 
 fake_three <- local_fake_api(n_synthetic = 0, parity = "three")
 fake_completed <- local_fake_api(n_synthetic = 0, parity = "completed")
@@ -57,6 +66,10 @@ parity_queries <- local({
 })
 parity_answers <- jsonlite::read_json(file.path(parity_dir, "answers.json"), simplifyVector = FALSE)
 names(parity_queries) <- vapply(parity_queries, `[[`, "", "name")
+
+# Golden queries a Local Source refuses with another class than the API's (the known difference
+# above), and that class.
+local_refusal_differs <- c(`range-chromosome-refused` = "opengwasr_invalid_query")
 
 # The columns og_analyses() gives that only the catalogue makes (NA on a Local Source).
 catalogue_only <- c("status", "listed", "trait_class", "ancestry_category", "label_from_source")
@@ -235,6 +248,12 @@ for (query in parity_queries) local({
       expect_generated_analyses(result, query)
       # The catalogue's own columns are NA locally (#32).
       for (name in catalogue_only) expect_true(all(is.na(result$value[[name]])), info = name)
+    } else if (query$name %in% names(local_refusal_differs)) {
+      # Known difference: the API answers `invalid_request` (generated_differences() says so).
+      expect_s3_class(result$value, local_refusal_differs[[query$name]])
+      expect_identical(generated_differences(result, query),
+                       paste0("expected the refusal `", generated_answer(query)$error$body$error, "`, got ",
+                              local_refusal_differs[[query$name]]))
     } else {
       expect_identical(generated_differences(result, query), character())
     }
@@ -252,6 +271,9 @@ for (query in parity_queries) local({
       shared <- setdiff(names(api$value), catalogue_only)
       expect_identical(names(here$value)[seq_along(names(api$value))], names(api$value))
       expect_identical(here$value[shared], api$value[shared])
+    } else if (query$name %in% names(local_refusal_differs)) {
+      expect_s3_class(api$value, "opengwasr_invalid_request")
+      expect_s3_class(here$value, local_refusal_differs[[query$name]])
     } else {
       expect_identical(comparable(here$value), comparable(api$value))
     }
@@ -288,4 +310,112 @@ test_that("known difference: s/r's infinite SE gives a NaN pval locally (the API
   x <- og_associations(local_source_of(c("dense", "ragged", "hyb")), "1:1000:A:G", "s:bmi_irn")
   expect_identical(x$se, Inf)
   expect_true(is.nan(x$pval))
+})
+
+# The fake's own Job routes follow the real API ---------------------------------------------------
+# Where the golden set touches them, the fake's routes over its usual world make the real API's
+# cuts, order, refusals and counts (ogdb-api at 9d36e76), so the rest of the suite tests against
+# the real rules. Each is checked here against a literal from the API's code or the generator.
+
+fake_plain <- local_fake_api(n_synthetic = 0)
+plain_cad <- "OGS-00011:GCST003116"
+plain_bmi <- "OGS-00011:GCST90029007"
+plain_releases <- list(list(store_id = "OGS-00011", release_id = "OGS-00011-completed"))
+
+# A Job on the plain fake, through its routes alone (no opengwasr): its rows (each a list) and
+# result metadata, or the error body it was refused with.
+plain_job <- function(endpoint, body) {
+  submitted <- raw_api(fake_plain$url(), fake_key, endpoint, body)
+  if (is.null(submitted$job_id)) return(list(error = submitted))
+  status <- raw_api(fake_plain$url(), fake_key, paste0("api/jobs/", submitted$job_id))
+  page <- raw_api(fake_plain$url(), fake_key, paste0("api/jobs/", submitted$job_id, "/result"))
+  lines <- strsplit(page$ndjson, "\n", fixed = TRUE)[[1]]
+  list(rows = lapply(lines, jsonlite::parse_json), metadata = status$result$metadata)
+}
+alids_of <- function(job) vapply(job$rows, `[[`, "", "alid")
+
+test_that("the fake orders rows as the API does: GWAS Store, Release, Analysis, then genome order", {
+  # ordering.py `row_key`: GCST003116 sorts before GCST90029007, whatever order they are asked in.
+  job <- plain_job("api/associations", list(variants = list("18:60161902:C:T", "5:75701728:A:AAAAT"),
+                                            analyses = list(plain_bmi, plain_cad), observed_only = FALSE,
+                                            releases = plain_releases))
+  expect_identical(vapply(job$rows, `[[`, "", "analysis_id"), c("GCST003116", "GCST003116", "GCST90029007", "GCST90029007"))
+  expect_identical(alids_of(job), rep(c("5:75701728:A:AAAAT", "18:60161902:C:T"), 2))
+  # Top hits: each Analysis strongest first, ties in genome order (query_operations.py:202).
+  job <- plain_job("api/tophits", list(analyses = list(plain_bmi, plain_cad), threshold = 5e-8, limit = 1000L,
+                                       observed_only = FALSE, releases = plain_releases))
+  expect_identical(vapply(job$rows, function(r) r$z, 0), c(-20, 16, 10, -8, 5.6, -40, 6))
+})
+
+test_that("the fake cuts at |z| >= z_critical(threshold), as the API and the Top-Hit Index do", {
+  # The generator's z_critical(5e-8), from ogquery, which the API cuts with.
+  expect_equal(server_env$fake_z_critical(5e-8), parity_answers$header$z_critical[["5e-08"]], tolerance = 1e-12)
+  # CAD's rs1333049 has z 5.6 (two-sided p 2.14e-8) but log10_p -7.5: |z| decides, not log10_p.
+  top <- function(threshold) {
+    alids_of(plain_job("api/tophits", list(analyses = list(plain_cad), threshold = threshold, limit = 1000L,
+                                           observed_only = FALSE, releases = plain_releases)))
+  }
+  expect_true("9:22115503:A:G" %in% top(2.2e-8))
+  expect_false("9:22115503:A:G" %in% top(2.1e-8))
+})
+
+test_that("the fake refuses a top-hits threshold looser than every tier, as the API does", {
+  job <- plain_job("api/tophits", list(analyses = list(plain_cad), threshold = 1e-3, limit = 1000L,
+                                       observed_only = FALSE, releases = plain_releases))
+  # query_operations.py:107-110: the message names the release's GWAS Store and its loosest tier.
+  expect_identical(job$error$error, "unsupported_threshold")
+  expect_identical(job$error$message,
+                   "threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds")
+  expect_identical(unlist(job$error$indexed_thresholds), c(5e-8, 5e-6, 5e-4))
+  # Another GWAS Store's release is named for its own.
+  job <- plain_job("api/tophits", list(analyses = list("OGS-00009:ukb-b-19953"), threshold = 1e-3, limit = 1000L,
+                                       observed_only = FALSE,
+                                       releases = list(list(store_id = "OGS-00009", release_id = "OGS-00009-completed"))))
+  expect_identical(job$error$message,
+                   "threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00009 holds")
+  # The body model refuses a threshold outside (0, 1) first (schemas.py:225, errors.py:64).
+  job <- plain_job("api/tophits", list(analyses = list(plain_cad), threshold = 1, limit = 1000L,
+                                       observed_only = FALSE, releases = plain_releases))
+  expect_identical(job$error$error, "invalid_request")
+})
+
+test_that("the fake's PheWAS counts every match in `total` and cuts the ordered rows at `limit`", {
+  phewas <- function(threshold, limit) {
+    plain_job("api/phewas", list(variant = "16:53767042:C:T", threshold = threshold, limit = limit,
+                                 observed_only = FALSE, releases = plain_releases))
+  }
+  # CAD (z 3.08) and BMI (z 38) hold it; threshold 1 keeps both (top_hits.py `significant`).
+  job <- phewas(1, 1L)
+  expect_identical(alids_of(job), "16:53767042:C:T")
+  expect_identical(job$rows[[1]]$analysis_id, "GCST003116")
+  expect_identical(job$metadata[c("variant", "total", "returned", "truncated")],
+                   list(variant = "16:53767042:C:T", total = 2L, returned = 1L, truncated = TRUE))
+  # At 1e-8 (z_critical about 5.73) only BMI's clears.
+  job <- phewas(1e-8, 1000L)
+  expect_identical(vapply(job$rows, `[[`, "", "analysis_id"), "GCST90029007")
+  expect_identical(job$metadata$total, 1L)
+})
+
+test_that("the fake refuses a range on a chromosome other than 1-22, X, Y or MT, as the API does", {
+  range <- function(chromosome) {
+    plain_job("api/associations/range", list(analyses = list(plain_cad), chromosome = chromosome, start = 1L,
+                                             end = 1000L, observed_only = FALSE, releases = plain_releases))
+  }
+  # schemas.py:35-44 and 166, refused by the body model (errors.py:64).
+  expect_identical(range("27")$error$error, "invalid_request")
+  expect_identical(range("Z")$error$error, "invalid_request")
+  expect_null(range("X")$error)
+  expect_null(range("23")$error)
+})
+
+test_that("the fake sends each Association once, and a missing one with NaN statistics and EAF \".\"", {
+  # An Analysis named twice reads it once (releases.py `local_analysis_ids`, planner.py:259-266).
+  job <- plain_job("api/associations", list(variants = list("18:60161902:C:T"), analyses = list(plain_cad, plain_cad),
+                                            observed_only = FALSE, releases = plain_releases))
+  expect_identical(alids_of(job), "18:60161902:C:T")
+  # Through the API Source: the missing row's statistics are NaN, its EAF NA.
+  x <- og_associations(fake_source(fake_plain), "21:5000:A:G", plain_cad, releases = "OGS-00011/OGS-00011-completed")
+  expect_identical(x$association_status, "missing")
+  expect_true(is.nan(x$z) && is.nan(x$se) && is.nan(x$beta))
+  expect_identical(x$eaf, NA_real_)
 })

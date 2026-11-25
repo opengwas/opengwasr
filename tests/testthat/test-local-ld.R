@@ -54,7 +54,7 @@ test_that("og_local(gwas, plink, bfile) holds the PLINK Reference og_plink_refer
   expect_identical(dense_plink()$ld, ref)
   shown <- format(src)
   expect_true(paste0("• LD resource: PLINK Reference ", ref$path) %in% shown)
-  expect_true(paste0("  PLINK: ", ref$plink_bin) %in% shown)
+  expect_true(paste0("  PLINK ", ref$plink_version, ": ", ref$plink_bin) %in% shown)
   bare <- dense_bare()
   expect_null(bare$ld)
   expect_true("• LD resource: none" %in% format(bare))

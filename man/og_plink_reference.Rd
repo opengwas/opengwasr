@@ -9,13 +9,15 @@ og_plink_reference(path, plink_bin = NULL)
 \arguments{
 \item{path}{The fileset's prefix, without \code{.bed}, \code{.bim} or \code{.fam}.}
 
-\item{plink_bin}{The path of a PLINK 1.9 binary. \code{NULL} looks for one in the genetics.binaRies
-package if it is installed, then on your \code{PATH}; if there is none, it stops (class
+\item{plink_bin}{The PLINK 1.9 or 2 binary: its path, or a command on your \code{PATH}, such as
+\code{"plink2"}. \code{NULL} looks for one in the genetics.binaRies package if it is installed, then for
+\code{plink}, then \code{plink2}, on your \code{PATH}; if there is none, it stops (class
 \code{opengwasr_plink_not_found}) and says how to install it.}
 }
 \value{
 An object of class \code{og_plink_reference}: \code{path} (absolute, with forward slashes on every
-platform) and \code{plink_bin}.
+platform), \code{plink_bin} (the binary's absolute path) and \code{plink_version} (as PLINK reports it,
+such as \code{"1.90b6.21"} or \code{"2.0.0-b.1.4"}).
 }
 \description{
 \code{og_plink_reference()} names a PLINK binary fileset (\code{.bed}, \code{.bim}, \code{.fam}) on your machine, and
@@ -32,6 +34,13 @@ and a message (class \code{opengwasr_plink_unmatched}, with \code{count}) says h
 option to rank by |z|, so the variants are ranked by |z| in R and PLINK is given the ranks as
 p-values (rank / (n + 1), the strongest variant the smallest); it clumps with \verb{--clump-p1 1}
 and \verb{--clump-p2 1}, so only \code{r2} and \code{kb} decide.
+
+PLINK 1.9 and PLINK 2 both work, and give the same answer: each is asked for the same thing in
+its own words (an LD matrix of r with the reference's allele order kept: \verb{--r square --keep-allele-order} in 1.9, \verb{--r-unphased square ref-based} in 2; clumping with \code{--clump}, read
+from \code{.clumped} or \code{.clumps}). Its version is read once, here (\code{--version}), and kept on the PLINK
+Reference and in the provenance of what it computes (\code{plink_version}, beside \code{plink_bin}). Any
+other PLINK, such as 1.07, or a program that isn't PLINK, is refused (class
+\code{opengwasr_plink_unsupported}, with \code{version}, the version found or \code{NA}, and \code{supported}).
 }
 \examples{
 \dontrun{

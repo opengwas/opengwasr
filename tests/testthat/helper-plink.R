@@ -43,7 +43,10 @@ fixture_bim <- function() {
 
 # PLINK's clumping rule, greedy and in plain R: the strongest score first, each index variant takes
 # every unclumped variant less than `kb` away on its chromosome (PLINK 1.90 leaves out one exactly `kb` away) whose r^2 with it is above `r2`. Returns the
-# index variants (strongest first) and the size of each clump, itself included.
+# index variants (strongest first) and the size of each clump, itself included. r² here is the
+# squared genotype correlation; PLINK 1.9 and 2 clump by r² from haplotype frequencies, which is close
+# but not equal (test-plink-versions.R has a pair either side of 0.2), so tests using this rule keep
+# their settings away from such pairs.
 expected_clump <- function(rsids, score, r2, kb) {
   d <- fixture_dosage()
   bim <- fixture_bim()
@@ -61,4 +64,36 @@ expected_clump <- function(rsids, score, r2, kb) {
     size <- c(size, length(unique(c(i, members))))
   }
   data.frame(lead = lead, size = size, stringsAsFactors = FALSE)
+}
+
+# A stand-in PLINK (a shell script; not on Windows) named `name` in `dir`: `--version` prints
+# `banner` (and appends a line to `<dir>/<name>.calls`), anything else fails.
+fake_plink <- function(dir, name, banner) {
+  bin <- file.path(dir, name)
+  writeLines(c("#!/bin/sh",
+               "if [ \"$1\" = \"--version\" ]; then",
+               paste0("  echo x >> '", bin, ".calls'"),
+               if (length(banner)) paste0("  echo '", banner, "'"),
+               "  exit 0",
+               "fi",
+               "exit 3"), bin)
+  Sys.chmod(bin, "0755")
+  normalise_path(bin)
+}
+
+plink19_banner <- "PLINK v1.90b6.21 64-bit (19 Oct 2020)"
+plink2_banner <- "PLINK v2.0.0-b.1.4 64-bit (7 Nov 2026)"
+
+# A PLINK Reference over the fixture for each supported PLINK this machine has, by series ("1.9",
+# "2"), or NULL for one it hasn't. They come from OPENGWASR_TEST_PLINK1 and OPENGWASR_TEST_PLINK2
+# (CI sets the second), the PLINK opengwasr finds, and `plink` and `plink2` on the PATH.
+plink_references_by_series <- function() {
+  found <- tryCatch(find_plink(NULL), error = function(e) "")
+  bins <- c(Sys.getenv(c("OPENGWASR_TEST_PLINK1", "OPENGWASR_TEST_PLINK2")), found, unname(Sys.which(c("plink", "plink2"))))
+  bins <- unique(bins[nzchar(bins)])
+  refs <- Filter(Negate(is.null), lapply(bins, function(b) {
+    tryCatch(og_plink_reference(plink_fixture(), plink_bin = b), error = function(e) NULL)
+  }))
+  series <- vapply(refs, function(r) plink_series(r$plink_version), "")
+  list("1.9" = refs[series == "1.9"][1][[1]], "2" = refs[series == "2"][1][[1]])
 }

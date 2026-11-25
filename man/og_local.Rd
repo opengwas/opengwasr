@@ -10,8 +10,9 @@ og_local(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_store = NULL)
 \item{gwas}{The directory of each GWAS Store, or of each Store Release: a character vector,
 one element per GWAS Store.}
 
-\item{plink}{The path of a PLINK 1.9 binary, for \code{bfile}. \code{NULL} finds one as
-\code{\link[=og_plink_reference]{og_plink_reference()}} does: genetics.binaRies, then your \code{PATH}.}
+\item{plink}{The PLINK 1.9 or 2 binary, for \code{bfile}: its path, or a command on your \code{PATH}, such
+as \code{"plink2"}. \code{NULL} finds one as \code{\link[=og_plink_reference]{og_plink_reference()}} does: genetics.binaRies, then \code{plink},
+then \code{plink2}, on your \code{PATH}.}
 
 \item{bfile}{A PLINK binary fileset's prefix (without \code{.bed}, \code{.bim} or \code{.fam}): the Source's LD
 resource, a PLINK Reference.}

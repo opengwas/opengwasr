@@ -25,12 +25,22 @@
 #' p-values (rank / (n + 1), the strongest variant the smallest); it clumps with `--clump-p1 1`
 #' and `--clump-p2 1`, so only `r2` and `kb` decide.
 #'
+#' PLINK 1.9 and PLINK 2 both work, and give the same answer: each is asked for the same thing in
+#' its own words (an LD matrix of r with the reference's allele order kept: `--r square
+#' --keep-allele-order` in 1.9, `--r-unphased square ref-based` in 2; clumping with `--clump`, read
+#' from `.clumped` or `.clumps`). Its version is read once, here (`--version`), and kept on the PLINK
+#' Reference and in the provenance of what it computes (`plink_version`, beside `plink_bin`). Any
+#' other PLINK, such as 1.07, or a program that isn't PLINK, is refused (class
+#' `opengwasr_plink_unsupported`, with `version`, the version found or `NA`, and `supported`).
+#'
 #' @param path The fileset's prefix, without `.bed`, `.bim` or `.fam`.
-#' @param plink_bin The path of a PLINK 1.9 binary. `NULL` looks for one in the genetics.binaRies
-#'   package if it is installed, then on your `PATH`; if there is none, it stops (class
+#' @param plink_bin The PLINK 1.9 or 2 binary: its path, or a command on your `PATH`, such as
+#'   `"plink2"`. `NULL` looks for one in the genetics.binaRies package if it is installed, then for
+#'   `plink`, then `plink2`, on your `PATH`; if there is none, it stops (class
 #'   `opengwasr_plink_not_found`) and says how to install it.
 #' @return An object of class `og_plink_reference`: `path` (absolute, with forward slashes on every
-#'   platform) and `plink_bin`.
+#'   platform), `plink_bin` (the binary's absolute path) and `plink_version` (as PLINK reports it,
+#'   such as `"1.90b6.21"` or `"2.0.0-b.1.4"`).
 #' @examples
 #' \dontrun{
 #' ref <- og_plink_reference("~/ld/1kg/EUR")
@@ -59,15 +69,19 @@ plink_reference <- function(path, plink_bin, args = c(path = "path", plink_bin =
                i = "Give the prefix of the `.bed`, `.bim` and `.fam` files, without the extension."),
              class = "opengwasr_plink_reference_missing", files = missing, arg = args[["path"]], call = call)
   }
+  bin <- find_plink(plink_bin, call, arg = args[["plink_bin"]])
   structure(list(path = file.path(normalise_path(dirname(prefix)), basename(prefix)),
-                 plink_bin = find_plink(plink_bin, call, arg = args[["plink_bin"]])),
+                 plink_bin = bin, plink_version = plink_version(bin, call, arg = args[["plink_bin"]])),
             class = "og_plink_reference")
 }
 
 #' @export
 format.og_plink_reference <- function(x, ...) {
-  c("<og_plink_reference>", paste0("  ", x$path), paste0("  PLINK: ", x$plink_bin))
+  c("<og_plink_reference>", paste0("  ", x$path), plink_binary_line(x))
 }
+
+# The PLINK a reference runs, as printed under it here and under a Local Source.
+plink_binary_line <- function(ref) paste0("  PLINK ", ref$plink_version, ": ", ref$plink_bin)
 
 #' @export
 print.og_plink_reference <- function(x, ...) {
@@ -75,30 +89,85 @@ print.og_plink_reference <- function(x, ...) {
   invisible(x)
 }
 
-# The PLINK binary: `plink_bin`, else genetics.binaRies' if it is installed, else the one on PATH.
+# The PLINK binary's path: `plink_bin` (a path, else a command on the PATH), else genetics.binaRies'
+# if it is installed, else `plink`, then `plink2`, on the PATH. Which version it is, plink_version() says.
 # Kept (here and in plink_run()): PLINK runs on this machine; the API isn't involved.
 find_plink <- function(plink_bin, call = rlang::caller_env(), arg = "plink_bin") {
   usable <- function(p) is.character(p) && length(p) == 1 && !is.na(p) && nzchar(p) && file.exists(p) &&
-    unname(file.access(p, 1)) == 0
+    !dir.exists(p) && unname(file.access(p, 1)) == 0
   if (!is.null(plink_bin)) {
-    if (!usable(plink_bin)) {
-      og_abort(paste0("`", arg, "` isn't an executable file: ", format(plink_bin), "."),
+    # A file that exists is taken as a path, as before; otherwise, a command: "plink2".
+    command <- is.character(plink_bin) && length(plink_bin) == 1 && !is.na(plink_bin) && nzchar(plink_bin) &&
+      !file.exists(plink_bin)
+    path <- if (command) unname(Sys.which(plink_bin)) else plink_bin
+    if (!usable(path)) {
+      og_abort(paste0("`", arg, "` isn't an executable file or a command on your `PATH`: ", format(plink_bin), "."),
                class = c("opengwasr_plink_not_found", "opengwasr_argument"), arg = arg, call = call)
     }
-    return(normalise_path(plink_bin))
+    return(normalise_path(path))
   }
-  # The package is optional, and not on CRAN, so it is looked up by name rather than declared.
-  pkg <- "genetics.binaRies"
-  if (requireNamespace(pkg, quietly = TRUE)) {
-    packaged <- tryCatch(get("get_plink_binary", envir = asNamespace(pkg))(), error = function(e) NULL)
-    if (usable(packaged)) return(normalise_path(packaged))
+  for (found in c(packaged_plink(), unname(Sys.which(c("plink", "plink2"))))) {
+    if (usable(found)) return(normalise_path(found))
   }
-  found <- unname(Sys.which("plink"))
-  if (usable(found)) return(normalise_path(found))
-  og_abort(c("Can't find PLINK, which a PLINK Reference needs.",
+  og_abort(c("Can't find PLINK 1.9 or 2, which a PLINK Reference needs.",
              i = "Install the genetics.binaRies package: `remotes::install_github(\"MRCIEU/genetics.binaRies\")`.",
-             i = paste0("Or install PLINK 1.9 (https://www.cog-genomics.org/plink/1.9/) and put it on your `PATH`, or pass its path as `", arg, "`.")),
+             i = paste0("Or install PLINK 1.9 (https://www.cog-genomics.org/plink/1.9/) or PLINK 2 (https://www.cog-genomics.org/plink/2.0/) ",
+                        "and put it on your `PATH` as `plink` or `plink2`, or pass its path or command as `", arg, "`.")),
            class = "opengwasr_plink_not_found", arg = arg, call = call)
+}
+
+# genetics.binaRies' PLINK, if the package is installed, else NULL. The package is optional, and not
+# on CRAN, so it is looked up by name rather than declared.
+packaged_plink <- function() {
+  pkg <- "genetics.binaRies"
+  if (!requireNamespace(pkg, quietly = TRUE)) return(NULL)
+  tryCatch(get("get_plink_binary", envir = asNamespace(pkg))(), error = function(e) NULL)
+}
+
+# The PLINK versions opengwasr speaks, by the series of the version a binary reports.
+plink_supported <- c("1.9", "2")
+
+# The version `bin` reports (`--version`, once, when a PLINK Reference is made), as it reports it
+# ("1.90b6.21", "2.0.0-b.1.4"). Any version but 1.9 or 2, or none (not PLINK), is refused.
+plink_version <- function(bin, call = rlang::caller_env(), arg = "plink_bin") {
+  out <- tryCatch(suppressWarnings(system2(bin, "--version", stdout = TRUE, stderr = TRUE, timeout = 60)),
+                  error = function(e) character())
+  # "PLINK v1.90b6.21 64-bit (19 Oct 2020)", "PLINK v2.0.0-b.1.4 64-bit ...", 1.07's "|  PLINK!  |  v1.07  |".
+  at <- regmatches(out, regexec("PLINK[! |]*v([0-9][^ |]*)", out))
+  at <- Filter(function(m) length(m) == 2, at)
+  version <- if (length(at) > 0) at[[1]][[2]] else NA_character_
+  if (is.na(plink_series(version))) {
+    og_abort(c(paste0("opengwasr works with PLINK 1.9 or 2, but ", bin,
+                      if (is.na(version)) " didn't report a PLINK version." else paste0(" is PLINK ", version, ".")),
+               i = paste0("Install PLINK 1.9 or PLINK 2 (https://www.cog-genomics.org/plink/), and pass its path or command as `", arg, "`.")),
+             class = "opengwasr_plink_unsupported", version = version, supported = plink_supported,
+             plink_bin = bin, arg = arg, call = call)
+  }
+  version
+}
+
+# "1.9" or "2" (one of `plink_supported`), or NA for any other version.
+plink_series <- function(version) {
+  if (is.na(version)) return(NA_character_)
+  if (startsWith(version, "1.9")) "1.9" else if (startsWith(version, "2.0")) "2" else NA_character_
+}
+
+# What each PLINK is asked, in its own words, for the same answer (tests/testthat/test-plink-versions.R
+# shows they agree on the committed fileset):
+# - `r`: the signed r of every pair, a square text matrix in the reference's order, its sign referring
+#   to the `.bim`'s first allele of each variant. 1.9 keeps that allele's order with
+#   `--keep-allele-order`; PLINK 2 always keeps the order (first allele ALT, second REF), and
+#   `ref-based` signs r by the REF alleles, the same sign as by the ALT ones. Without it, PLINK 2
+#   signs by the major alleles.
+# - `clumps`: `--clump`'s report and its ID column. PLINK 2's default r² for clumping (from haplotype
+#   frequencies, estimated from unphased genotypes) is the one 1.9 uses; `--clump-unphased` would
+#   take the squared genotype correlation instead, and give different clumps.
+plink_dialect <- function(ref) {
+  switch(plink_series(ref$plink_version),
+         "1.9" = list(r = c("--r", "square", "--keep-allele-order"), r_file = ".ld",
+                      clumps_file = ".clumped", id = "SNP"),
+         "2" = list(r = c("--r-unphased", "square", "ref-based"), r_file = ".unphased.vcor1",
+                    clumps_file = ".clumps", id = "ID"))
 }
 
 # The reference's variants, from its `.bim`: `rsid`, `a1`, `a2`, in file order. Alleles are read as
@@ -136,16 +205,17 @@ plink_run <- function(ref, files, flags, read, call = rlang::caller_env()) {
 
 # The r between every pair of `rsids` (all in the reference): a square matrix named
 # `<rsid>_<a1>_<a2>` with the reference's alleles, in the order of `rsids`. The sign of r refers to
-# the first allele in each name (`--keep-allele-order`, as ieugwasr's ld_matrix_local() did).
+# the first allele in each name (as ieugwasr's ld_matrix_local() did, with `--keep-allele-order`).
 plink_ld_matrix <- function(ref, rsids, call = rlang::caller_env()) {
   bim <- plink_bim(ref)
   in_file <- which(bim$rsid %in% rsids)  # PLINK writes the matrix in the reference's order
   if (length(in_file) == 0) return(matrix(NA_real_, 0, 0))
+  dialect <- plink_dialect(ref)
   m <- plink_run(ref, list(extract = rsids),
-                 function(file) c("--extract", file("extract"), "--r", "square", "--keep-allele-order"),
+                 function(file) c("--extract", file("extract"), dialect$r),
                  function(out) {
-                   # An undefined r (a variant with no variation) is written as "nan".
-                   as.matrix(utils::read.table(paste0(out, ".ld"), header = FALSE,
+                   # An undefined r (a variant with no variation) is written as "nan", by either PLINK.
+                   as.matrix(utils::read.table(paste0(out, dialect$r_file), header = FALSE,
                                                na.strings = c("nan", "-nan", "NA"), colClasses = "numeric"))
                  }, call)
   asked <- order(match(bim$rsid[in_file], rsids), seq_along(in_file))
@@ -168,19 +238,25 @@ plink_clump <- function(ref, rsid, z, r2, kb, call = rlang::caller_env()) {
   if (n <= 1) return(list(leads = rsids, size = rep(1L, length(rsid))))
   score <- as.numeric(tapply(abs(z), factor(rsid, levels = rsids), max))
   p <- rank(-score, ties.method = "first", na.last = TRUE) / (n + 1)
+  dialect <- plink_dialect(ref)
+  # The scores' header names the ID column "SNP", which PLINK 2's --clump also looks for.
   clumped <- plink_run(ref, list(scores = c("SNP P", sprintf("%s %.15g", rsids, p))),
                        function(file) c("--clump", file("scores"), "--clump-p1", 1, "--clump-p2", 1,
                                         "--clump-r2", format(r2, digits = 15), "--clump-kb", format(kb, digits = 15)),
                        function(out) {
-                         file <- paste0(out, ".clumped")
+                         file <- paste0(out, dialect$clumps_file)
                          if (!file.exists(file)) {
                            og_abort("PLINK wrote no clumps. This is a bug in opengwasr.", class = "opengwasr_internal", call = call)
                          }
-                         utils::read.table(file, header = TRUE, stringsAsFactors = FALSE,
-                                           colClasses = c(SNP = "character", TOTAL = "integer"))
+                         # 1.9's `.clumped` is space-aligned; PLINK 2's `.clumps` is tab-separated, its
+                         # header starting "#CHROM".
+                         utils::read.table(file, header = TRUE, stringsAsFactors = FALSE, comment.char = "",
+                                           check.names = FALSE,
+                                           colClasses = stats::setNames(c("character", "integer"), c(dialect$id, "TOTAL")))
                        }, call)
+  ids <- clumped[[dialect$id]]
   # TOTAL counts the others in the clump.
-  list(leads = rsids[rsids %in% clumped$SNP], size = clumped$TOTAL[match(rsid, clumped$SNP)] + 1L)
+  list(leads = rsids[rsids %in% ids], size = clumped$TOTAL[match(rsid, ids)] + 1L)
 }
 
 # `r2` and `kb` are the user's with a PLINK Reference: it records no defaults to take instead.
@@ -203,7 +279,7 @@ inform_plink_unmatched <- function(total, left_out, what = "variants") {
 # With progress on (`opengwasr.progress`), which PLINK runs.
 inform_plink_binary <- function(ref) {
   if (!progress_enabled()) return(invisible())
-  rlang::inform(c(i = paste0("Using PLINK at ", ref$plink_bin, ".")), class = "opengwasr_plink_binary")
+  rlang::inform(c(i = paste0("Using PLINK ", ref$plink_version, " at ", ref$plink_bin, ".")), class = "opengwasr_plink_binary")
 }
 
 is_plink_reference <- function(x) inherits(x, "og_plink_reference")
@@ -278,7 +354,7 @@ ld_query_plink <- function(prep, spec, method) {
     done <- spec$local(ctx)
     list(value = done$value, jobs = jobs,
          provenance = c(list(ld = prep$store$ld_store, ld_choice = prep$choice, ld_from = prep$from, absent = left_out,
-                             plink_bin = plink$ref$plink_bin), done$provenance))
+                             plink_bin = plink$ref$plink_bin, plink_version = plink$ref$plink_version), done$provenance))
   })
 }
 
@@ -336,7 +412,8 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
       out <- rows[keep, , drop = FALSE]
       rownames(out) <- NULL
       list(value = clump_columns(out, chosen$store$ld_store, chosen$choice, clump$r2, clump$kb, size[keep]),
-           provenance = list(clump = summary, plink_bin = ref$plink_bin, ld_from = chosen$from),
+           provenance = list(clump = summary, plink_bin = ref$plink_bin, plink_version = ref$plink_version,
+                             ld_from = chosen$from),
            # `limit` cut index variants off: provenance says so, on the Jobs of those Analyses.
            truncated = vapply(pieces, function(p) any(info$id[p$scope] %in% too_many), NA))
     }

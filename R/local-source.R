@@ -96,8 +96,9 @@
 #'
 #' @param gwas The directory of each GWAS Store, or of each Store Release: a character vector,
 #'   one element per GWAS Store.
-#' @param plink The path of a PLINK 1.9 binary, for `bfile`. `NULL` finds one as
-#'   [og_plink_reference()] does: genetics.binaRies, then your `PATH`.
+#' @param plink The PLINK 1.9 or 2 binary, for `bfile`: its path, or a command on your `PATH`, such
+#'   as `"plink2"`. `NULL` finds one as [og_plink_reference()] does: genetics.binaRies, then `plink`,
+#'   then `plink2`, on your `PATH`.
 #' @param bfile A PLINK binary fileset's prefix (without `.bed`, `.bim` or `.fam`): the Source's LD
 #'   resource, a PLINK Reference.
 #' @param ld_store A downloaded LD Store. Not available yet.
@@ -153,7 +154,7 @@ format.og_local_source <- function(x, ...) {
     if (is.null(ref <- og_ld_resource(x))) {
       "\u2022 LD resource: none"
     } else {
-      c(paste0("\u2022 LD resource: PLINK Reference ", ref$path), paste0("  PLINK: ", ref$plink_bin))
+      c(paste0("\u2022 LD resource: PLINK Reference ", ref$path), plink_binary_line(ref))
     }
   )
 }

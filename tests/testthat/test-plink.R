@@ -61,6 +61,7 @@ test_that("og_ld_matrix() reads r from PLINK, named by rsID and the reference's 
   expect_equal(prov$ld_choice, "user")
   expect_equal(prov$absent, character())
   expect_equal(prov$plink_bin, ref$plink_bin)
+  expect_equal(prov$plink_version, ref$plink_version)
   expect_match(prov$query, "ld = ", fixed = TRUE)
 })
 

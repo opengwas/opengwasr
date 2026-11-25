@@ -14,13 +14,18 @@ Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.ht
 > **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026 (`ld-resource-api` and `ld-resource-override` replay the same requests as `choosing-ld`, `unassigned-ld` and `ld-matrices`), except these:
 >
 > - `stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39). Its output is illustrative.
-> - The PLINK Reference section, which is shown but not evaluated: building the vignette would need a PLINK binary and a genotype fileset such as 1000 Genomes, which CRAN doesn't have. Its grey output blocks marked `# illustrative` are shaped the way opengwasr returns them (the API isn't involved in them). The package's tests run the same functions with PLINK on a small committed fileset wherever a PLINK binary can be found, as in CI; elsewhere they are skipped.
+> - `plink-reference` and `plink-no-source`: they read the small synthetic PLINK Reference that comes with opengwasr, and need a PLINK binary. They run wherever one is found (`plink_ready`: genetics.binaRies, or `plink` on the `PATH`), as in CI; without one, as on CRAN, their code is shown unevaluated.
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
 ```{r credentials, include = FALSE}
 source("recordings.R")
 start_recordings("recordings-ld")
+# The PLINK Reference chunks run only where a PLINK binary is found, as in local-source.Rmd.
+plink_ready <- !inherits(
+  tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
+           error = identity),
+  "error")
 ```
 
 ```{r setup}
@@ -56,7 +61,7 @@ A Source says where Associations come from, and which **LD resource** answers LD
 
 A form that is coming is refused with an error that says so (class `opengwasr_ld_resource_unavailable`), rather than quietly doing something else. `og_api(ld_store = )` takes what `ld` takes: an LD Store's name, or an ancestry code for that ancestry's LD Store.
 
-Every verb that needs LD uses the Source's LD resource: `og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()`. Here the Source's LD resource is the EUR LD Store, and the top hits are clumped there without `ld`:
+Every verb that needs LD uses the Source's LD resource: `og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`. Here the Source's LD resource is the EUR LD Store, and the top hits are clumped there without `ld`:
 
 ```{r ld-resource-api}
 src_eur <- og_api(ld_store = "EUR")
@@ -72,6 +77,13 @@ basophils <- og_tophits(src_eur, "OGS-00014:GCST90475125", ld = "AMR")
 unique(basophils$clump_ld)
 m <- og_ld_matrix(src_eur, c("16:53772541:A:G", "16:53767042:C:T", "18:60161902:C:T", "2:628504:A:G", "5:75701728:A:AAAAT"))
 og_provenance(m)$ld
+```
+
+`og_ld_resource()` returns the LD resource a Source carries (`NULL` when it carries none). Packages built on opengwasr, such as TwoSampleMR, use it to honour the Source's LD resource:
+
+```{r og-ld-resource}
+og_ld_resource(src_eur)
+og_ld_resource(og_api())
 ```
 
 The rest of this vignette uses `src`, made with `og_api()`, which has no LD resource of its own, so each Analysis's Assigned Ancestry chooses.
@@ -91,7 +103,7 @@ If several LD Stores serve one ancestry, opengwasr uses the one the LD Store lis
 
 ### The `ld` argument {#ld-argument}
 
-`og_tophits()`, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()` all take `ld`, and it means the same in each. It overrides the Source's LD resource for one call:
+`og_tophits()`, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()` all take `ld`, and it means the same in each. It overrides the Source's LD resource for one call:
 
 | `ld` | LD used |
 |---|---|
@@ -315,16 +327,14 @@ og_provenance(cad)$clump
 
 A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`) on your own machine, such as the 1000 Genomes files ieugwasr users already have. Pass it as `ld` to clump or build LD matrices locally with PLINK for one call, as ieugwasr's local functions did, with either Source. A Local Source can also carry one as its LD resource, `og_local(gwas = ..., bfile = prefix)`, so every call uses it without `ld` (see [Clumping and LD on a Local Source](local-source.html#local-clumping)).
 
-```{r plink-reference, eval = FALSE}
-ref <- og_plink_reference("~/ld/1kg/EUR")
-cad_local <- og_tophits(src, "OGS-00011:GCST003116", ld = ref, r2 = 0.001, kb = 10000)
-m_local <- og_ld_matrix(src, cad_local, ld = ref)
-```
+For your own, such as `og_plink_reference("~/ld/1kg/EUR")`, the calls are `og_tophits(src, ids, ld = ref, r2 = 0.001, kb = 10000)`, `og_clump(src, data, ld = ref, r2 = 0.001, kb = 10000)` and `og_ld_matrix(src, variants, ld = ref)`. Here, the small synthetic PLINK Reference that comes with opengwasr, 300 made-up people, whose rsIDs include a few CAD and BMI signals, clumps the CAD and BMI index variants from [above](#og-clump) together, and reads an LD matrix of rsIDs. It holds only a few of these real variants, so most are left out, as the message says; your own PLINK Reference holds far more:
 
-```text
-# illustrative
-ℹ Using PLINK at /usr/local/bin/plink.
-ℹ 2,131 of 2,194 top hits matched the PLINK Reference by rsID; 63 not in it were left out.
+```{r plink-reference, eval = plink_ready}
+ref <- og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref"))
+joint_local <- og_clump(src, rbind(cad, bmi), ld = ref, r2 = 0.001, kb = 10000)
+joint_local[, c("id", "rsid", "alid", "z", "clump_r2", "clump_kb", "clump_size")]
+m_local <- og_ld_matrix(src, c("rs4977574", "rs2891168", "rs1333049", "rs1421085"), ld = ref)
+round(m_local, 3)
 ```
 
 - **Variants are matched by rsID,** because PLINK References are usually on GRCh37 while ALIDs are on GRCh38. Variants without an rsID match are left out, and the message says how many. An LD matrix from a PLINK Reference is named `<rsid>_<allele>_<allele>` with the PLINK Reference's alleles, as ieugwasr named it, and the sign of r again refers to the first allele in each name.
@@ -337,8 +347,9 @@ m_local <- og_ld_matrix(src, cad_local, ld = ref)
 
 With data that already carries rsIDs, `og_clump()` and `og_ld_matrix()` with a PLINK Reference need no API at all: pass `src = NULL`, with no credentials set. If an ALID's rsID would have to be looked up (no `rsid` column, and no rsIDs given), they stop with class `opengwasr_source_required`, which says how many ALIDs need it; pass a Source then.
 
-```{r plink-no-source, eval = FALSE}
-og_clump(NULL, cad_local, ld = ref, r2 = 0.001, kb = 10000)  # cad_local has an `rsid` column
+```{r plink-no-source, eval = plink_ready}
+og_clump(NULL, rbind(cad, bmi), ld = ref, r2 = 0.001, kb = 10000)[, c("id", "rsid", "clump_size")]  # with an `rsid` column
+og_ld_matrix(NULL, c("rs4977574", "rs2891168"), ld = ref)
 ```
 
 ```{r end-recordings, include = FALSE}

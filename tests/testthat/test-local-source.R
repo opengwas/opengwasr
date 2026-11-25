@@ -1,4 +1,4 @@
-# The Local Source (#31): og_local(path) over ogquery, finding Python, and og_local_check().
+# The Local Source (#31): og_local(gwas) over ogquery, finding Python, and og_local_check().
 #
 # Reads use the example Store Releases bundled in inst/stores (helper-local.R) and skip without a
 # Python that has ogquery. The Python boundary (local_* in R/local-source.R) is mocked at its
@@ -8,7 +8,7 @@
 
 test_that("og_local() opens the Store Releases it is given, each named by its manifest", {
   skip_if_no_local()
-  src <- three()
+  src <- local_source_of()
   expect_s3_class(src, "og_local_source")
   expect_equal(src$releases$store_id, c("s", "residual-rag", "hyb"))
   expect_equal(src$releases$release_id, c("r", "comp", "v1"))
@@ -27,7 +27,7 @@ test_that("og_local() opens the Store Releases it is given, each named by its ma
 
 test_that("a Local Source keeps the opened Store Release for the queries that follow", {
   skip_if_no_local()
-  src <- three()
+  src <- local_source_of()
   release <- local_release(src, "hyb")
   expect_identical(local_release(src, "hyb"), release)
 })
@@ -196,10 +196,12 @@ test_that("og_local_check() reports which Store Release each GWAS Store director
   expect_equal(offline$releases$problem, c("unavailable", "unavailable"))
 })
 
-test_that("og_local() refuses a path that isn't a Store Release, and an empty `path`", {
-  expect_error(og_local(character()), class = "opengwasr_argument")
-  expect_error(og_local(NA_character_), class = "opengwasr_argument")
-  expect_error(og_local(1), class = "opengwasr_argument")
+test_that("og_local() refuses a path that isn't a Store Release, and an empty `gwas`", {
+  # The argument named is the caller's: og_local()'s `gwas`, og_local_check()'s `path`.
+  for (bad in list(character(), NA_character_, 1)) {
+    expect_equal(expect_error(og_local(bad), class = "opengwasr_argument")$arg, "gwas")
+    expect_equal(expect_error(og_local_check(bad), class = "opengwasr_argument")$arg, "path")
+  }
   missing <- file.path(withr::local_tempdir(), "no-such-release")
   e <- expect_error(og_local(missing), class = "opengwasr_not_store_release")
   expect_equal(e$paths, local_path(missing))
@@ -478,8 +480,7 @@ test_that("a stale handle is opened again the way og_local() opens it, probe and
   local_fresh_python()
   local_state$ogquery <- list(info = list(python = "/p", chosen_by = "RETICULATE_PYTHON", ogquery = "0.1.0", reads = "0.3"))
   dir <- local_path(withr::local_tempdir())
-  src <- structure(list(releases = data.frame(store_id = "s", release_id = "r", format_version = "0.3.0", path = dir),
-                        handles = new.env()), class = "og_local_source")
+  src <- unopened_source(data.frame(store_id = "s", release_id = "r", format_version = "0.3.0", path = dir))
   assign(dir, "old", envir = src$handles)
   probed <- character()
   local_mocked_bindings(
@@ -535,7 +536,7 @@ test_that("og_local_check() reports the Python, the versions and every Store Rel
 
 test_that("og_local_check() takes a Local Source, and names two Store Releases of one GWAS Store", {
   skip_if_no_local()
-  check <- og_local_check(three())
+  check <- og_local_check(local_source_of())
   expect_equal(check$releases$store_id, c("s", "residual-rag", "hyb"))
   expect_true(all(check$releases$readable))
   expect_length(check$duplicates, 0)
@@ -570,7 +571,7 @@ test_that("og_local_check() refuses only bad arguments", {
 # The API Source never needs Python ------------------------------------------------------------
 
 test_that("anything without a Local Source method refuses a Local Source", {
-  src <- structure(list(releases = data.frame()), class = "og_local_source")
+  src <- unopened_source(data.frame())
   # Every query verb has a Local Source method (#34 gave og_tophits(), og_clump() and og_ld_matrix()
   # theirs); the one Source check still refuses a Local Source wherever one reaches it.
   e <- expect_error(check_source(src), class = "opengwasr_local_unsupported")

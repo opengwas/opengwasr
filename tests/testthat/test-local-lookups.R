@@ -7,17 +7,12 @@
 # (tests/contract/expected/{dense_ranges,ragged_completed,hybrid_observed}.json, read by eye). The
 # refusals need no Python: a Local Source object is enough to dispatch on.
 
-# A Local Source object for the refusals, which never read it.
-unopened <- function() {
-  structure(list(releases = data.frame(store_id = "s", release_id = "r", format_version = "0.3.0", path = "/nowhere"),
-                 handles = new.env()), class = "og_local_source")
-}
 
 # Analyses ---------------------------------------------------------------------------------------
 
 test_that("og_analyses() on a Local Source returns the Analyses named, with their Store Release", {
   skip_if_no_local()
-  x <- og_analyses(three(), c("hyb:trait_b", "s:bmi_irn", "residual-rag:a"))
+  x <- og_analyses(local_source_of(), c("hyb:trait_b", "s:bmi_irn", "residual-rag:a"))
   expect_equal(x$requested_id, c("hyb:trait_b", "s:bmi_irn", "residual-rag:a"))
   expect_equal(x$id, c("hyb:trait_b", "s:bmi_irn", "residual-rag:a"))
   expect_equal(x$store_id, c("hyb", "s", "residual-rag"))
@@ -48,7 +43,7 @@ test_that("og_analyses() on a Local Source returns the Analyses named, with thei
 
 test_that("a local Analysis row has every API Source column in its order, then the release's own", {
   skip_if_no_local()
-  x <- og_analyses(three(), "s:bmi_irn")
+  x <- og_analyses(local_source_of(), "s:bmi_irn")
   expect_equal(names(x), c(
     "requested_id", "id",
     # The API Source's, in its order (fixtures/shapes.json `analysis_row`, with `id` first).
@@ -68,7 +63,7 @@ test_that("a local Analysis row has every API Source column in its order, then t
 
 test_that("og_analyses(ids = NULL) on a Local Source lists every Analysis of its Store Releases", {
   skip_if_no_local()
-  x <- og_analyses(three())
+  x <- og_analyses(local_source_of())
   expect_equal(x$id, c("s:bmi_irn", "residual-rag:a", "residual-rag:b", "hyb:trait_a", "hyb:trait_b"))
   expect_equal(x$requested_id, x$id)
   expect_equal(x$release_id, c("r", "comp", "comp", "v1", "v1"))
@@ -76,7 +71,7 @@ test_that("og_analyses(ids = NULL) on a Local Source lists every Analysis of its
 
 test_that("a bare analysis id names the one Analysis it names in the Local Source", {
   skip_if_no_local()
-  x <- og_analyses(three(), c("bmi_irn", "hyb:trait_a"))
+  x <- og_analyses(local_source_of(), c("bmi_irn", "hyb:trait_a"))
   expect_equal(x$requested_id, c("bmi_irn", "hyb:trait_a"))
   expect_equal(x$id, c("s:bmi_irn", "hyb:trait_a"))
 })
@@ -99,7 +94,7 @@ test_that("a value of analyses.tsv the catalogue would refuse is refused, never 
 
 test_that("an Analysis a Local Source doesn't hold gets the API Source's class", {
   skip_if_no_local()
-  e <- expect_error(og_analyses(three(), c("s:bmi_irn", "s:absent", "OGS-00011:GCST003116")),
+  e <- expect_error(og_analyses(local_source_of(), c("s:bmi_irn", "s:absent", "OGS-00011:GCST003116")),
                     class = "opengwasr_analysis_not_found")
   expect_equal(e$ids, c("s:absent", "OGS-00011:GCST003116"))
   expect_equal(e$api_error, "analysis_not_found")
@@ -107,19 +102,19 @@ test_that("an Analysis a Local Source doesn't hold gets the API Source's class",
 
 test_that("a Local Source refuses a Legacy OpenGWAS id and says to translate it on the API Source", {
   skip_if_no_local()
-  e <- expect_error(og_analyses(three(), c("s:bmi_irn", "ieu-a-2", "ukb-b-19953")),
+  e <- expect_error(og_analyses(local_source_of(), c("s:bmi_irn", "ieu-a-2", "ukb-b-19953")),
                     class = "opengwasr_legacy_id_local")
   expect_s3_class(e, "opengwasr_refusal")
   expect_equal(e$ids, c("ieu-a-2", "ukb-b-19953"))
   # A bare id the Source holds, in a Store Release not asked for, is no legacy id: it names no
   # Analysis in the Store Releases asked for.
-  e <- expect_error(og_analyses(three(), "trait_a", releases = "s"), class = "opengwasr_analysis_not_found")
+  e <- expect_error(og_analyses(local_source_of(), "trait_a", releases = "s"), class = "opengwasr_analysis_not_found")
   expect_equal(e$ids, "trait_a")
 })
 
 test_that("`releases` on a Local Source takes a GWAS Store id or a pin it holds", {
   skip_if_no_local()
-  src <- three()
+  src <- local_source_of()
   expect_equal(og_analyses(src, releases = "s")$id, "s:bmi_irn")
   expect_equal(og_analyses(src, releases = c("residual-rag/comp", "s"))$id,
                c("residual-rag:a", "residual-rag:b", "s:bmi_irn"))
@@ -130,7 +125,7 @@ test_that("`releases` on a Local Source takes a GWAS Store id or a pin it holds"
 
 test_that("a Store Release a Local Source doesn't hold is refused with the API Source's class", {
   skip_if_no_local()
-  src <- three()
+  src <- local_source_of()
   e <- expect_error(og_analyses(src, releases = "OGS-00011"), class = "opengwasr_release_not_found")
   expect_equal(e$api_error, "release_not_found")
   expect_error(og_analyses(src, "s:bmi_irn", releases = "s/other"), class = "opengwasr_release_not_found")
@@ -164,7 +159,7 @@ test_that("outcome_type follows the catalogue's rule", {
 
 test_that("og_variants_rsid() on a Local Source returns the API Source's rows", {
   skip_if_no_local()
-  x <- og_variants_rsid(three(), c("rs5000", "RS1100", "rs99999999"))
+  x <- og_variants_rsid(local_source_of(), c("rs5000", "RS1100", "rs99999999"))
   # The API's fields, in the order it sends them (fake-server.R fake_variants()).
   expect_equal(names(x), c("alid", "chromosome", "effect_allele", "other_allele", "position", "release_id",
                            "rsid", "store_id"))
@@ -189,14 +184,14 @@ test_that("og_variants_rsid() on a Local Source returns the API Source's rows", 
 test_that("an rsID is matched whole, as the API matches it", {
   skip_if_no_local()
   # The third variant of each digest release names `rs77;rs78`, one name, whole (contract README).
-  x <- og_variants_rsid(three(), c("rs77;rs78", "rs77"), releases = "residual-rag")
+  x <- og_variants_rsid(local_source_of(), c("rs77;rs78", "rs77"), releases = "residual-rag")
   expect_equal(x$alid, "1:1001000:A:G")
   expect_equal(x$rsid, "rs77;rs78")
 })
 
 test_that("og_variants_chrpos() on a Local Source returns the API Source's rows", {
   skip_if_no_local()
-  x <- og_variants_chrpos(three(), c("chr1:1000", "2:300"))
+  x <- og_variants_chrpos(local_source_of(), c("chr1:1000", "2:300"))
   expect_equal(names(x), c("alid", "chromosome", "effect_allele", "other_allele", "position", "release_id",
                            "rsid", "store_id"))
   expect_equal(x$alid, c("1:1000:A:G", "2:300:C:T", "1:1000:A:G"))
@@ -206,13 +201,13 @@ test_that("og_variants_chrpos() on a Local Source returns the API Source's rows"
   expect_equal(x$release_id, c("r", "r", "v1"))
 
   # A position with several variants gives each: rs5000's two, and one with no rsID.
-  y <- og_variants_chrpos(three(), "1:5000", releases = "s")
+  y <- og_variants_chrpos(local_source_of(), "1:5000", releases = "s")
   expect_equal(nrow(y), 3)
   expect_equal(y$alid[1:2], c("1:5000:A:C", "1:5000:C:G"))
   expect_identical(y$rsid, c("rs5000", "rs5000", NA))
 
   # A position nothing holds, or that isn't `chromosome:position`, has no row.
-  z <- og_variants_chrpos(three(), c("1:4999", "1:x", "nothing"), releases = "s")
+  z <- og_variants_chrpos(local_source_of(), c("1:4999", "1:x", "nothing"), releases = "s")
   expect_equal(nrow(z), 0)
   expect_equal(names(z), names(empty_lookup()))
 })
@@ -221,19 +216,19 @@ test_that("a chromosome ogquery can't normalise is refused, never answered with 
   skip_if_no_local()
   # "27" is a number no chromosome has (UnsupportedChromosome); "NA" and "." say none (MissingChromosome).
   for (bad in c("27", "NA", ".")) {
-    e <- expect_error(og_variants_chrpos(three(), c("1:5000", paste0(bad, ":5"))), class = "opengwasr_argument")
+    e <- expect_error(og_variants_chrpos(local_source_of(), c("1:5000", paste0(bad, ":5"))), class = "opengwasr_argument")
     expect_equal(e$chromosomes, bad)
   }
-  e <- expect_error(og_variants_chrpos(three(), c("27:5", "NA:5")), class = "opengwasr_argument")
+  e <- expect_error(og_variants_chrpos(local_source_of(), c("27:5", "NA:5")), class = "opengwasr_argument")
   expect_equal(e$chromosomes, c("27", "NA"))
   # "Z" is a contig name ogquery accepts (identity.py normalise_chromosome()), which these Store
   # Releases don't hold: no row, as the API answers.
-  expect_equal(nrow(og_variants_chrpos(three(), "Z:5")), 0)
+  expect_equal(nrow(og_variants_chrpos(local_source_of(), "Z:5")), 0)
 })
 
 test_that("rsIDs resolve on a Local Source as on the API, the ones held by none unresolved", {
   skip_if_no_local()
-  src <- three()
+  src <- local_source_of()
   releases <- resolve_releases(src, NULL)
   resolved <- resolve_variants(src, c("rs5000", "1:1000:A:G", "rs99999999"), releases)
   expect_equal(resolved$alids, c("1:1000:A:G", "1:5000:A:C", "1:5000:C:G"))
@@ -242,7 +237,7 @@ test_that("rsIDs resolve on a Local Source as on the API, the ones held by none 
 })
 
 test_that("an endpoint the local Job doesn't answer is an internal error naming it", {
-  e <- expect_error(local_request(unopened(), "api/nothing", list()), class = "opengwasr_internal")
+  e <- expect_error(local_request(unopened_source(), "api/nothing", list()), class = "opengwasr_internal")
   expect_equal(e$path, "api/nothing")
 })
 
@@ -250,13 +245,13 @@ test_that("an endpoint the local Job doesn't answer is an internal error naming 
 
 test_that("og_status() and og_user() refuse a Local Source", {
   for (f in list(og_status, og_user)) {
-    e <- expect_error(f(unopened()), class = "opengwasr_local_unsupported")
+    e <- expect_error(f(unopened_source()), class = "opengwasr_local_unsupported")
     expect_s3_class(e, "opengwasr_refusal")
   }
 })
 
 test_that("og_submit() and the og_job_* functions refuse a Local Source", {
-  src <- unopened()
+  src <- unopened_source()
   expect_error(og_submit(src, og_variants_rsid, "rs5000"), class = "opengwasr_local_unsupported")
   expect_error(og_job_status(src, "abc"), class = "opengwasr_local_unsupported")
   expect_error(og_job_result(src, "abc", raw = TRUE), class = "opengwasr_local_unsupported")
@@ -264,7 +259,7 @@ test_that("og_submit() and the og_job_* functions refuse a Local Source", {
 })
 
 test_that("LD operations that read LD Stores refuse a Local Source; the others need its LD resource", {
-  src <- unopened()
+  src <- unopened_source()
   for (call in list(quote(og_ld_stores(src)), quote(og_ld_proxies(src, "rs5000")), quote(og_ld_reflookup(src, "rs5000")))) {
     e <- expect_error(eval(call), class = "opengwasr_local_unsupported")
     expect_s3_class(e, "opengwasr_refusal")

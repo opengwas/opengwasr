@@ -45,7 +45,7 @@ library(opengwasr)
 
 - **Store Releases on disk.** Each GWAS Store you download is a directory, such as `/data/opengwas/OGS-00011`, holding one Store Release, such as `/data/opengwas/OGS-00011/OGS-00011-v2`. opengwasr doesn't download them for you.
 - **Python, with ogquery.** ogquery is the **Store Reader**, the library every consumer uses to read a Store Release. It is on PyPI (version 0.1.0) and needs only numpy, zarr and numcodecs. It runs on Linux, macOS and Windows, with Python 3.12 to 3.14. opengwasr calls it through reticulate. You never use ogquery by name from R.
-- **Store Release format 0.3.0.** ogquery reads format 0.3.0. A 0.2.x Store Release is refused, with its format named. The hosted Store Releases are being rebuilt at 0.3.0.
+- **Store Release format 0.3.x.** ogquery 0.1.0 reads any format 0.3.x. A 0.2.x Store Release is refused, with its format named. The hosted Store Releases are being rebuilt at 0.3.0.
 
 API users never need Python, reticulate or ogquery.
 
@@ -137,7 +137,7 @@ Each Store Release names itself by its manifest: `<store_id>/<release_id>`, then
 og_local(file.path(stores, "hyb"))
 ```
 
-A Local Source holds at most one Store Release of each GWAS Store, so two Store Releases of the same GWAS Store are refused when you create it (`opengwasr_duplicate_store`). `hyb/v1` and `hyb/v1c` are two Store Releases of GWAS Store `hyb`:
+A Local Source holds at most one Store Release of each GWAS Store, so two Store Releases of the same GWAS Store are refused when you create it (`opengwasr_duplicate_store`). The directories `hyb/v1` and `hyb/v1c` hold two Store Releases of GWAS Store `hyb`, whose release ids are `v1` and `v1-completed`:
 
 ```{r local-duplicate, error = TRUE}
 og_local(file.path(stores, "hyb", c("v1", "v1c")))

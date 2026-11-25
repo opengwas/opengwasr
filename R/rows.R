@@ -46,7 +46,8 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   # An Analysis of the rows with no metadata (the catalogue doesn't list it yet) can't be rescaled.
   if (original_units) check_original_units_known(unique(rows$id), analyses, call)
   if (!is.null(rows$rsid)) rows$rsid <- rsid_or_na(rows$rsid)
-  for (name in intersect(c("eaf", "n"), names(rows))) rows[[name]] <- number_or_na(rows[[name]])
+  # Numbers from both Sources, with NA where ogquery wrote "." (a column of nulls only parses as logical).
+  for (name in intersect(no_value_fields, names(rows))) rows[[name]] <- as.numeric(rows[[name]])
   # `beta` as ogquery derives it (ogquery stats.py `association_statistics()`, ADR 0104, lines
   # 155-161): NaN where the SE isn't finite (a missing Association, or an infinite SE a release
   # before format 0.2.3 may hold), where z * Inf would read as a value. `pval` is the row's own.
@@ -80,15 +81,10 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   rows
 }
 
-# A number the API may send as "." (ogquery's marker for none: `eaf`, `n`): a number, NA for ".".
-# The API Source reads "." as null (no_value_as_null()), so its column is numbers; a Local Source's
-# field holding both is text, each number written with 17 significant digits
-# (api_association_rows()).
-number_or_na <- function(x) {
-  if (is.numeric(x)) return(x)
-  x[x %in% "."] <- NA
-  as.numeric(x)
-}
+# The numbers ogquery's `resolve_rows` writes as "." when there is none (`_eaf_or_missing`,
+# `_n_or_missing`). Both Sources read "." as NA before shaping: the API Source in the page's text
+# (no_value_as_null()), a Local Source in ogquery's rows (api_association_rows()).
+no_value_fields <- c("eaf", "n")
 
 # No Associations, with the columns a result would have.
 empty_associations <- function() {

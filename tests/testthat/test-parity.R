@@ -177,7 +177,7 @@ comparable <- function(value) {
 # (the known difference "HTTP").
 rlang_fields <- c("message", "trace", "parent", "call", "rlang", "body", "footer", "use_cli_format")
 api_only_fields <- c("status", "api_message", "api_body")
-local_only_fields <- "reason"
+local_only_fields <- c("reason", "reason_code")
 
 # How a Local Source's refusal differs from the API Source's, as messages: the class chain, the
 # message, and every field both carry; and any field one carries beyond the known difference.

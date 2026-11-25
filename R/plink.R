@@ -29,7 +29,8 @@
 #' @param plink_bin The path of a PLINK 1.9 binary. `NULL` looks for one in the genetics.binaRies
 #'   package if it is installed, then on your `PATH`; if there is none, it stops (class
 #'   `opengwasr_plink_not_found`) and says how to install it.
-#' @return An object of class `og_plink_reference`: `path` (absolute) and `plink_bin`.
+#' @return An object of class `og_plink_reference`: `path` (absolute, with forward slashes on every
+#'   platform) and `plink_bin`.
 #' @examples
 #' \dontrun{
 #' ref <- og_plink_reference("~/ld/1kg/EUR")
@@ -58,7 +59,7 @@ plink_reference <- function(path, plink_bin, args = c(path = "path", plink_bin =
                i = "Give the prefix of the `.bed`, `.bim` and `.fam` files, without the extension."),
              class = "opengwasr_plink_reference_missing", files = missing, arg = args[["path"]], call = call)
   }
-  structure(list(path = file.path(normalizePath(dirname(prefix)), basename(prefix)),
+  structure(list(path = file.path(normalise_path(dirname(prefix)), basename(prefix)),
                  plink_bin = find_plink(plink_bin, call, arg = args[["plink_bin"]])),
             class = "og_plink_reference")
 }
@@ -84,16 +85,16 @@ find_plink <- function(plink_bin, call = rlang::caller_env(), arg = "plink_bin")
       og_abort(paste0("`", arg, "` isn't an executable file: ", format(plink_bin), "."),
                class = c("opengwasr_plink_not_found", "opengwasr_argument"), arg = arg, call = call)
     }
-    return(normalizePath(plink_bin))
+    return(normalise_path(plink_bin))
   }
   # The package is optional, and not on CRAN, so it is looked up by name rather than declared.
   pkg <- "genetics.binaRies"
   if (requireNamespace(pkg, quietly = TRUE)) {
     packaged <- tryCatch(get("get_plink_binary", envir = asNamespace(pkg))(), error = function(e) NULL)
-    if (usable(packaged)) return(normalizePath(packaged))
+    if (usable(packaged)) return(normalise_path(packaged))
   }
   found <- unname(Sys.which("plink"))
-  if (usable(found)) return(normalizePath(found))
+  if (usable(found)) return(normalise_path(found))
   og_abort(c("Can't find PLINK, which a PLINK Reference needs.",
              i = "Install the genetics.binaRies package: `remotes::install_github(\"MRCIEU/genetics.binaRies\")`.",
              i = paste0("Or install PLINK 1.9 (https://www.cog-genomics.org/plink/1.9/) and put it on your `PATH`, or pass its path as `", arg, "`.")),

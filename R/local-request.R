@@ -28,7 +28,7 @@ local_request <- function(src, path, body, call = rlang::caller_env()) {
     total = answer$total %||% nrow(rows),
     truncated = answer$truncated %||% FALSE,
     metadata = answer$metadata %||% list(),
-    releases = release_names(vapply(releases, `[[`, "", "store_id"), vapply(releases, `[[`, "", "release_id"))
+    releases = release_names(releases)
   ))
 }
 
@@ -38,7 +38,7 @@ local_request <- function(src, path, body, call = rlang::caller_env()) {
 # it, so every local read (each request, and the Analyses) checks what it is asked to read.
 local_releases_held <- function(src, releases, call = rlang::caller_env()) {
   held <- release_names(src$releases$store_id, src$releases$release_id)
-  asked <- release_names(vapply(releases, `[[`, "", "store_id"), vapply(releases, `[[`, "", "release_id"))
+  asked <- release_names(releases)
   unknown <- unique(asked[!asked %in% held])
   if (length(unknown) > 0) {
     og_abort(c(paste0("This Local Source holds no Store Release ",
@@ -64,7 +64,7 @@ local_endpoints <- list(
   },
   # `chromosome:position` values (a `chr` prefix allowed) to the variants there, in each Store
   # Release, as the API (`variants_by_position`): a value that isn't `chromosome:position` names
-  # none, and a chromosome no ALID spells is refused (local_read_variants_at()), as the API fails
+  # none, and a chromosome no ALID spells is refused (variants_at_positions()), as the API fails
   # the Job.
   "api/variants/chrpos" = function(src, body, releases, call) {
     wanted <- sub("^chr", "", as.character(unlist(body$positions)))
@@ -74,7 +74,7 @@ local_endpoints <- list(
     chromosome <- vapply(at, `[[`, "", 2)
     position <- as.integer(vapply(at, `[[`, "", 3))
     local_variant_lookup(src, releases, call, function(facade) {
-      rows <- local_read_variants_at(facade, chromosome, position, call)
+      rows <- variants_at_positions(facade, chromosome, position, call)
       rows[paste0(rows$chromosome, ":", rows$position) %in% wanted, , drop = FALSE]
     })
   },
@@ -101,7 +101,7 @@ local_endpoints <- list(
   "api/associations/range" = function(src, body, releases, call) {
     ogquery <- local_ogquery(call)
     if (!local_primary_chromosome(ogquery, body$chromosome)) {
-      local_malformed(paste0("chromosome '", body$chromosome, "' is not one of 1-22, X, Y or MT"), call)
+      local_malformed(paste0("chromosome '", body$chromosome, "' is not one of 1-22, X, Y or MT"), "chromosome", call)
     }
     local_require_associations(src, releases, call)
     rows <- local_release_rows(src, releases, call, function(facade, release) {
@@ -123,7 +123,7 @@ local_endpoints <- list(
   # (order_by_analysis()). `truncated` says whether any Analysis had more than `limit`.
   "api/tophits" = function(src, body, releases, call) {
     threshold <- body$threshold
-    if (!(threshold > 0 && threshold < 1)) local_malformed("threshold must be greater than 0 and less than 1", call)
+    if (!(threshold > 0 && threshold < 1)) local_malformed("threshold must be greater than 0 and less than 1", "threshold", call)
     ogquery <- local_ogquery(call)
     # Every Store Release's tier is chosen before any is read, as the API chooses them when the Job is
     # submitted.
@@ -159,9 +159,9 @@ local_endpoints <- list(
   "api/phewas" = function(src, body, releases, call) {
     threshold <- body$threshold
     limit <- body$limit
-    if (!(threshold > 0 && threshold <= 1)) local_malformed("threshold must be greater than 0 and at most 1", call)
+    if (!(threshold > 0 && threshold <= 1)) local_malformed("threshold must be greater than 0 and at most 1", "threshold", call)
     if (!(limit >= 1 && limit <= max_phewas_per_variant)) {
-      local_malformed(paste0("limit must be from 1 to ", max_phewas_per_variant), call)
+      local_malformed(paste0("limit must be from 1 to ", max_phewas_per_variant), "limit", call)
     }
     local_require_associations(src, releases, call, phewas = TRUE)
     ogquery <- local_ogquery(call)
@@ -186,16 +186,10 @@ local_endpoints <- list(
 )
 
 # A variant lookup over each Store Release in turn: `read(facade)` gives one release's rows, in
-# variant-index order, and each row is stamped with its Store Release, as the API stamps it. The
-# fields are the API's, in the order it sends them.
+# variant-index order, each stamped with its Store Release by local_release_rows(). The fields are
+# the API's, in the order it sends them (name order).
 local_variant_lookup <- function(src, releases, call, read) {
-  found <- lapply(releases, function(r) {
-    rows <- read(local_facade(src, r$store_id, call))
-    rows$store_id <- rep(r$store_id, nrow(rows))
-    rows$release_id <- rep(r$release_id, nrow(rows))
-    rows
-  })
-  rows <- do.call(rbind, c(list(cbind(lookup_fields(), store_id = character(), release_id = character())), found))
+  rows <- local_release_rows(src, releases, call, function(facade, release) read(facade), empty = lookup_fields())
   list(rows = rows[c("alid", "chromosome", "effect_allele", "other_allele", "position", "release_id",
                      "rsid", "store_id")])
 }
@@ -208,10 +202,11 @@ lookup_fields <- function() {
 }
 
 # Rows read from each Store Release in turn, stamped with it, as the API stamps them
-# (query_operations.py `_provenance`): `read(facade, release)` gives one release's rows
-# (local_resolve_rows()), or NULL for none. The fields are in name order, as the API sends them
-# (`json.dumps(sort_keys=True)`).
-local_release_rows <- function(src, releases, call, read) {
+# (query_operations.py `_provenance`): the one place rows get their `store_id` and `release_id`.
+# `read(facade, release)` gives one release's rows (local_resolve_rows(), or a variant lookup's), or
+# NULL for none; `empty` is the rows when there are none. The fields are in name order, as the API
+# sends them (`json.dumps(sort_keys=True)`).
+local_release_rows <- function(src, releases, call, read, empty = api_association_rows(list())) {
   found <- lapply(releases, function(r) {
     rows <- read(local_facade(src, r$store_id, call), r)
     if (is.null(rows) || nrow(rows) == 0) return(NULL)
@@ -221,7 +216,7 @@ local_release_rows <- function(src, releases, call, read) {
   })
   found <- Filter(Negate(is.null), found)
   rows <- if (length(found) > 0) bind_frames(found)
-          else cbind(api_association_rows(list()), store_id = character(), release_id = character())
+          else cbind(empty, store_id = character(), release_id = character())
   rows[sort(names(rows), method = "radix")]
 }
 
@@ -249,9 +244,8 @@ local_resolve_rows <- function(ogquery, facade, record, keep = NULL) {
 
 # ogquery's resolved rows as the API sends them: the fields its reader gives (ogdb-api pins
 # opengwasdb, whose `resolve_rows` gives `log10_p` and no `beta`, `pval` or `source_alid`), each a
-# column of the type the API's JSON parses to. A field holding both numbers and "." (`eaf`, `n`)
-# is text, as the API Source parses it, with each number written exactly; shape_associations()
-# reads "." as NA for both Sources. A missing Association's z, se and log10_p are NaN, the API's
+# column of the type the API's JSON parses to. A field ogquery may write as "." (`no_value_fields`)
+# is numbers, NA for ".", as the API Source reads it (no_value_as_null()). A missing Association's z, se and log10_p are NaN, the API's
 # intended answer (its NDJSON can't carry NaN yet: opengwas/ogdb-api#193).
 api_association_rows <- function(fields) {
   n <- length(fields$alid)
@@ -261,15 +255,22 @@ api_association_rows <- function(fields) {
     if (!is.list(x)) return(x)
     vapply(x, function(v) if (is.numeric(v)) sprintf("%.17g", v) else as.character(v), "", USE.NAMES = FALSE)
   }
+  # A field of no_value_fields: numbers, NA for ".".
+  number <- function(name) {
+    x <- fields[[name]]
+    if (is.list(x)) return(vapply(x, function(v) if (is.numeric(v)) as.numeric(v) else NA_real_, 0, USE.NAMES = FALSE))
+    if (is.character(x)) x[x == "."] <- NA
+    as.numeric(x %||% numeric(n))
+  }
   rows <- data.frame(alid = column("alid"), analysis_id = column("analysis_id"),
                      analysis_label = column("analysis_label"), association_status = column("association_status"),
-                     chromosome = column("chromosome"), eaf = column("eaf", numeric(n)),
+                     chromosome = column("chromosome"), eaf = number("eaf"),
                      effect_allele = column("effect_allele"), log10_p = as.numeric(column("log10_p", numeric(n))),
                      other_allele = column("other_allele"), position = as.integer(column("position", integer(n))),
                      rsid = column("rsid"), se = as.numeric(column("se", numeric(n))),
                      z = as.numeric(column("z", numeric(n))), stringsAsFactors = FALSE)
   # A Ragged release with per-Association sample sizes sends `n` (ogquery ADR 0067); others don't.
-  if (!is.null(fields$n)) rows$n <- column("n", numeric(n))
+  if (!is.null(fields$n)) rows$n <- number("n")
   rows
 }
 
@@ -347,11 +348,11 @@ local_require_associations <- function(src, releases, call, phewas = FALSE) {
   for (r in releases) {
     release <- local_release(src, r$store_id, call)
     if (local_association_coverage(release) %in% c("top_hits", "unknown")) {
-      local_unsupported(paste0("The Store Release `", r$store_id, "/", r$release_id, "` holds only top hits."),
+      local_unsupported(paste0("The Store Release `", release_names(r$store_id, r$release_id), "` holds only top hits."),
                         "Use `og_tophits()` on it.", call = call)
     }
     if (phewas && !local_variant_indexed(ogquery, release)) {
-      local_unsupported(paste0("The Store Release `", r$store_id, "/", r$release_id,
+      local_unsupported(paste0("The Store Release `", release_names(r$store_id, r$release_id),
                                "` has no by-variant index, so it can't answer a PheWAS."),
                         "Query its Associations with `og_associations()` or `og_range()` instead.", call = call)
     }
@@ -362,8 +363,9 @@ local_require_associations <- function(src, releases, call, phewas = FALSE) {
 # validate the body as its model (schemas.py: a range's chromosome, a threshold or limit out of
 # range) before anything else, and answer 400 `invalid_request`, "Malformed request" (ogdb-api
 # main.py:773-784, errors.py:56-64). Its message is the API's exactly, never reworded (ADR 0002);
-# `reason` says what was wrong.
-local_malformed <- function(reason, call) {
+# `reason` says what was wrong, for people, and `reason_code` which field: "chromosome", "threshold"
+# or "limit".
+local_malformed <- function(reason, reason_code, call) {
   og_abort("Malformed request", class = api_error_class("invalid_request", 400L),
-           api_error = "invalid_request", reason = reason, call = call)
+           api_error = "invalid_request", reason = reason, reason_code = reason_code, call = call)
 }

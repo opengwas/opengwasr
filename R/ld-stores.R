@@ -237,7 +237,7 @@ associations_ancestries <- function(src, data, call = rlang::caller_env()) {
   ids <- unique(data$id)
   if (length(ids) == 0) return(NULL)
   releases <- if (all(c("store_id", "release_id") %in% names(data))) {
-    unique(paste0(data$store_id, "/", data$release_id))
+    unique(release_names(data$store_id, data$release_id))
   }
   info <- analyses_lookup(src, ids, resolve_releases(src, releases, call), call)
   stats::setNames(as.character(info$assigned_ancestry), info$id)

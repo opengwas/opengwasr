@@ -32,27 +32,25 @@ copy_release <- function(from, env) {
   file.path(dir, basename(example_releases(from)))
 }
 
-# One Local Source over dense, ragged and hyb (three GWAS Stores), opened once per test process and
-# shared by the test files that only read it. Call it after skip_if_no_local().
-three <- local({
-  src <- NULL
-  function() {
-    if (is.null(src)) src <<- og_local(example_releases("dense", "ragged", "hyb"))
-    src
-  }
-})
-
-# A Local Source over the named example Store Releases (a parity source set, such as
-# c("dense", "ragged", "hyb-c")), opened once per test process for each set. Call it after
-# skip_if_no_local().
+# The one way tests make a Local Source: over the named example Store Releases (by default dense,
+# ragged and hyb, three GWAS Stores; or a parity source set, such as c("dense", "ragged", "hyb-c")),
+# with `bfile` as its PLINK Reference if given. Each is opened once per test process and shared by
+# the tests that only read it. Call it after skip_if_no_local().
 local_source_of <- local({
   opened <- list()
-  function(names) {
-    key <- paste(names, collapse = "+")
-    if (is.null(opened[[key]])) opened[[key]] <<- og_local(example_releases(names))
+  function(names = c("dense", "ragged", "hyb"), bfile = NULL) {
+    key <- paste(c(names, bfile), collapse = "+")
+    if (is.null(opened[[key]])) opened[[key]] <<- og_local(example_releases(names), bfile = bfile)
     opened[[key]]
   }
 })
+
+# A Local Source object that was never opened, so no Python: for refusals, which never read it,
+# and for tests that mock the Python boundary. `releases` as og_local() keeps them.
+unopened_source <- function(releases = data.frame(store_id = "s", release_id = "r", format_version = "0.3.0",
+                                                  path = "/nowhere", stringsAsFactors = FALSE)) {
+  structure(list(releases = releases, handles = new.env()), class = "og_local_source")
+}
 
 # A path as og_local() and og_local_check() store and report it: the one place tests normalise a
 # path, through the package's own normaliser (whose separators test-local-source.R checks with
@@ -61,12 +59,14 @@ local_path <- function(path) normalise_path(path)
 
 # Skip unless this session can read Store Releases: never on CRAN, and only with a Python the run
 # chose itself (`RETICULATE_PYTHON`), so a test never sets one up with uv or touches the network.
+# The cheap checks come first: skip_if_not_installed() loads reticulate's namespace, about a second,
+# which a run without Python needn't pay to skip.
 skip_if_no_local <- function() {
   testthat::skip_on_cran()
-  testthat::skip_if_not_installed("reticulate")
   if (!nzchar(Sys.getenv("RETICULATE_PYTHON"))) {
     testthat::skip("RETICULATE_PYTHON isn't set; local tests never set Python up themselves.")
   }
+  testthat::skip_if_not_installed("reticulate")
   found <- tryCatch(local_ogquery(), opengwasr_local_unavailable = function(e) NULL)
   if (is.null(found)) testthat::skip("The Python in RETICULATE_PYTHON has no ogquery.")
   invisible(found)

@@ -1,0 +1,21 @@
+# Example Store Releases: four of the Store Reader contract bundle's nine releases, copied from
+# ogquery's tests/contract/releases/. The bundle is opengwasdb's (its SOURCE names the commit);
+# ogquery 0.1.0 reads it alone.
+repository https://github.com/opengwas/ogquery.git
+commit f95f4ab1d64bbae2b54db56c5528c08f93f63e9a
+path tests/contract/releases
+bundle 1
+format_version 0.3.0
+opengwasdb_commit 69c2945229070ede4ccf8ced0520b281a87a0d68
+#
+# Here         There              store_id      release_id    layout
+# dense/       dense_ranges/      s             r             dense
+# ragged/      ragged_completed/  residual-rag  comp          ragged
+# hyb/         hybrid_observed/   hyb           v1            hybrid
+# hyb-c/       hybrid_completed/  hyb           v1-completed  hybrid
+#
+# Each is byte for byte the bundle's, less variants.tsv.gz, variants.tsv.gz.tbi and overview.html:
+# a 0.3.0 release is read from its sidecars, never its Variant Table, and with those files gone each
+# still gives every answer of the bundle's expected/<release>.json (its contract_reader.py, run with
+# ogquery 0.1.0). The directory names are short because R CMD check notes a path in the package
+# tarball longer than 100 bytes, and a hybrid release's deepest file is 69 bytes below its root.

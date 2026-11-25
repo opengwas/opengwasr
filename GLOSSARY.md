@@ -1,6 +1,6 @@
 # opengwasr
 
-The R interface to OpenGWAS data: it queries GWAS Stores and LD Stores either through the OpenGWAS API or from local copies, and hands the results to analytical tools such as TwoSampleMR. Data terms are taken unchanged from opengwasdb and ogld, and terms that cross repositories from og-dev-hub's `CONTEXT.md`; this glossary defines them only as far as opengwasr users meet them.
+The R interface to OpenGWAS data: it queries GWAS Stores and LD Stores through the OpenGWAS API or from Store Releases you have downloaded, and hands the results to analytical tools such as TwoSampleMR. Data terms are taken unchanged from opengwasdb and ogld, and terms that cross repositories from og-dev-hub's `CONTEXT.md`; this glossary defines them only as far as opengwasr users meet them.
 
 ## Data (from opengwasdb and ogld)
 
@@ -82,7 +82,7 @@ The OpenGWAS service in production today, which ieugwasr calls, until OpenGWAS r
 _Avoid_: the old API, bare "OpenGWAS" for that service
 
 **Local Source**:
-Store Releases downloaded to the user's own machine, suited to large queries. Reading downloaded LD Stores is a later addition.
+Store Releases downloaded to the user's own machine, suited to large queries.
 _Avoid_: offline mode, local files
 
 **Job**:
@@ -90,5 +90,5 @@ A query submitted to the API Source that is queued and later collected, rather t
 _Avoid_: request, task
 
 **Store Reader**:
-The single library through which every consumer reads a Store Release. It is ogquery.
+The single library through which every consumer reads a Store Release. That library is ogquery.
 _Avoid_: query engine, opengwasdb (for the reading part)

@@ -168,6 +168,13 @@ test_api("an EAF the API sends as \".\" is NA, and eaf stays a number", {
   expect_equal(x$eaf, c(0.38, NA))
 }, live = FALSE)
 
+test_api("eaf and n keep every digit of the API's numbers when a page also holds \".\" in them", {
+  x <- og_associations(src, c("21:3000:A:G", "21:4000:A:G"), bmi, releases = rel)
+  expect_identical(x$eaf, c(0.05000000074505806, NA))
+  # A per-Association N as sent; "." falls back to the Analysis's sample size.
+  expect_identical(x$n, c(30694.123456789012, 532396))
+}, live = FALSE)
+
 test_api("an infinite SE gives beta NaN, and pval is the API's own log10_p", {
   x <- og_associations(src, c(snv, "21:2000:A:G"), bmi, releases = rel)
   inf <- x[x$alid == "21:2000:A:G", ]

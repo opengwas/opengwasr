@@ -403,7 +403,11 @@ fake_associations <- function() {
       # An infinite SE (a release before format 0.2.3 may hold one) with a finite log10_p, as the
       # API's pinned reader computes log10_p from z alone. jsonlite writes Inf as "Inf"; the real API
       # would write `Infinity`, which isn't JSON (opengwas/ogdb-api#193).
-      bmi("21:2000:A:G", "rs999022", 0.4, 6, Inf, -8.7, "observed")
+      bmi("21:2000:A:G", "rs999022", 0.4, 6, Inf, -8.7, "observed"),
+      # An EAF and a per-Association N with 17 significant digits, and a row with "." in both, so
+      # one page mixes numbers and "." in each (a Ragged release's rows, as ogquery resolves them).
+      c(bmi("21:3000:A:G", "rs999023", 0.05000000074505806, 5, 0.01, -6.3, "observed"), list(n = 30694.123456789012)),
+      c(bmi("21:4000:A:G", "rs999024", ".", 5, 0.01, -6.3, "observed"), list(n = "."))
     )
   )
 }

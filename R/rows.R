@@ -80,8 +80,10 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   rows
 }
 
-# A number the API may send as "." (ogquery's marker for none: `eaf`, `n`), which makes the column
-# text when a page holds both: a number, NA for ".".
+# A number the API may send as "." (ogquery's marker for none: `eaf`, `n`): a number, NA for ".".
+# The column is text when every row of a page holds "." (a page mixing numbers and "." is read as
+# numbers by exact_numbers()), or when a Local Source's field holds both (each number written
+# with 17 significant digits, api_association_rows()).
 number_or_na <- function(x) {
   if (is.numeric(x)) return(x)
   x[x %in% "."] <- NA

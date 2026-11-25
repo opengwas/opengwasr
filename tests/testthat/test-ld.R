@@ -618,3 +618,13 @@ test_that("og_ld_matrix(), og_ld_proxies(), og_ld_reflookup() and og_clump() rea
   expect_equal(og_provenance(joint)$clump$clumps, "computed")
   expect_equal(joint, suppressWarnings(og_clump(src, data, ld = "EUR")), ignore_attr = TRUE)
 })
+
+# og_ld_resource() (#36): what a package built on opengwasr reads to honour a Source's LD resource.
+test_that("og_ld_resource() gives the API Source's LD resource, NULL without one, and refuses a non-Source", {
+  expect_null(og_ld_resource(fake_source(fake)))
+  expect_equal(og_ld_resource(fake_source(fake, ld_store = "EUR")), "EUR")
+  expect_equal(og_ld_resource(fake_source(fake, ld_store = eur)), eur)
+  expect_error(og_ld_resource(NULL), class = "opengwasr_source_required")
+  expect_error(og_ld_resource("EUR"), class = "opengwasr_argument")
+  expect_error(og_ld_resource(list(ld = "EUR")), class = "opengwasr_argument")
+})

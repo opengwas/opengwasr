@@ -130,7 +130,7 @@ og_local <- function(gwas, plink = NULL, bfile = NULL, ld_store = NULL, geno_sto
     list(releases = rows[c("store_id", "release_id", "format_version", "path")], handles = handles,
          # A local query waits for nothing: the deadline a call sets (local_query()) is never reached.
          timeout = Inf,
-         # The Source's LD resource (ADR 0006): read by ld_resource() (R/ld-stores.R), never elsewhere.
+         # The Source's LD resource (ADR 0006): read by og_ld_resource() (R/ld-stores.R), never elsewhere.
          ld = ld),
     class = "og_local_source"
   )
@@ -143,10 +143,10 @@ format.og_local_source <- function(x, ...) {
     "<og_local_source>",
     paste0("\u2022 Store Releases: ", nrow(r)),
     if (nrow(r)) paste0("\u2022 ", release_names(r$store_id, r$release_id), ": ", r$path),
-    if (is.null(x$ld)) {
+    if (is.null(ref <- og_ld_resource(x))) {
       "\u2022 LD resource: none"
     } else {
-      c(paste0("\u2022 LD resource: PLINK Reference ", x$ld$path), paste0("  PLINK: ", x$ld$plink_bin))
+      c(paste0("\u2022 LD resource: PLINK Reference ", ref$path), paste0("  PLINK: ", ref$plink_bin))
     }
   )
 }

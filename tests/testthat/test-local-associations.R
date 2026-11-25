@@ -111,8 +111,9 @@ test_that("og_tophits(clump = FALSE) on a Local Source gives the contract's top 
                          "1:1000:A:G", "1:9000:A:G"))
   expect_equal(x$z, c(-9, 8, -8, 7, 7, 7, -6, -6))
   expect_equal(x$rsid, c(NA, "rs5000", "rs1007", "rs5000", "rs1005", "rs1006", "rs1000", "rs1004"))
-  # 1:1000:A:G's SE is infinite (dense_ranges' planted legacy state): its beta and pval are NaN, as
-  # the contract gives them ("NaN"), not z * Inf.
+  # 1:1000:A:G's SE is infinite (dense_ranges' planted legacy state): its beta is NaN, as ogquery
+  # derives it, not z * Inf. Its pval is what ogquery's row carries (10^log10_p): NaN, as the
+  # contract gives it ("NaN").
   expect_identical(x$se[[7]], Inf)
   expect_true(is.nan(x$beta[[7]]))
   expect_true(is.nan(x$pval[[7]]))

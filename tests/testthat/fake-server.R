@@ -365,7 +365,11 @@ fake_associations <- function() {
       # The API sends rsid "." where a variant has no rsID.
       bmi("16:53767042:A:G", ".", 0.62, -38, 0.002, -300, "observed"),
       # The API sends eaf "." where the Store Release has none (ogquery's marker).
-      bmi("21:1000:A:G", "rs999021", ".", 7, 0.01, -11.6, "observed")
+      bmi("21:1000:A:G", "rs999021", ".", 7, 0.01, -11.6, "observed"),
+      # An infinite SE (a release before format 0.2.3 may hold one) with a finite log10_p, as the
+      # API's pinned reader computes log10_p from z alone. jsonlite writes Inf as "Inf"; the real API
+      # would write `Infinity`, which isn't JSON (opengwas/ogdb-api#193).
+      bmi("21:2000:A:G", "rs999022", 0.4, 6, Inf, -8.7, "observed")
     )
   )
 }

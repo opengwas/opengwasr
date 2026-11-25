@@ -7,7 +7,9 @@
 #   beta = z * se
 #   pval = 10^log10_p     (underflows to 0 above |z| of about 38.5; `z` stays exact)
 #
-# both NaN where `se` isn't finite, as ogquery derives them. `eaf` and `n` sent as "." are NA.
+# `beta` is NaN where `se` isn't finite, as ogquery derives it; `pval` is always the row's own
+# `log10_p`, whatever it is (opengwasr doesn't police the API's answer). `eaf` and `n` sent as "."
+# are NA.
 #
 # Sample size comes with every row: `n` is the row's own N where the API sends one (the dev API's
 # molecular Analyses, such as OGS-00027's, do; most GWAS Stores don't), otherwise the Analysis's
@@ -45,18 +47,14 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   if (original_units) check_original_units_known(unique(rows$id), analyses, call)
   if (!is.null(rows$rsid)) rows$rsid <- rsid_or_na(rows$rsid)
   for (name in intersect(c("eaf", "n"), names(rows))) rows[[name]] <- number_or_na(rows[[name]])
-  # As ogquery derives them (ogquery stats.py `association_statistics()`, ADR 0104, lines 155-161):
-  # NaN where the SE isn't finite (a missing Association, or an infinite SE a release before format
-  # 0.2.3 may hold), where z * Inf would read as a value.
-  unusable <- !is.finite(rows$se)
+  # `beta` as ogquery derives it (ogquery stats.py `association_statistics()`, ADR 0104, lines
+  # 155-161): NaN where the SE isn't finite (a missing Association, or an infinite SE a release
+  # before format 0.2.3 may hold), where z * Inf would read as a value. `pval` is the row's own.
   if (is.null(rows$beta)) {
     rows$beta <- rows$z * rows$se
-    rows$beta[unusable] <- NaN
+    rows$beta[!is.finite(rows$se)] <- NaN
   }
-  if (is.null(rows$pval)) {
-    rows$pval <- 10^rows$log10_p
-    rows$pval[unusable] <- NaN
-  }
+  if (is.null(rows$pval)) rows$pval <- 10^rows$log10_p
   rows$log10_p <- NULL
   at <- match(rows$id, analyses$id)
   field <- function(name, as) {

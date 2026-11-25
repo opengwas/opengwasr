@@ -111,9 +111,9 @@ stores <- system.file("stores", package = "opengwasr")
 src <- og_local(c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")))
 src
 # With a PLINK Reference as its LD resource, where PLINK is installed:
-if (!is.null(tryCatch(og_plink_reference(system.file("plink", "ref", package = "opengwasr")),
-                      error = function(e) NULL))) {
-  src <- og_local(file.path(stores, "dense"), bfile = system.file("plink", "ref", package = "opengwasr"))
+bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
+if (!is.null(tryCatch(og_plink_reference(bfile), error = function(e) NULL))) {
+  src <- og_local(file.path(stores, "dense"), bfile = bfile)
   og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
 }
 \dontshow{\}) # examplesIf}

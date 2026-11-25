@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue), and the Source constructors in [Sources](#sources): `og_api(ld_store = )` comes in a later step (#34), and `og_local()` needs Python, ogquery and a PLINK Reference, which this vignette doesn't use.
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue), and `sources-local` in [Sources](#sources), which needs Python, ogquery and a PLINK Reference, which this vignette doesn't use (they run in [Querying downloaded Store Releases](local-source.html#local-clumping)).
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
@@ -44,7 +44,7 @@ An LD resource is one of three kinds, and each can be on the API or on your mach
 
 A form that is coming is refused with an error that says so, rather than quietly doing something else.
 
-```{r sources-api, eval = FALSE}
+```{r sources-api}
 src <- og_api()                         # LD: each Analysis's Assigned Ancestry chooses
 src_eur <- og_api(ld_store = "EUR")     # LD: the EUR LD Store
 src_eur

@@ -1,5 +1,5 @@
 # Generates the PLINK Reference that comes with opengwasr, `ref.{bed,bim,fam}` (synthetic: no real
-# people). The tests and the Local Source vignette both read it, from `system.file("plink", "ref")`.
+# people). The tests and the Local Source vignette both read it, as `file.path(system.file("plink", package = "opengwasr"), "ref")`.
 #
 #   Rscript inst/plink/make-reference.R      # PLINK 1.9 from genetics.binaRies, else on the PATH
 #

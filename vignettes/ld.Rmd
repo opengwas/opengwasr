@@ -11,9 +11,8 @@ Linkage disequilibrium (LD) is how strongly two variants are inherited together,
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except these:
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026 (`ld-resource-api` and `ld-resource-override` replay the same requests as `choosing-ld`, `unassigned-ld` and `ld-matrices`), except these:
 >
-> - `ld-resource-api` and `ld-resource-override`: the Source's LD resource, `og_api(ld_store = )`, comes in a later step (#34).
 > - `stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39). Its output is illustrative.
 > - The PLINK Reference section, which is shown but not evaluated: building the vignette would need a PLINK binary and a genotype fileset such as 1000 Genomes, which CRAN doesn't have. Its grey output blocks marked `# illustrative` are shaped the way opengwasr returns them (the API isn't involved in them). The package's tests run the same functions with PLINK on a small committed fileset wherever a PLINK binary can be found, as in CI; elsewhere they are skipped.
 >
@@ -59,7 +58,7 @@ A form that is coming is refused with an error that says so (class `opengwasr_ld
 
 Every verb that needs LD uses the Source's LD resource: `og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()`. Here the Source's LD resource is the EUR LD Store, and the top hits are clumped there without `ld`:
 
-```{r ld-resource-api, eval = FALSE}
+```{r ld-resource-api}
 src_eur <- og_api(ld_store = "EUR")
 src_eur
 cad_eur <- og_tophits(src_eur, "OGS-00011:GCST003116")
@@ -68,7 +67,7 @@ unique(cad_eur[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")]
 
 A verb's `ld` overrides the Source's LD resource for that one call ([below](#ld-argument)). The next call uses the Source's again:
 
-```{r ld-resource-override, eval = FALSE}
+```{r ld-resource-override, warning = FALSE}
 basophils <- og_tophits(src_eur, "OGS-00014:GCST90475125", ld = "AMR")
 unique(basophils$clump_ld)
 m <- og_ld_matrix(src_eur, c("16:53772541:A:G", "16:53767042:C:T", "18:60161902:C:T", "2:628504:A:G", "5:75701728:A:AAAAT"))

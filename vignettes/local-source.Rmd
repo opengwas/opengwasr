@@ -11,11 +11,11 @@ A **Local Source** answers your queries from **Store Releases** you have downloa
 
 This vignette follows one journey: set up Python, open your Store Releases, run your script against them, clump what you fetched, and run a TwoSampleMR pipeline on them.
 
-> **Status.** The Local Source is being built. Today it sets up and checks Python, opens Store Releases, looks up Analyses and variants, and answers top hits (unclumped), Associations, PheWAS and ranges. Those chunks run on the small example Store Releases that come with opengwasr, wherever Python and ogquery are set up where this vignette was built (on CRAN, which has no Python, the code is shown unevaluated). The chunks that don't run, and why:
+> **Status.** The Local Source is being built. Today it sets up and checks Python, opens Store Releases, looks up Analyses and variants, and answers top hits, Associations, PheWAS and ranges, and clumps and reads LD matrices with a PLINK Reference. Those chunks run on the small example Store Releases that come with opengwasr, wherever Python and ogquery are set up where this vignette was built (on CRAN, which has no Python, the code is shown unevaluated). The chunks that don't run, or need more, and why:
 >
 > - `local-python-hpc-shell`, `local-python-conda-shell` and `local-python-conda`: they set up a Python environment on your machine.
 > - `local-translate`: it calls the OpenGWAS API, and this vignette never touches the network.
-> - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary. Clumping and LD on a Local Source come in a later step (#34); after it, they run wherever a PLINK binary is found (`plink_ready` below), as in CI.
+> - `local-clumping-plink`, `local-plink-settings`, `local-og-clump`, `local-ld-matrix` and `local-ld-override`: they use a PLINK Reference, the small synthetic fileset that comes with opengwasr, and need a PLINK binary too. They run wherever one is found (`plink_ready`: genetics.binaRies, or `plink` on the `PATH`), as in CI; without one their code is shown unevaluated.
 > - `local-stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39).
 > - `local-twosamplemr`: TwoSampleMR on a Local Source comes in a later step (#36), on full-size Store Releases.
 >
@@ -32,7 +32,7 @@ knitr::opts_chunk$set(eval = local_ready)
 # The chunks that clump or read LD with the bundled PLINK Reference also need a PLINK binary
 # (genetics.binaRies, or plink on the PATH), as in CI. Without one, their code is shown unevaluated.
 plink_ready <- local_ready && !inherits(
-  tryCatch(opengwasr::og_plink_reference(system.file("plink", "ref", package = "opengwasr")),
+  tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
            error = identity),
   "error")
 ```
@@ -296,28 +296,28 @@ og_provenance(top)$clump[, c("id", "ld", "r2", "kb", "leads", "clumps")]
 
 Give `og_local()` the fileset's prefix as `bfile`, as ieugwasr's local functions took it. opengwasr comes with a small synthetic PLINK Reference, 300 made-up people, whose rsIDs include the example Store Releases' top hits, and this vignette uses it:
 
-```{r local-clumping-plink, eval = FALSE}
-bfile <- system.file("plink", "ref", package = "opengwasr")
+```{r local-clumping-plink, eval = plink_ready}
+bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
 src <- og_local(gwas = c(file.path(stores, c("dense", "ragged")), file.path(stores, "hyb", "v1")),
                 bfile = bfile)
 src
 
 top <- og_tophits(src, "s:bmi_irn", r2 = 0.001, kb = 10000)
 top[, c("alid", "rsid", "z", "clump_r2", "clump_kb", "clump_size")]
-og_provenance(top)$clump
+og_provenance(top)$clump[, c("id", "ld_choice", "r2", "kb", "hits", "absent", "leads", "clumps")]
 ```
 
 With your own, give its prefix, and the PLINK binary if opengwasr can't find one (it looks in the genetics.binaRies package, then on your `PATH`): `og_local(gwas = "/data/opengwas/OGS-00011", plink = "/usr/local/bin/plink", bfile = "/data/ld/1kg/EUR")`. Variants are matched to the PLINK Reference by rsID, because PLINK References are usually on GRCh37: a top hit with no rsID, or one the reference doesn't hold, is left out, and a message says how many. The Analysis's top hits are read from your Store Releases, and PLINK clumps them on your machine.
 
 A PLINK Reference has no default `r2` and `kb` of its own, so clumping with one needs both (class `opengwasr_plink_settings_required`):
 
-```{r local-plink-settings, error = TRUE, eval = FALSE}
+```{r local-plink-settings, error = TRUE, eval = plink_ready}
 og_tophits(src, "s:bmi_irn")
 ```
 
 To clump Associations you already have, as one set, use `og_clump()`. It uses the Source's LD resource too:
 
-```{r local-og-clump, eval = FALSE}
+```{r local-og-clump, eval = plink_ready}
 hits <- og_tophits(src, "s:bmi_irn", clump = FALSE)
 og_clump(src, hits, r2 = 0.001, kb = 10000)[, c("alid", "rsid", "z", "clump_size")]
 ```
@@ -326,18 +326,18 @@ og_clump(src, hits, r2 = 0.001, kb = 10000)[, c("alid", "rsid", "z", "clump_size
 
 `og_ld_matrix()` reads the LD matrix from the Source's PLINK Reference. Variants given as ALIDs are matched by their rsIDs, which are looked up in your Store Releases, never on the API:
 
-```{r local-ld-matrix, eval = FALSE}
-m <- og_ld_matrix(src, c("rs5000", "rs1000", "2:300:C:T", "2:7000:A:C"))
+```{r local-ld-matrix, eval = plink_ready}
+m <- og_ld_matrix(src, c("1:5000:C:G", "1:1000:A:G", "2:300:C:T", "2:7000:A:C"))
 round(m, 3)
 ```
 
-The matrix is named `<rsid>_<allele>_<allele>`, with the PLINK Reference's alleles; the sign of r refers to the first one.
+The matrix is named `<rsid>_<allele>_<allele>`, with the PLINK Reference's alleles; the sign of r refers to the first one. rsIDs work as well as ALIDs, and need no lookup.
 
 ### Overriding the LD for one call {#local-ld-override}
 
 Each verb's `ld` overrides the Source's LD resource for one call. With a PLINK Reference as `ld`, a Local Source with no LD resource of its own can clump or read an LD matrix:
 
-```{r local-ld-override, eval = FALSE}
+```{r local-ld-override, eval = plink_ready}
 ref <- og_plink_reference(bfile)
 og_ld_matrix(local, c("rs5000", "rs1000"), ld = ref)
 ```

@@ -17,6 +17,10 @@
 #    `api_error` and every field both carry). Provenance is compared too, less what can't agree:
 #    `retrieved` (when each answer was read), `job_ids` (a Local Source runs no Job) and
 #    `cost_estimate` (the API's estimate per Job; a Local Source has none, NA).
+# `log10_p`, and `pval` (10^log10_p), are compared to within four ulps of log10_p in all three, as
+# opengwasdb compares them across machines (column_agrees()): log10_p is the libm's, which differs
+# in the last bits between the machine that generated answers.json and the one running the tests.
+# Every other value exactly.
 # When the last fails, the first two say which side is off.
 #
 # Known differences ------------------------------------------------------------------------------
@@ -120,6 +124,45 @@ generated_answer <- function(query, answers = parity_answers) {
   stop("answers.json has no answer for query ", query$name, "; run fixtures/parity/generate.py.")
 }
 
+# Values compared across machines to within four ulps: log10_p is the libm's (erfc, erf, log,
+# log1p), which differs in the last bits between C libraries, so answers generated on one machine
+# and read on another (CI's) differ there. opengwasdb's contract compares it so (210e12c9,
+# a1c5aa36: CROSS_MACHINE_RTOL, relative 4 * 2^-52). Both Sources give pval as 10^log10_p, which
+# carries log10_p's difference multiplied by ln(10) * |log10_p|: CI's 1-ulp difference in a
+# log10_p of -8.70 is 19 ulps of pval. So pval agrees when its log10_p does to within four ulps,
+# and never more tightly than four ulps of pval itself. Every other value is stored or exact
+# arithmetic on stored values, and is compared exactly.
+cross_machine_rtol <- 4 * .Machine$double.eps
+libm_columns <- c("pval", "log10_p")
+
+# Whether `x` and `y` agree as values of column `name`: identical; or, for a libm column, doubles
+# with the same attributes, NA and NaN at the same places, the same infinities and zeros, and each
+# other pair within cross_machine_rtol of the larger in magnitude (for pval, of its log10_p).
+column_agrees <- function(name, x, y) {
+  if (identical(x, y)) return(TRUE)
+  if (!name %in% libm_columns || !is.double(x) || !is.double(y) || length(x) != length(y) ||
+      !identical(attributes(x), attributes(y))) {
+    return(FALSE)
+  }
+  if (!identical(is.na(x), is.na(y)) || !identical(is.nan(x), is.nan(y))) return(FALSE)
+  finite <- is.finite(x) & is.finite(y) & x != 0 & y != 0
+  if (!identical(x[!finite], y[!finite])) return(FALSE)
+  larger <- pmax(abs(x[finite]), abs(y[finite]))
+  scale <- if (name == "pval") pmax(1, log(10) * abs(log10(larger))) else 1
+  all(abs(x[finite] - y[finite]) <= cross_machine_rtol * scale * larger)
+}
+
+# A Local Source's data frame as compared with the API Source's: a libm column that agrees to
+# within four ulps (column_agrees()) takes the API Source's values, so everything else, the
+# columns' types, the rows' order and every other value, is compared exactly.
+within_ulps <- function(here, api) {
+  if (!is.data.frame(here) || !is.data.frame(api)) return(here)
+  for (name in intersect(libm_columns, intersect(names(here), names(api)))) {
+    if (column_agrees(name, here[[name]], api[[name]])) here[[name]] <- api[[name]]
+  }
+  here
+}
+
 # What is compared of a data frame: itself with its provenance, less the fields that can't agree.
 comparable <- function(value) {
   prov <- attr(value, "og_provenance", exact = TRUE)
@@ -215,8 +258,8 @@ generated_differences <- function(result, query, answers = parity_answers) {
   found <- character()
   for (name in fields) {
     got <- value[[name]][at]
-    if (!identical(got, expected[[name]])) {
-      i <- which(!mapply(identical, got, expected[[name]]))[[1]]
+    if (!column_agrees(name, got, expected[[name]])) {
+      i <- which(!mapply(function(a, b) column_agrees(name, a, b), got, expected[[name]]))[[1]]
       found <- c(found, paste0("`", name, "` of ", key(expected)[[i]], ": ", format(got[[i]], digits = 17),
                                ", expected ", format(expected[[name]][[i]], digits = 17)))
     }
@@ -303,9 +346,43 @@ for (query in parity_queries) local({
     } else if (inherits(api$value, "condition") || inherits(here$value, "condition")) {
       expect_identical(condition_differences(here$value, api$value), character())
     } else {
-      expect_identical(comparable(here$value), comparable(api$value))
+      expect_identical(comparable(within_ulps(here$value, api$value)), comparable(api$value))
     }
   })
+})
+
+# pval agrees across machines to four ulps, every other value exactly ---------------------------
+
+test_that("the comparison takes pval to within four ulps, and every other value exactly", {
+  base <- api_run(parity_queries[["tophits-truncated"]])$value
+  # 0.5 is a power of two, so one ulp of it is 2^-53 and five ulps are 5 * 2^-53, beyond
+  # 4 * .Machine$double.eps * 0.5; at 0.5, ln(10) * |log10_p| is below 1, so the rule is four ulps
+  # of pval itself. z's -9 has ulps of 2^-49.
+  base$pval[[1]] <- 0.5
+  moved <- function(name, by) {
+    x <- base
+    x[[name]][[1]] <- x[[name]][[1]] + by
+    x
+  }
+  # Between the Sources.
+  expect_identical(comparable(within_ulps(moved("pval", 2^-53), base)), comparable(base))
+  expect_false(identical(comparable(within_ulps(moved("pval", 5 * 2^-53), base)), comparable(base)))
+  expect_false(identical(comparable(within_ulps(moved("z", -2^-49), base)), comparable(base)))
+  # Against the generated answer, by the same rule.
+  expect_true(column_agrees("pval", 0.5 + 2^-53, 0.5))
+  expect_false(column_agrees("pval", 0.5 + 5 * 2^-53, 0.5))
+  expect_false(column_agrees("z", -9 - 2^-49, -9))
+  # CI's case (run 45604755758): s/r 1:9000:A:G, whose log10_p differs by one ulp (2^-49 at -8.70),
+  # passes; five ulps of that log10_p fail.
+  expect_true(column_agrees("pval", 1.9731752900753962e-09, 1.9731752900753879e-09))
+  log10_p <- -8.7048343318127248
+  expect_false(column_agrees("pval", 10^(log10_p - 5 * 2^-49), 10^log10_p))
+  expect_true(column_agrees("log10_p", log10_p - 2^-49, log10_p))
+  expect_false(column_agrees("log10_p", log10_p - 5 * 2^-49, log10_p))
+  # NA and NaN, and the infinities, are compared exactly.
+  expect_false(column_agrees("pval", NA_real_, NaN))
+  expect_false(column_agrees("pval", Inf, .Machine$double.xmax))
+  expect_true(column_agrees("pval", c(NaN, 1), c(NaN, 1 + 2^-52)))
 })
 
 # The parity tests fail when one generated value changes --------------------------------------------

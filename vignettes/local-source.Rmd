@@ -11,7 +11,7 @@ A **Local Source** answers your queries from **Store Releases** you have downloa
 
 This vignette follows one journey: set up Python, open your Store Releases, run your script against them, clump what you fetched, and run a TwoSampleMR pipeline on them.
 
-> **Status.** The Local Source is being built. Setting up Python, checking the setup and opening Store Releases work today, and those chunks run on the small example Store Releases that come with opengwasr whenever Python and ogquery are set up where this vignette was built. Queries come next: that code shows how it will work, and is not run yet. The grey output blocks marked `# illustrative` are shaped the way opengwasr returns results, not recorded from a run.
+> **Status.** The Local Source is being built. Setting up Python, checking the setup, opening Store Releases, looking up Analyses and looking up variants work today, and those chunks run on the small example Store Releases that come with opengwasr whenever Python and ogquery are set up where this vignette was built. Queries of Associations come next: that code shows how it will work, and is not run yet. The grey output blocks marked `# illustrative` are shaped the way opengwasr returns results, not recorded from a run.
 
 ```{r setup, include = FALSE}
 # The chunks that read the bundled example Store Releases run only where a Python with ogquery is
@@ -154,20 +154,41 @@ og_range(src, "OGS-00011:GCST003116", chromosome = "9", start = 22090000, end = 
 og_variants_rsid(src, "rs34159589")
 ```
 
-`og_status()`, `og_user()`, `og_submit()` and the `og_job_*` functions mean nothing for a Local Source: there is no API to ask, and nothing to queue.
+On the example Store Releases, the variant lookups already run. `rs5000` names two variants in one Store Release, and two Store Releases hold a variant at `1:1000`, one of them without an rsID:
 
-<!-- Which of these refuse, and with which condition class: settled in #32. -->
+```{r local-lookups}
+og_variants_rsid(local, "rs5000")
+og_variants_chrpos(local, "1:1000")
+```
+
+`og_status()`, `og_user()`, `og_submit()` and the `og_job_*` functions mean nothing for a Local Source: there is no API to ask, and nothing to queue. Each refuses it with an error of class `opengwasr_local_unsupported`. `og_local_check()` is where to look at a Local Source instead:
+
+```{r local-refusals, error = TRUE}
+og_status(local)
+```
+
+The LD operations, `og_ld_stores()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`, refuse a Local Source as `src` the same way: it holds no LD Stores. Use the API Source for its LD Stores, or, for an LD matrix, a PLINK Reference as `ld` with no Source, `og_ld_matrix(NULL, variants, ld = og_plink_reference(path))` (see [The `ld` argument](ld.html#ld-argument)).
 
 ## Naming Analyses {#local-names}
 
-An Analysis is named `<store_id>:<analysis_id>`, such as `OGS-00011:GCST003116`, as with the API Source. An Analysis name that matches nothing is refused, as with the API Source.
+An Analysis is named `<store_id>:<analysis_id>`, such as `OGS-00011:GCST003116`, as with the API Source, and a bare `analysis_id` is accepted where it names one Analysis. An Analysis name that matches nothing is refused, as with the API Source (`opengwasr_analysis_not_found`). `og_analyses()` lists every Analysis the Local Source holds, or the ones you name:
+
+```{r local-names}
+og_analyses(local)[, c("id", "analysis_label", "sample_size", "release_id")]
+og_analyses(local, "s:bmi_irn")[, c("requested_id", "id", "stored_effect_scale", "outcome_type")]
+```
+
+The rows have every column of the API Source's, in its order, read from each Store Release's `analyses.tsv`, and then the columns of `analyses.tsv` the API Source doesn't return. `outcome_type` is derived as the catalogue derives it. The columns the catalogue adds (`status`, `listed`, `trait_class`, `ancestry_category` and `label_from_source`) are `NA` locally, as is any column a Store Release has no value for.
 
 ### Store Releases {#local-releases}
 
 Because a Local Source holds one Store Release of each GWAS Store, a name never has to choose between Store Releases. `releases` works as on the API Source, in every query function that takes Analyses: give a GWAS Store id, such as `"OGS-00011"`, or `"<store_id>/<release_id>"`, naming a Store Release the Source holds. One it doesn't hold is refused, as the API Source refuses an unknown Store Release.
 
-```{r local-pin, eval = FALSE}
-og_analyses(src, "OGS-00011:GCST003116", releases = "OGS-00011/OGS-00011-v2")
+For example `og_analyses(src, "OGS-00011:GCST003116", releases = "OGS-00011/OGS-00011-v2")`. With the example Store Releases:
+
+```{r local-pin, error = TRUE}
+og_analyses(local, releases = "residual-rag/comp")[, c("id", "release_id")]
+og_analyses(local, releases = "hyb/v1-completed")
 ```
 
 Record the `store_id` and `release_id` columns that come back with every Association to reproduce an analysis later.
@@ -176,17 +197,10 @@ Record the `store_id` and `release_id` columns that come back with every Associa
 
 Store Releases don't carry the ids **Legacy OpenGWAS** used (`ukb-b-19953`, `ebi-a-GCST003116`), so a Local Source refuses one rather than guess, and the error tells you what to do. It stays on your machine and never calls the API for you.
 
-```{r local-legacy, eval = FALSE, error = TRUE}
-og_tophits(src, "ukb-b-19953")
-```
+The error has class `opengwasr_legacy_id_local`:
 
-<!-- The error's class and wording: settled in #32. -->
-
-```text
-# illustrative
-Error in `og_tophits()`:
-! `ukb-b-19953` is a Legacy OpenGWAS id, and a Local Source holds only canonical ids.
-ℹ Translate it with `og_analyses(og_api(), "ukb-b-19953")`, then use the `id` it returns.
+```{r local-legacy, error = TRUE}
+og_analyses(local, "ukb-b-19953")
 ```
 
 Translate once, with the API Source, and keep the canonical id from then on:

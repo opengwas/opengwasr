@@ -3,6 +3,9 @@
 #' `og_status()` reports whether the API is up and the limits it applies. `og_user()` reports who
 #' you are signed in as, and your allowance.
 #'
+#' A Local Source has no API to ask: both refuse it (`opengwasr_local_unsupported`); check its
+#' setup with [og_local_check()].
+#'
 #' @param src A Source, from [og_api()].
 #' @return A list (class `og_status` or `og_user`, with a print method). Read its fields in scripts:
 #'   `status$ready`, `status$execution$limits`; `user$user`, `user$tier`, `user$allowance`,

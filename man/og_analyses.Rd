@@ -7,14 +7,16 @@
 og_analyses(src, ids = NULL, releases = NULL)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}}.}
 
 \item{ids}{Analysis identifiers, or \code{NULL} for the whole catalogue.}
 
 \item{releases}{Store Releases to use. \code{NULL} uses the one Store Release each GWAS Store serves,
 as does a GWAS Store id such as \code{"OGS-00011"}. The API doesn't say which Store Release of a GWAS
 Store is latest, so if a GWAS Store serves several, opengwasr stops with
-\code{opengwasr_release_selection_required} and lists them: pin one as \code{"<store_id>/<release_id>"}.}
+\code{opengwasr_release_selection_required} and lists them: pin one as \code{"<store_id>/<release_id>"}.
+A Local Source holds one Store Release of each GWAS Store, so never asks. A Store Release the
+Source doesn't serve or hold raises \code{opengwasr_release_not_found}.}
 }
 \value{
 A data frame: \code{requested_id}, \code{id}, then the API's metadata columns (\code{store_id},
@@ -39,6 +41,23 @@ where it gave one in \code{api_reasons} (\code{NA} otherwise), and, for a retire
 successor the API named in \code{superseded_by}.
 }
 }
+\section{Local Source}{
+
+A Local Source (\code{\link[=og_local]{og_local()}}) answers from the \code{analyses.tsv} of each Store Release it holds,
+and names Analyses the same way. It has no catalogue of Legacy OpenGWAS identifiers: an
+identifier that isn't \verb{<store_id>:<analysis_id>} and is no \code{analysis_id} it holds, in any of its
+Store Releases, raises \code{opengwasr_legacy_id_local} (with the identifiers in \code{ids}); translate it
+once with \code{og_analyses(og_api(), ids)} and use the \code{id} that returns.
+
+Its rows have every column of the API Source's, in the same order and of the same types, from
+the Store Release's \code{analyses.tsv}; \code{outcome_type} is derived as the catalogue derives it.
+Columns the catalogue adds are NA locally (\code{status}, \code{listed}, \code{trait_class},
+\code{ancestry_category}, \code{label_from_source}), as is any column the Store Release has no value for.
+The other columns of \code{analyses.tsv} follow, as text. A value of \code{analyses.tsv} the catalogue
+would refuse (a sample size that isn't a whole number, say) raises
+\code{opengwasr_invalid_analyses}, naming the Store Release and the column.
+}
+
 \examples{
 \dontrun{
 src <- og_api()

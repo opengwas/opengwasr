@@ -6,15 +6,6 @@
 # drive the rule for which Python is chosen. Tests assert on classes and fields, never on
 # opengwasr's own message text.
 
-# One Local Source over three GWAS Stores, opened once and shared: the tests only read it.
-three <- local({
-  src <- NULL
-  function() {
-    if (is.null(src)) src <<- og_local(example_releases("dense", "ragged", "hyb"))
-    src
-  }
-})
-
 test_that("og_local() opens the Store Releases it is given, each named by its manifest", {
   skip_if_no_local()
   src <- three()

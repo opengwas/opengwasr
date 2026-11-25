@@ -224,7 +224,9 @@ test_that("og_local(inherit = local, bfile = ref) keeps the Store Releases and r
 
 test_that("an LD group given to og_local(inherit = ) replaces the inherited one, never mixes with it", {
   skip_if_no_local()
-  src <- dense_plink()
+  # PLINK never runs here, so it is stood in for: this runs wherever Python does.
+  local_mocked_bindings(find_plink = function(...) list(bin = "/stand-in/plink", version = "1.90b6.21"))
+  src <- og_local(example_releases("dense"), bfile = plink_fixture())
   # Mixed would be `opengwasr_ld_resource_mixed`: this is refused as unavailable instead.
   e <- expect_error(og_local(inherit = src, ld_store = "/data/ld/EUR"), class = "opengwasr_ld_resource_unavailable")
   expect_false(inherits(e, "opengwasr_ld_resource_mixed"))

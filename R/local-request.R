@@ -80,43 +80,47 @@ local_endpoints <- list(
   },
   # Associations of variants (ALIDs: the engine resolved rsIDs before) in Analyses, as the API
   # (query_operations.py `execute_operation`): ogquery's `lookup()` in each Store Release, of the
-  # Analyses it holds, in genome order.
+  # Analyses it holds. The engine orders them (order_associations()).
   "api/associations" = function(src, body, releases, call) {
+    local_require_associations(src, releases, call)
+    ogquery <- local_ogquery(call)
     variants <- as.list(as.character(unlist(body$variants)))
-    rows <- local_release_rows(src, releases, call, function(read) {
-      here <- read$analyses(body$analyses)
-      if (length(here$analysis_id) == 0) return(NULL)
-      record <- read$read("lookup", list(variants, as.list(here$analysis_id), observed_only = body$observed_only))
-      read$resolve(record)
+    rows <- local_release_rows(src, releases, call, function(facade, release) {
+      here <- analyses_held_here(facade, body$analyses, release$store_id)
+      if (NROW(here) == 0) return(NULL)
+      record <- local_read_associations(facade, "lookup", list(variants, as.list(here$analysis_id),
+                                                               observed_only = body$observed_only), call)
+      local_resolve_rows(ogquery, facade, record)
     })
-    list(rows = local_api_order(rows, dedupe = TRUE))
+    list(rows = local_distinct_rows(rows, call))
   },
   # Every Association of a window of one chromosome, in the Analyses named, as the API
   # (`execute_operation`): ogquery's `range_phewas()`, cut to those Analyses before any row is
   # resolved (`keep_analyses`). A chromosome other than 1-22, X, Y or MT is refused, as the API
-  # refuses the request (schemas.py `check_chromosome`).
+  # refuses the request (schemas.py `check_chromosome`). The engine orders the rows.
   "api/associations/range" = function(src, body, releases, call) {
     ogquery <- local_ogquery(call)
     if (!local_primary_chromosome(ogquery, body$chromosome)) {
       local_invalid_query(paste0("chromosome '", body$chromosome, "' is not one of 1-22, X, Y or MT"), call)
     }
-    rows <- local_release_rows(src, releases, call, function(read) {
-      here <- read$analyses(body$analyses)
+    local_require_associations(src, releases, call)
+    rows <- local_release_rows(src, releases, call, function(facade, release) {
+      here <- analyses_held_here(facade, body$analyses, release$store_id)
       if (!is.null(here) && nrow(here) == 0) return(NULL)
-      record <- read$read("range_phewas", list(body$chromosome, as.integer(body$start), as.integer(body$end),
-                                               observed_only = body$observed_only))
-      index <- read$index(record)
+      record <- local_read_associations(facade, "range_phewas", list(
+        body$chromosome, as.integer(body$start), as.integer(body$end), observed_only = body$observed_only), call)
+      index <- local_record_index(ogquery, record)
       keep <- seq_along(index$z) - 1L
       if (!is.null(here)) keep <- keep[index$analysis_index %in% here$analysis_index]
-      read$resolve(record, keep)
+      local_resolve_rows(ogquery, facade, record, keep)
     })
-    list(rows = local_api_order(rows, dedupe = TRUE))
+    list(rows = local_distinct_rows(rows, call))
   },
   # Each Analysis's top hits at p <= `threshold`, at most `limit` of them, as the API
   # (`_top_hits`): ogquery's `top_hits()` at the stored tier at or above `threshold`
-  # (top_hits.py `index_tier`), cut to `threshold` (`at_threshold`), each Analysis's `limit`
-  # strongest kept (`rank_per_analysis`), then strongest first. `truncated` says whether any
-  # Analysis had more than `limit`.
+  # (top_hits.py `index_tier`), cut to `threshold` (`at_threshold`), and each Analysis's `limit`
+  # strongest kept, strongest first (`rank_per_analysis`), which the engine keeps
+  # (order_by_analysis()). `truncated` says whether any Analysis had more than `limit`.
   "api/tophits" = function(src, body, releases, call) {
     threshold <- body$threshold
     if (!(threshold > 0 && threshold < 1)) local_invalid_query("threshold must be greater than 0 and less than 1", call)
@@ -124,25 +128,25 @@ local_endpoints <- list(
     # Every Store Release's tier is chosen before any is read, as the API chooses them when the Job is
     # submitted.
     tiers <- lapply(releases, function(r) local_top_hit_tier(ogquery, src, r$store_id, threshold, call))
+    names(tiers) <- vapply(releases, `[[`, "", "store_id")
     cut <- local_z_critical(ogquery, threshold)
     capped <- FALSE
-    rows <- local_release_rows(src, releases, call, function(read) {
-      tier <- tiers[[read$at]]
-      here <- read$analyses(body$analyses)
+    rows <- local_release_rows(src, releases, call, function(facade, release) {
+      tier <- tiers[[release$store_id]]
+      here <- analyses_held_here(facade, body$analyses, release$store_id)
       found <- lapply(if (is.null(here)) list(NULL) else as.list(here$analysis_id), function(analysis_id) {
-        record <- read$read("top_hits", list(analysis_id = analysis_id, threshold = tier,
-                                             observed_only = body$observed_only))
-        index <- read$index(record)
+        record <- local_read_associations(facade, "top_hits", list(analysis_id = analysis_id, threshold = tier,
+                                                                   observed_only = body$observed_only), call)
+        index <- local_record_index(ogquery, record)
         keep <- seq_along(index$z) - 1L
         if (threshold != tier) keep <- keep[hit_strength(index$z) >= cut]
         ranked <- rank_per_analysis(index, keep, body$limit)
         capped <<- capped || ranked$cut
-        read$resolve(record, ranked$keep)
+        local_resolve_rows(ogquery, facade, record, ranked$keep)
       })
       found <- Filter(Negate(is.null), found)
       if (length(found) > 0) bind_frames(found)
     })
-    rows <- local_api_order(rows, strength = TRUE)
     list(rows = rows, total = nrow(rows), truncated = capped,
          metadata = list(threshold = threshold, observed_only = body$observed_only, total = nrow(rows),
                          truncated = capped))
@@ -150,7 +154,8 @@ local_endpoints <- list(
   # One variant across the Analyses of the Store Releases (or those named) at p <= `threshold`, as
   # the API (`_phewas`): ogquery's `phewas()`, cut to `threshold` (top_hits.py `significant`) and
   # the Analyses before any row is resolved; each Store Release's first `limit`, then all of them
-  # in genome order, cut to `limit`. `total` counts every Association that passed.
+  # in the API's order (local_api_order()), cut to `limit`. `total` counts every Association that
+  # passed. The engine keeps the Jobs' order, so this is the one endpoint whose order is its own.
   "api/phewas" = function(src, body, releases, call) {
     threshold <- body$threshold
     limit <- body$limit
@@ -158,18 +163,19 @@ local_endpoints <- list(
     if (!(limit >= 1 && limit <= max_phewas_per_variant)) {
       local_invalid_query(paste0("limit must be from 1 to ", max_phewas_per_variant), call)
     }
+    local_require_associations(src, releases, call, phewas = TRUE)
     ogquery <- local_ogquery(call)
     cut <- if (threshold < 1) local_z_critical(ogquery, threshold)
     total <- 0
-    rows <- local_release_rows(src, releases, call, function(read) {
-      record <- read$read("phewas", list(body$variant, observed_only = body$observed_only))
-      index <- read$index(record)
+    rows <- local_release_rows(src, releases, call, function(facade, release) {
+      record <- local_read_associations(facade, "phewas", list(body$variant, observed_only = body$observed_only), call)
+      index <- local_record_index(ogquery, record)
       keep <- seq_along(index$z) - 1L
       if (!is.null(cut)) keep <- keep[hit_strength(index$z) >= cut]
-      here <- read$analyses(body$analyses)
+      here <- analyses_held_here(facade, body$analyses, release$store_id)
       if (!is.null(here)) keep <- keep[index$analysis_index[keep + 1L] %in% here$analysis_index]
       total <<- total + length(keep)
-      read$resolve(record, utils::head(keep, limit))
+      local_resolve_rows(ogquery, facade, record, utils::head(keep, limit))
     })
     rows <- utils::head(local_api_order(rows), limit)
     rownames(rows) <- NULL
@@ -179,33 +185,35 @@ local_endpoints <- list(
   }
 )
 
+# A variant lookup over each Store Release in turn: `read(facade)` gives one release's rows, in
+# variant-index order, and each row is stamped with its Store Release, as the API stamps it. The
+# fields are the API's, in the order it sends them.
+local_variant_lookup <- function(src, releases, call, read) {
+  found <- lapply(releases, function(r) {
+    rows <- read(local_facade(src, r$store_id, call))
+    rows$store_id <- rep(r$store_id, nrow(rows))
+    rows$release_id <- rep(r$release_id, nrow(rows))
+    rows
+  })
+  rows <- do.call(rbind, c(list(cbind(lookup_fields(), store_id = character(), release_id = character())), found))
+  list(rows = rows[c("alid", "chromosome", "effect_allele", "other_allele", "position", "release_id",
+                     "rsid", "store_id")])
+}
+
+# The fields of ogquery's variant rows that a lookup reads, with none.
+lookup_fields <- function() {
+  data.frame(variant_index = integer(), alid = character(), chromosome = character(), position = integer(),
+             effect_allele = character(), other_allele = character(), rsid = character(),
+             stringsAsFactors = FALSE)
+}
+
 # Rows read from each Store Release in turn, stamped with it, as the API stamps them
-# (query_operations.py `_provenance`): `read(r)` gives one release's rows (from `r$resolve()`), or
-# NULL for none, and gets `r`, the release's reads: `r$analyses(requested)` (the Analyses of
-# `requested` it holds, as analyses_held_here()), `r$read(method, args)` (an ogquery read),
-# `r$index(record)` and `r$resolve(record, keep)` (local_resolve()), and `r$at`, its place in
-# `releases`.
+# (query_operations.py `_provenance`): `read(facade, release)` gives one release's rows
+# (local_resolve_rows()), or NULL for none. The fields are in name order, as the API sends them
+# (`json.dumps(sort_keys=True)`).
 local_release_rows <- function(src, releases, call, read) {
-  ogquery <- local_ogquery(call)
-  found <- lapply(seq_along(releases), function(i) {
-    r <- releases[[i]]
-    facade <- local_facade(src, r$store_id, call)
-    held <- NULL
-    reads <- list(
-      at = i,
-      analyses = function(requested) {
-        if (is.null(requested)) return(NULL)
-        if (is.null(held)) held <<- local_read_analysis_ids(facade)
-        analyses_held_here(held, unlist(requested), r$store_id)
-      },
-      read = function(method, args) local_read_associations(facade, method, args, call),
-      index = function(record) local_record_index(ogquery, record),
-      resolve = function(record, keep = NULL) {
-        if (!is.null(keep) && length(keep) == 0) return(NULL)
-        api_association_rows(local_resolve(ogquery, facade, record, keep))
-      }
-    )
-    rows <- read(reads)
+  found <- lapply(releases, function(r) {
+    rows <- read(local_facade(src, r$store_id, call), r)
     if (is.null(rows) || nrow(rows) == 0) return(NULL)
     rows$store_id <- rep(r$store_id, nrow(rows))
     rows$release_id <- rep(r$release_id, nrow(rows))
@@ -214,15 +222,17 @@ local_release_rows <- function(src, releases, call, read) {
   found <- Filter(Negate(is.null), found)
   rows <- if (length(found) > 0) bind_frames(found)
           else cbind(api_association_rows(list()), store_id = character(), release_id = character())
-  # The API sends each row's fields in name order (`json.dumps(sort_keys=True)`).
   rows[sort(names(rows), method = "radix")]
 }
 
-# The Analyses of `requested` that a Store Release of GWAS Store `store_id` holds (`held`), in the
-# order requested, each once, as the API finds them (releases.py `local_analysis_ids`): an Analysis
-# named `<store_id>:<analysis_id>` counts only for its own GWAS Store, a bare `analysis_id` for any
-# that holds it.
-analyses_held_here <- function(held, requested, store_id) {
+# The Analyses of `requested` that a Store Release of GWAS Store `store_id` holds, `analysis_index`
+# and `analysis_id`, in the order requested, each once, as the API finds them (releases.py
+# `local_analysis_ids`): an Analysis named `<store_id>:<analysis_id>` counts only for its own GWAS
+# Store, a bare `analysis_id` for any that holds it. NULL when none are requested (every Analysis).
+analyses_held_here <- function(facade, requested, store_id) {
+  if (is.null(requested)) return(NULL)
+  requested <- as.character(unlist(requested))
+  held <- local_read_analysis_ids(facade)
   prefix <- paste0(store_id, ":")
   bare <- ifelse(startsWith(requested, prefix) & substring(requested, nchar(prefix) + 1) %in% held$analysis_id,
                  substring(requested, nchar(prefix) + 1), requested)
@@ -230,39 +240,65 @@ analyses_held_here <- function(held, requested, store_id) {
   held[match(bare, held$analysis_id), , drop = FALSE]
 }
 
+# Rows `keep` of a record (0-based; NULL for all) as the API sends them (api_association_rows()),
+# none when `keep` is empty.
+local_resolve_rows <- function(ogquery, facade, record, keep = NULL) {
+  if (!is.null(keep) && length(keep) == 0) return(NULL)
+  api_association_rows(local_resolve(ogquery, facade, record, keep))
+}
+
 # ogquery's resolved rows as the API sends them: the fields its reader gives (ogdb-api pins
-# opengwasdb, whose `resolve_rows` gives `log10_p` and no `beta`, `pval` or `source_alid`), with
-# "." for no EAF or N as NA, so shape_associations() takes the same path for both Sources.
+# opengwasdb, whose `resolve_rows` gives `log10_p` and no `beta`, `pval` or `source_alid`), each a
+# column of the type the API's JSON parses to. A field holding both numbers and "." (`eaf`, `n`)
+# is text, as the API Source parses it, with each number written exactly; shape_associations()
+# reads "." as NA for both Sources. A missing Association's z, se and log10_p are NaN, the API's
+# intended answer (its NDJSON can't carry NaN yet: opengwas/ogdb-api#193).
 api_association_rows <- function(fields) {
   n <- length(fields$alid)
-  text <- function(name) as.character(unlist(fields[[name]]) %||% character(n))
-  number <- function(name) {
-    x <- fields[[name]] %||% numeric(n)
-    if (!is.numeric(x)) x <- vapply(x, function(v) if (is.numeric(v)) as.numeric(v) else NA_real_, 0, USE.NAMES = FALSE)
-    as.numeric(x)
+  column <- function(name, empty = character(n)) {
+    x <- fields[[name]]
+    if (is.null(x)) return(empty)
+    if (!is.list(x)) return(x)
+    vapply(x, function(v) if (is.numeric(v)) sprintf("%.17g", v) else as.character(v), "", USE.NAMES = FALSE)
   }
-  rows <- data.frame(alid = text("alid"), analysis_id = text("analysis_id"), analysis_label = text("analysis_label"),
-                     association_status = text("association_status"), chromosome = text("chromosome"),
-                     eaf = number("eaf"), effect_allele = text("effect_allele"), log10_p = number("log10_p"),
-                     other_allele = text("other_allele"), position = as.integer(unlist(fields$position) %||% integer(n)),
-                     rsid = text("rsid"), se = number("se"), z = number("z"), stringsAsFactors = FALSE)
+  rows <- data.frame(alid = column("alid"), analysis_id = column("analysis_id"),
+                     analysis_label = column("analysis_label"), association_status = column("association_status"),
+                     chromosome = column("chromosome"), eaf = column("eaf", numeric(n)),
+                     effect_allele = column("effect_allele"), log10_p = as.numeric(column("log10_p", numeric(n))),
+                     other_allele = column("other_allele"), position = as.integer(column("position", integer(n))),
+                     rsid = column("rsid"), se = as.numeric(column("se", numeric(n))),
+                     z = as.numeric(column("z", numeric(n))), stringsAsFactors = FALSE)
   # A Ragged release with per-Association sample sizes sends `n` (ogquery ADR 0067); others don't.
-  if (!is.null(fields$n)) rows$n <- number("n")
+  if (!is.null(fields$n)) rows$n <- column("n", numeric(n))
   rows
 }
 
-# Rows in the API's order (ordering.py `row_key`): by GWAS Store, Store Release and Analysis, then,
-# for top hits (`strength`), strongest |z| first, then genome order: chromosome 1-22, X, Y, MT, then
-# others by name, position and ALID. `dedupe` drops a repeated row, as the API's planner does.
-local_api_order <- function(rows, strength = FALSE, dedupe = FALSE) {
-  if (dedupe) rows <- rows[!duplicated(rows[c("store_id", "release_id", "analysis_id", "alid")]), , drop = FALSE]
+# The rows of an endpoint the API's planner answers (`FederatedPlanner.run`, planner.py:255-266),
+# each Association once: rows with the same key that agree are one, and rows that disagree are
+# refused, as the API refuses them (`ConflictingRowsError`, code `conflicting_rows`).
+local_distinct_rows <- function(rows, call) {
+  key <- c("store_id", "release_id", "analysis_id", "alid")
+  repeated <- duplicated(rows[key])
+  if (!any(repeated)) return(rows)
+  distinct <- rows[!duplicated(rows), , drop = FALSE]
+  clash <- duplicated(distinct[key])
+  if (any(clash)) {
+    at <- distinct[which(clash)[[1]], key]
+    og_abort(paste0("conflicting association rows for (", paste0("'", unlist(at), "'", collapse = ", "), ")"),
+             class = api_error_class("conflicting_rows", 409L), api_error = "conflicting_rows",
+             store_id = at$store_id, release_id = at$release_id, analysis_id = at$analysis_id, alid = at$alid,
+             call = call)
+  }
+  rownames(distinct) <- NULL
+  distinct
+}
+
+# PheWAS rows in the API's order (ordering.py `row_key`): by GWAS Store, Store Release and
+# Analysis, then genome order (chromosome_rank(), position, ALID).
+local_api_order <- function(rows) {
   if (nrow(rows) > 1) {
-    chr <- rows$chromosome
-    rank <- ifelse(grepl("^[0-9]+$", chr), suppressWarnings(as.numeric(chr)), 22 + match(chr, c("X", "Y", "MT")))
-    rank[is.na(rank)] <- 1000
-    keys <- list(rows$store_id, rows$release_id, rows$analysis_id, if (strength) -hit_strength(rows$z), rank, chr,
-                 rows$position, rows$alid)
-    rows <- rows[do.call(order, c(Filter(Negate(is.null), keys), list(method = "radix"))), , drop = FALSE]
+    rows <- rows[order(rows$store_id, rows$release_id, rows$analysis_id, chromosome_rank(rows$chromosome),
+                       rows$position, rows$alid, method = "radix"), , drop = FALSE]
   }
   rownames(rows) <- NULL
   rows
@@ -286,7 +322,7 @@ rank_per_analysis <- function(index, keep, limit) {
 # The stored top-hit tier a Store Release reads for `threshold`: the tightest at or above it
 # (top_hits.py `index_tier`), or the API's refusal when none is that loose.
 local_top_hit_tier <- function(ogquery, src, store_id, threshold, call) {
-  tiers <- local_top_hit_tiers(ogquery, local_release_path(src, store_id, call))
+  tiers <- local_top_hit_tiers(ogquery, local_release(src, store_id, call))
   if (length(tiers) == 0) {
     local_unsupported(paste0("The Store Release of GWAS Store `", store_id, "` has no Top-Hit Index."),
                       "Query its Associations with `og_associations()` or `og_range()` instead.", call = call)
@@ -301,29 +337,28 @@ local_top_hit_tier <- function(ogquery, src, store_id, threshold, call) {
   min(looser)
 }
 
+# The API serves Associations only from a Store Release that holds them, and a PheWAS only from one
+# that can read a variant across its Analyses without a scan (ogdb-api releases.py
+# `_capabilities`, checked by query_operations.py `select_operation` before anything is read):
+# not a release whose `association_coverage` is `top_hits` or `unknown`; for a PheWAS, not a
+# Ragged or Hybrid release without its by-variant index. Every release is checked first, as there.
+local_require_associations <- function(src, releases, call, phewas = FALSE) {
+  ogquery <- local_ogquery(call)
+  for (r in releases) {
+    release <- local_release(src, r$store_id, call)
+    if (local_association_coverage(release) %in% c("top_hits", "unknown")) {
+      local_unsupported(paste0("The Store Release `", r$store_id, "/", r$release_id, "` holds only top hits."),
+                        "Use `og_tophits()` on it.", call = call)
+    }
+    if (phewas && !local_variant_indexed(ogquery, release)) {
+      local_unsupported(paste0("The Store Release `", r$store_id, "/", r$release_id,
+                               "` has no by-variant index, so it can't answer a PheWAS."),
+                        "Query its Associations with `og_associations()` or `og_range()` instead.", call = call)
+    }
+  }
+}
+
 # A request the API refuses as invalid (`invalid_query`), refused the same way.
 local_invalid_query <- function(message, call) {
   og_abort(message, class = api_error_class("invalid_query", 400L), api_error = "invalid_query", call = call)
-}
-
-# A variant lookup over each Store Release in turn: `read(facade)` gives one release's rows, in
-# variant-index order, and each row is stamped with its Store Release, as the API stamps it. The
-# fields are the API's, in the order it sends them.
-local_variant_lookup <- function(src, releases, call, read) {
-  found <- lapply(releases, function(r) {
-    rows <- read(local_facade(src, r$store_id, call))
-    rows$store_id <- rep(r$store_id, nrow(rows))
-    rows$release_id <- rep(r$release_id, nrow(rows))
-    rows
-  })
-  rows <- do.call(rbind, c(list(cbind(lookup_fields(), store_id = character(), release_id = character())), found))
-  list(rows = rows[c("alid", "chromosome", "effect_allele", "other_allele", "position", "release_id",
-                     "rsid", "store_id")])
-}
-
-# The fields of ogquery's variant rows that a lookup reads, with none.
-lookup_fields <- function() {
-  data.frame(variant_index = integer(), alid = character(), chromosome = character(), position = integer(),
-             effect_allele = character(), other_allele = character(), rsid = character(),
-             stringsAsFactors = FALSE)
 }

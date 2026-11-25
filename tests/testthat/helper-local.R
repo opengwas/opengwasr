@@ -100,3 +100,28 @@ mock_python <- function(started = FALSE,
 # reticulate's config of its automatic environment, as reticulate 1.47 reports it.
 automatic_python <- list(python = "/home/me/.cache/R/reticulate/uv/env/bin/python", forced = "py_require()",
                          ephemeral = TRUE)
+
+# A copy of an example Store Release in a temporary directory, its analyses.tsv edited by
+# `edit(table)` (a data frame of text, every cell as written; "" for none), written back as the
+# same tab-separated text.
+release_with_analyses <- function(edit, from = "dense", env = parent.frame()) {
+  dir <- withr::local_tempdir(.local_envir = env)
+  file.copy(example_releases(from), dir, recursive = TRUE)
+  path <- file.path(dir, from)
+  file <- file.path(path, "analyses.tsv")
+  table <- utils::read.delim(file, colClasses = "character", na.strings = character(), check.names = FALSE,
+                             quote = "")
+  utils::write.table(edit(table), file, sep = "\t", quote = FALSE, row.names = FALSE, na = "")
+  path
+}
+
+# A copy of an example Store Release in a temporary directory, without the file or directory at
+# `drop` (relative to the release).
+release_without <- function(drop, from = "ragged", env = parent.frame()) {
+  dir <- withr::local_tempdir(.local_envir = env)
+  file.copy(example_releases(from), dir, recursive = TRUE)
+  path <- file.path(dir, from)
+  stopifnot(file.exists(file.path(path, drop)))
+  unlink(file.path(path, drop), recursive = TRUE)
+  path
+}

@@ -363,7 +363,9 @@ fake_associations <- function() {
       bmi("18:60161902:C:T", "rs6567160", 0.25, 24, 0.002, -125, "observed"),
       # Not in the dev Data API: the one Analysis that holds both ALIDs of a multiallelic rsID.
       # The API sends rsid "." where a variant has no rsID.
-      bmi("16:53767042:A:G", ".", 0.62, -38, 0.002, -300, "observed")
+      bmi("16:53767042:A:G", ".", 0.62, -38, 0.002, -300, "observed"),
+      # The API sends eaf "." where the Store Release has none (ogquery's marker).
+      bmi("21:1000:A:G", "rs999021", ".", 7, 0.01, -11.6, "observed")
     )
   )
 }

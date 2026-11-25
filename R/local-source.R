@@ -233,7 +233,7 @@ local_facade <- function(src, store_id, call = rlang::caller_env()) {
   key <- paste0("query:", local_release_path(src, store_id, call))
   facade <- get0(key, envir = src$handles, inherits = FALSE)
   if (is.null(facade) || local_is_stale(facade)) {
-    facade <- local_open_facade(release)
+    facade <- local_open_facade(release, call)
     assign(key, facade, envir = src$handles)
   }
   facade
@@ -620,6 +620,7 @@ local_import_ogquery <- function() {
        format = reticulate::import("ogquery.format"), version = reticulate::import("ogquery.version"),
        json = reticulate::import("json"), identity = reticulate::import("ogquery.identity"),
        stats = reticulate::import("ogquery.stats"), top_hits = reticulate::import("ogquery.top_hits"),
+       by_variant = reticulate::import("ogquery.by_variant"),
        columns = reticulate::py_run_string(local_python_columns, local = TRUE))
 }
 
@@ -687,7 +688,16 @@ local_ogquery_versions <- function(modules) {
 
 local_is_stale <- function(object) reticulate::py_is_null_xptr(object)
 
-local_open_facade <- function(release) release$query()
+# ogquery opens a Ragged or Hybrid release's by-variant index with it, and refuses one without
+# (`VariantIndexError`), which the Data API wouldn't serve either: refused as a release a Local
+# Source can't read.
+local_open_facade <- function(release, call = rlang::caller_env()) {
+  tryCatch(release$query(), ogquery.by_variant.VariantIndexError = function(e) {
+    local_unsupported(c("This Store Release has no by-variant index, which ogquery needs to read it.",
+                        x = conditionMessage(e)),
+                      "Use a copy of the Store Release that has its index.", call = call)
+  })
+}
 
 # A Store Release's Analyses, `analyses_table()`: every column of analyses.tsv, as text ("" for
 # none), one row per Analysis in the file's order, as a data frame of character columns.
@@ -791,12 +801,21 @@ local_resolve <- function(ogquery, facade, record, keep = NULL) {
   ogquery$columns$resolved(facade, record, keep)
 }
 
-# The top-hit tiers a Store Release stores, as the Data API finds them (ogdb-api releases.py): each
-# of ogquery's thresholds whose tier directory the release has.
-local_top_hit_tiers <- function(ogquery, path) {
-  thresholds <- as.numeric(unlist(ogquery$top_hits$TOP_HIT_THRESHOLDS))
-  keys <- vapply(thresholds, function(t) ogquery$top_hits$threshold_key(t), "")
-  thresholds[dir.exists(file.path(path, "data.zarr", ogquery$top_hits$TOP_HIT_GROUP, keys))]
+# The top-hit tiers a Store Release stores, tightest first: ogquery's `TopHitTiers` over the
+# release's arrays, as each facade opens them (a Hybrid release's are its own, facade.py:785).
+local_top_hit_tiers <- function(ogquery, release) {
+  as.numeric(unlist(ogquery$top_hits$TopHitTiers(release$arrays())$stored_thresholds()))
+}
+
+# A Store Release's `association_coverage`, from its manifest, as text.
+local_association_coverage <- function(release) as.character(release$manifest$association_coverage)
+
+# Whether a Store Release can read one variant across its Analyses without a scan, as the Data API
+# decides it (ogdb-api releases.py `_phewas_indexed`): a Dense release always can; a Ragged or
+# Hybrid one needs its by-variant index (ogquery's `has_variant_index()`, ADR 0060).
+local_variant_indexed <- function(ogquery, release) {
+  identical(as.character(release$manifest$primary_layout), "dense") ||
+    isTRUE(ogquery$by_variant$has_variant_index(release$path))
 }
 
 # The |z| at or above which two-sided p <= `threshold` (ogquery's `z_critical()`): the one cut the

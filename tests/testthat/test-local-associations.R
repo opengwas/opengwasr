@@ -111,6 +111,11 @@ test_that("og_tophits(clump = FALSE) on a Local Source gives the contract's top 
                          "1:1000:A:G", "1:9000:A:G"))
   expect_equal(x$z, c(-9, 8, -8, 7, 7, 7, -6, -6))
   expect_equal(x$rsid, c(NA, "rs5000", "rs1007", "rs5000", "rs1005", "rs1006", "rs1000", "rs1004"))
+  # 1:1000:A:G's SE is infinite (dense_ranges' planted legacy state): its beta and pval are NaN, as
+  # the contract gives them ("NaN"), not z * Inf.
+  expect_identical(x$se[[7]], Inf)
+  expect_true(is.nan(x$beta[[7]]))
+  expect_true(is.nan(x$pval[[7]]))
   prov <- og_provenance(x)
   expect_equal(prov$total, 8)
   expect_false(prov$truncated)
@@ -143,6 +148,10 @@ test_that("a local threshold reads the indexed tier at or above it, and refuses 
   expect_s3_class(e, "opengwasr_refusal")
   expect_equal(e$indexed_thresholds, c(5e-8, 5e-6, 5e-4))
   expect_error(og_tophits(three(), "s:bmi_irn", threshold = 1, clump = FALSE), class = "opengwasr_invalid_query")
+  # A Hybrid release's own tiers (its overflow's, ogquery facade.py:785) are found too.
+  e <- expect_error(og_tophits(three(), "hyb:trait_a", threshold = 1e-3, clump = FALSE),
+                    class = "opengwasr_unsupported_threshold")
+  expect_equal(e$indexed_thresholds, c(5e-8, 5e-6, 5e-4))
 })
 
 test_that("observed_only = TRUE leaves out a local Imputed top hit", {
@@ -219,4 +228,76 @@ test_that("a local range takes observed_only, and refuses a chromosome the API r
                              observed_only = TRUE)), 0)
   expect_error(og_range(three(), "s:bmi_irn", chromosome = "27", start = 1, end = 10), class = "opengwasr_invalid_query")
   expect_error(og_range(three(), "s:bmi_irn", chromosome = "Z", start = 1, end = 10), class = "opengwasr_invalid_query")
+})
+
+# What the API refuses, refused the same way ------------------------------------------------------
+
+# ogquery's resolved rows for s:bmi_irn at 1:5000:C:G (dense_ranges phewas/1:5000:C:G), one per
+# `z`: what local_resolve() returns, for the tests that mock it.
+resolved_rows <- function(z) {
+  n <- length(z)
+  list(analysis_id = rep("bmi_irn", n), analysis_label = rep("BMI_IRN", n), chromosome = rep("1", n),
+       position = rep(5000L, n), alid = rep("1:5000:C:G", n), effect_allele = rep("C", n),
+       other_allele = rep("G", n), z = z, se = rep(0.01000213623046875, n), beta = z * 0.01000213623046875,
+       pval = rep(1.2441921148543639e-15, n), log10_p = rep(-14.905112555353176, n), eaf = rep(0.75, n),
+       association_status = rep("observed", n), rsid = rep("rs5000", n), source_alid = rep("1:5000:C:G", n))
+}
+
+test_that("two local rows for one Association collapse when they agree, and are refused when they don't", {
+  skip_if_no_local()
+  local_mocked_bindings(local_resolve = function(ogquery, facade, record, keep = NULL) resolved_rows(c(8, 8)))
+  expect_equal(og_associations(three(), "1:5000:C:G", "s:bmi_irn")$z, 8)
+  local_mocked_bindings(local_resolve = function(ogquery, facade, record, keep = NULL) resolved_rows(c(8, 7)))
+  e <- expect_error(og_associations(three(), "1:5000:C:G", "s:bmi_irn"), class = "opengwasr_conflicting_rows")
+  expect_equal(e$api_error, "conflicting_rows")
+  expect_equal(e$alid, "1:5000:C:G")
+  expect_equal(e$analysis_id, "bmi_irn")
+  expect_equal(e$store_id, "s")
+  expect_equal(e$release_id, "r")
+})
+
+test_that("a local PheWAS refuses a Store Release without a by-variant index, as the API does", {
+  skip_if_no_local()
+  # ogquery 0.1.0 opens no Ragged release without its index (below), so the index is mocked away at
+  # the boundary for the API's own check.
+  local_mocked_bindings(local_variant_indexed = function(ogquery, release) FALSE)
+  expect_error(og_phewas(three(), "1:1000:A:G"), class = "opengwasr_local_unsupported")
+  expect_equal(nrow(og_associations(three(), "1:1000:A:G", "s:bmi_irn")), 1)
+})
+
+test_that("a Ragged Store Release without its by-variant index is refused, not ogquery's exception", {
+  skip_if_no_local()
+  src <- og_local(release_without(file.path("data.zarr", "ragged", "by_variant")))
+  expect_error(og_phewas(src, "1:1000000:A:G"), class = "opengwasr_local_unsupported")
+  expect_error(og_associations(src, "1:1000000:A:G", "residual-rag:a"), class = "opengwasr_local_unsupported")
+})
+
+test_that("a local query of Associations refuses a Store Release that holds only top hits, as the API does", {
+  skip_if_no_local()
+  # ogquery reads no such manifest (its AssociationCoverage has no `top_hits`), so the coverage is
+  # mocked at the boundary.
+  local_mocked_bindings(local_association_coverage = function(release) "top_hits")
+  expect_error(og_associations(three(), "1:5000:C:G", "s:bmi_irn"), class = "opengwasr_local_unsupported")
+  expect_error(og_range(three(), "s:bmi_irn", chromosome = "1", start = 1, end = 10), class = "opengwasr_local_unsupported")
+  expect_error(og_phewas(three(), "1:5000:C:G"), class = "opengwasr_local_unsupported")
+})
+
+# Original units ---------------------------------------------------------------------------------
+
+test_that("original_units = TRUE rescales a local per-SD continuous Analysis by its original_sd", {
+  skip_if_no_local()
+  # s:bmi_irn made a continuous trait (sample_size_kind "total") with a phenotype SD of 2.5.
+  path <- release_with_analyses(function(table) {
+    table$sample_size_kind[table$analysis_id == "bmi_irn"] <- "total"
+    table$original_sd[table$analysis_id == "bmi_irn"] <- "2.5"
+    table
+  })
+  src <- og_local(path)
+  x <- og_associations(src, "1:5000:C:G", "s:bmi_irn", original_units = TRUE)
+  # dense_ranges phewas/1:5000:C:G: z = 8, se = 0.01000213623046875.
+  expect_equal(x$se, 0.01000213623046875 * 2.5)
+  expect_equal(x$beta, 8 * 0.01000213623046875 * 2.5)
+  expect_equal(x$z, 8)
+  expect_equal(x$effect_scale, "original")
+  expect_equal(og_associations(src, "1:5000:C:G", "s:bmi_irn")$effect_scale, "sd")
 })

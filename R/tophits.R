@@ -92,8 +92,9 @@ og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 10
                     spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
 }
 
-# The API method's call into the engine, unchanged, once clumping is refused: a Local Source can't
-# clump yet (#34 replaces this refusal).
+# The API method's call into the engine, without clumping, once clumping is refused: a Local Source
+# can't clump yet (#34 replaces this refusal). It can't delegate to the API method: the engine
+# reads the call from the frame of the method UseMethod() dispatched to (method_arguments()).
 #' @export
 og_tophits.og_local_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
                                        observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
@@ -106,13 +107,12 @@ og_tophits.og_local_source <- function(src, analyses, threshold = 5e-8, limit = 
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
                     analyses_per_job = tophits_analyses_per_job(limit), order = "api",
-                    truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold),
-                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
+                    truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold))
 }
 
 # Kept: R argument types and shapes, and `limit`'s range, which the splitter needs to size Jobs.
 # Which thresholds are allowed is the API's to say (`opengwasr_unsupported_threshold`, or
-# `opengwasr_invalid_request` outside 0 to 1).
+# `opengwasr_invalid_query` outside 0 to 1).
 check_tophits_arguments <- function(threshold, limit, clump, ld, r2, kb, call = rlang::caller_env()) {
   bad <- function(what) og_abort(what, class = "opengwasr_argument", call = call)
   check_threshold_limit(threshold, limit, call)

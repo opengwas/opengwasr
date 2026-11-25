@@ -133,8 +133,14 @@ source_not_given <- function(src, ...) check_source(src, sys.call(sys.parent()))
 check_source <- function(src, call = rlang::caller_env()) {
   if (inherits(src, "og_api_source")) return(invisible())
   if (is.null(src)) source_required(call)
-  og_abort(c(paste0("`src` must be a Source from `og_api()`, not ", class(src)[[1]], "."),
-             i = "Create one with `og_api()`."),
+  # A query with a Local Source method never gets here; one without refuses it.
+  if (inherits(src, "og_local_source")) {
+    og_abort(c("This isn't available for a Local Source.",
+               i = "Use the API Source, `og_api()`, for it."),
+             class = "opengwasr_local_unsupported", refusal = TRUE, call = call)
+  }
+  og_abort(c(paste0("`src` must be a Source from `og_api()` or `og_local()`, not ", class(src)[[1]], "."),
+             i = "Create one with `og_api()`, or with `og_local()` for Store Releases on this machine."),
            class = "opengwasr_argument", call = call)
 }
 og_analyses.default <- og_associations.default <- og_phewas.default <- og_range.default <-

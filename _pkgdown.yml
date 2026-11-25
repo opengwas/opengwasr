@@ -37,6 +37,8 @@ reference:
   desc: Where queries are answered, and who you are signed in as.
   contents:
   - og_api
+  - og_local
+  - og_local_check
   - og_status
   - og_user
 articles:

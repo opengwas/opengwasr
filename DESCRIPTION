@@ -21,10 +21,14 @@ Imports:
 Suggests:
     httptest2,
     knitr,
+    reticulate (>= 1.41),
     rmarkdown,
     testthat (>= 3.0.0),
     webfakes,
     withr
+SystemRequirements: Optional, for a Local Source only: Python (>= 3.12)
+    with the ogquery package, which reticulate sets up with uv on first
+    use when no Python is chosen.
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/testthat/parallel: true

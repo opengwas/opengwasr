@@ -44,12 +44,6 @@
 #  * Capabilities. The bundled copies of the example releases lack variants.tsv.gz, which
 #    ogdb-api's `_capabilities` (releases.py:137-171) requires for variant lookups and PheWAS. The
 #    bundle's own releases have it, so the generator takes every capability as present.
-#  * A request the API's body model refuses. The API's per-endpoint routes validate the body as
-#    its model before anything else, so a range chromosome other than 1-22, X, Y or MT (and a
-#    threshold or limit out of range) is 400 `invalid_request`, "Malformed request" (ogdb-api
-#    main.py:773-784, errors.py:56-64). A Local Source refuses these with `opengwasr_invalid_query`
-#    (local_invalid_query() in R/local-request.R). The golden query range-chromosome-refused
-#    asserts the difference (`local_refusal_differs`) until that is fixed: reported on #35.
 
 fake_three <- local_fake_api(n_synthetic = 0, parity = "three")
 fake_completed <- local_fake_api(n_synthetic = 0, parity = "completed")
@@ -66,10 +60,6 @@ parity_queries <- local({
 })
 parity_answers <- jsonlite::read_json(file.path(parity_dir, "answers.json"), simplifyVector = FALSE)
 names(parity_queries) <- vapply(parity_queries, `[[`, "", "name")
-
-# Golden queries a Local Source refuses with another class than the API's (the known difference
-# above), and that class.
-local_refusal_differs <- c(`range-chromosome-refused` = "opengwasr_invalid_query")
 
 # The columns og_analyses() gives that only the catalogue makes (NA on a Local Source).
 catalogue_only <- c("status", "listed", "trait_class", "ancestry_category", "label_from_source")
@@ -248,12 +238,6 @@ for (query in parity_queries) local({
       expect_generated_analyses(result, query)
       # The catalogue's own columns are NA locally (#32).
       for (name in catalogue_only) expect_true(all(is.na(result$value[[name]])), info = name)
-    } else if (query$name %in% names(local_refusal_differs)) {
-      # Known difference: the API answers `invalid_request` (generated_differences() says so).
-      expect_s3_class(result$value, local_refusal_differs[[query$name]])
-      expect_identical(generated_differences(result, query),
-                       paste0("expected the refusal `", generated_answer(query)$error$body$error, "`, got ",
-                              local_refusal_differs[[query$name]]))
     } else {
       expect_identical(generated_differences(result, query), character())
     }
@@ -271,9 +255,6 @@ for (query in parity_queries) local({
       shared <- setdiff(names(api$value), catalogue_only)
       expect_identical(names(here$value)[seq_along(names(api$value))], names(api$value))
       expect_identical(here$value[shared], api$value[shared])
-    } else if (query$name %in% names(local_refusal_differs)) {
-      expect_s3_class(api$value, "opengwasr_invalid_request")
-      expect_s3_class(here$value, local_refusal_differs[[query$name]])
     } else {
       expect_identical(comparable(here$value), comparable(api$value))
     }

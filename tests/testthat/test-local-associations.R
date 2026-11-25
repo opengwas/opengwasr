@@ -148,7 +148,10 @@ test_that("a local threshold reads the indexed tier at or above it, and refuses 
                     class = "opengwasr_unsupported_threshold")
   expect_s3_class(e, "opengwasr_refusal")
   expect_equal(e$indexed_thresholds, c(5e-8, 5e-6, 5e-4))
-  expect_error(og_tophits(three(), "s:bmi_irn", threshold = 1, clump = FALSE), class = "opengwasr_invalid_query")
+  # A threshold outside (0, 1) is refused as the API's body model refuses it (ogdb-api schemas.py:225,
+  # errors.py:56-64): `invalid_request`.
+  e <- expect_error(og_tophits(three(), "s:bmi_irn", threshold = 1, clump = FALSE), class = "opengwasr_invalid_request")
+  expect_identical(e$api_error, "invalid_request")
   # A Hybrid release's own tiers (its overflow's, ogquery facade.py:785) are found too.
   e <- expect_error(og_tophits(three(), "hyb:trait_a", threshold = 1e-3, clump = FALSE),
                     class = "opengwasr_unsupported_threshold")
@@ -227,8 +230,11 @@ test_that("a local range takes observed_only, and refuses a chromosome the API r
   expect_equal(all$association_status, "imputed")
   expect_equal(nrow(og_range(three(), "residual-rag:a", chromosome = "1", start = 1001500, end = 1001500,
                              observed_only = TRUE)), 0)
-  expect_error(og_range(three(), "s:bmi_irn", chromosome = "27", start = 1, end = 10), class = "opengwasr_invalid_query")
-  expect_error(og_range(three(), "s:bmi_irn", chromosome = "Z", start = 1, end = 10), class = "opengwasr_invalid_query")
+  # A chromosome other than 1-22, X, Y or MT is refused as the API's body model refuses it
+  # (ogdb-api schemas.py:35-44 and 166, errors.py:56-64): `invalid_request`.
+  e <- expect_error(og_range(three(), "s:bmi_irn", chromosome = "27", start = 1, end = 10), class = "opengwasr_invalid_request")
+  expect_identical(e$api_error, "invalid_request")
+  expect_error(og_range(three(), "s:bmi_irn", chromosome = "Z", start = 1, end = 10), class = "opengwasr_invalid_request")
 })
 
 # What the API refuses, refused the same way ------------------------------------------------------

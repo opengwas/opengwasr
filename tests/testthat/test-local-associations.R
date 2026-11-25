@@ -164,9 +164,10 @@ test_that("observed_only = TRUE leaves out a local Imputed top hit", {
   expect_true(all(x$association_status == "observed"))
 })
 
-test_that("og_tophits(clump = TRUE) on a Local Source is refused until local clumping lands", {
+# Clumping on a Local Source needs its LD resource (#34): test-local-ld.R.
+test_that("og_tophits(clump = TRUE) on a Local Source with no LD resource is refused", {
   skip_if_no_local()
-  expect_error(og_tophits(three(), "s:bmi_irn"), class = "opengwasr_local_unsupported")
+  expect_error(og_tophits(three(), "s:bmi_irn"), class = "opengwasr_ld_resource_required")
 })
 
 # PheWAS -----------------------------------------------------------------------------------------

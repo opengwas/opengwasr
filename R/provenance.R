@@ -29,7 +29,9 @@
 #'   * `retrieved`: when the answer was read, as a `POSIXct`.
 #'   * Clumped results: `clump`, a data frame with one row per Analysis clumped (one row, `id` `NA`,
 #'     for [og_clump()]'s one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
-#'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants).
+#'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants),
+#'     and `clumps`: `"computed"` (clumped on the fly, as every clumping is today) or, once Store
+#'     Releases carry them, `"stored"`.
 #'   * LD results: `ld`, `ld_choice` and `absent` (see [og_ld_matrix()]).
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class

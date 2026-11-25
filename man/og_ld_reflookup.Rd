@@ -11,8 +11,9 @@ og_ld_reflookup(src, variants, ld = NULL)
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
 
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match the Assigned
-Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.}
+\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} for the Source's LD
+resource (\code{og_api(ld_store = )}), else to match the Assigned Ancestry of the Associations'
+Analyses. LD Stores only: a PLINK Reference is refused, and so is a Local Source.}
 }
 \value{
 A data frame with \code{\link[=og_provenance]{og_provenance()}} attached (\code{ld}, \code{ld_choice}, \code{absent}), one row per

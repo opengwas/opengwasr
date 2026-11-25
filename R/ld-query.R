@@ -42,8 +42,10 @@ ld_query <- function(src, path, variants, ld, spec) {
 }
 
 # The ALIDs to ask the LD Store about, and the LD Store: `list(alids, store, choice, unresolved,
-# jobs)`. The LD Store is chosen before any Job runs, so a refusal costs none.
+# jobs)`. The LD Store is chosen before any Job runs, so a refusal costs none. `ld` is the call's,
+# else the Source's LD resource (ld_resource()): only with neither is the Assigned Ancestry matched.
 ld_prepare <- function(src, variants, ld, deadline, call, spec) {
+  ld <- ld_resource(src, ld, call)
   if (is.data.frame(variants)) {
     if (!is.character(variants$alid)) {  # Kept: an R argument's shape
       og_abort("A data frame of `variants` needs an `alid` column.", class = "opengwasr_argument", call = call)
@@ -58,7 +60,7 @@ ld_prepare <- function(src, variants, ld, deadline, call, spec) {
   # A PLINK Reference is matched by rsID and read locally (R/plink.R).
   if (!is.null(chosen$plink)) {
     # Refused before anything is matched or looked up.
-    if (is.null(spec$local)) refuse_plink(call)
+    if (is.null(spec$local)) refuse_plink(call, src)
     return(ld_prepare_plink(src, variants, kinds, chosen, deadline, call))
   }
   resolved <- resolve_variants(src, kinds, if (length(kinds$rsids) > 0) resolve_releases(src, NULL, call),

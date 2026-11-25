@@ -30,13 +30,16 @@
 #' `t_far`, `near_bp` and `far_bp`); a choice of LD Store that can't be made without guessing is
 #' refused by opengwasr (`opengwasr_ld_unmatched`, with the LD Stores in `ld_stores`).
 #'
-#' @param src A Source, from [og_api()]. `NULL` works with a PLINK Reference as `ld` when nothing is
+#' @param src A Source, from [og_api()] or [og_local()] (which reads its PLINK Reference, its rsIDs
+#'   looked up in its Store Releases). `NULL` works with a PLINK Reference as `ld` when nothing is
 #'   looked up: `variants` are rsIDs, or a data frame with an `rsid` column. A lookup that is needed
 #'   without a Source stops, with class `opengwasr_source_required`.
 #' @param variants ALIDs and rsIDs, or a data frame of Associations.
 #' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-#'   [og_plink_reference()], or `NULL` to match the Assigned Ancestry of the Associations' Analyses
-#'   (refused for Unassigned or mixed ancestries, and for variants given without Analyses).
+#'   [og_plink_reference()], or `NULL` for the Source's LD resource (`og_api(ld_store = )`,
+#'   `og_local(bfile = )`), else (API Source) to match the Assigned Ancestry of the Associations'
+#'   Analyses (refused for Unassigned or mixed ancestries, and for variants given without
+#'   Analyses). A Local Source with neither is refused (`opengwasr_ld_resource_required`).
 #' @param fill_below_t_far Set pairs below the Far Threshold to 0, as above.
 #' @return A numeric matrix (class `og_ld_matrix`, which is also a `matrix`) with [og_provenance()] attached: `ld` (the LD Store that answered),
 #'   `ld_choice` (`"user"`, `"ancestry_default"` or `"matched"`) and `absent`.
@@ -68,6 +71,11 @@ og_ld_matrix.og_api_source <- function(src, variants, ld = NULL, fill_below_t_fa
 
 #' @export
 og_ld_matrix.NULL <- og_ld_matrix.og_api_source
+
+# A Local Source reads its PLINK Reference (or `ld`'s), its rsIDs looked up in its own Store
+# Releases. The same method: the engine reads the call from the frame UseMethod() dispatched to.
+#' @export
+og_ld_matrix.og_local_source <- og_ld_matrix.og_api_source
 
 # The one matrix of every present variant, from the Jobs' rows. A row is `alid` and `r`, its r with
 # each of the rows' variants in the same order (null, where the LD Store holds no r, is NA).

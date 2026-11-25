@@ -262,11 +262,15 @@ test_that("og_submit() and the og_job_* functions refuse a Local Source", {
   expect_error(og_job_cancel(src, "abc"), class = "opengwasr_local_unsupported")
 })
 
-test_that("LD operations refuse a Local Source as `src`", {
+test_that("LD operations that read LD Stores refuse a Local Source; the others need its LD resource", {
   src <- unopened()
-  for (call in list(quote(og_ld_stores(src)), quote(og_ld_matrix(src, "1:1000:A:G")),
-                    quote(og_ld_proxies(src, "rs5000")), quote(og_ld_reflookup(src, "rs5000")))) {
+  for (call in list(quote(og_ld_stores(src)), quote(og_ld_proxies(src, "rs5000")), quote(og_ld_reflookup(src, "rs5000")))) {
     e <- expect_error(eval(call), class = "opengwasr_local_unsupported")
+    expect_s3_class(e, "opengwasr_refusal")
+  }
+  # og_ld_matrix() and og_clump() read a Local Source's PLINK Reference (test-local-ld.R); this one has none.
+  for (call in list(quote(og_ld_matrix(src, "1:1000:A:G")), quote(og_clump(src, data.frame(alid = "1:1000:A:G", z = 5))))) {
+    e <- expect_error(eval(call), class = "opengwasr_ld_resource_required")
     expect_s3_class(e, "opengwasr_refusal")
   }
 })

@@ -1,7 +1,8 @@
 # PLINK References: the user's own PLINK binary fileset as another place LD is read from.
 #
 # `og_plink_reference()` makes one, and every LD function takes it through the same `ld` argument
-# as an LD Store's name (choose_ld_store() in R/ld-stores.R is the one place `ld` is interpreted).
+# as an LD Store's name, or a Local Source carries it as its LD resource (`og_local(bfile = )`):
+# choose_ld_store() in R/ld-stores.R is the one place either is interpreted.
 # This file is the whole of the PLINK side: finding the binary, running it, the two things it is
 # asked (an LD matrix, a clumping), matching variants to the reference by rsID (ADR 0004), and the
 # plan and top-hit assembly of a query that reads one. The other files only branch on a PLINK
@@ -12,7 +13,9 @@
 #'
 #' `og_plink_reference()` names a PLINK binary fileset (`.bed`, `.bim`, `.fam`) on your machine, and
 #' the PLINK that will read it, to pass as `ld` to [og_ld_matrix()], [og_clump()] and
-#' [og_tophits()]. See `vignette("ld")`.
+#' [og_tophits()] for one call, with either Source. A Local Source can also carry one as its LD
+#' resource, `og_local(gwas, plink = , bfile = )`, which builds it with this function. See
+#' `vignette("ld")`.
 #'
 #' Variants are matched to the reference by rsID, because PLINK References are usually on GRCh37
 #' while ALIDs are on GRCh38: a variant with no rsID, or whose rsID isn't in the `.bim`, is left out,
@@ -244,10 +247,14 @@ plink_rsids_of <- function(src, alids, deadline, call) {
   list(alid = rows$alid, rsid = rows$rsid, jobs = lookup_jobs(lapply(out, `[[`, "job")))
 }
 
-# A query that reads LD Stores only, given a PLINK Reference.
-refuse_plink <- function(method) {
+# A query that reads LD Stores only, given a PLINK Reference (as `ld`, or as the Source's LD resource).
+refuse_plink <- function(method, src = NULL) {
   og_abort(c(paste0("`", get(".Generic", envir = method), "()` reads LD Stores only, not a PLINK Reference."),
-             i = "Pass an LD Store's name or an ancestry code in `ld`."),
+             i = if (is.null(method$ld) && !is.null(src$ld)) {
+               "The PLINK Reference is the Source's LD resource: pass an LD Store's name or an ancestry code in `ld` for this call."
+             } else {
+               "Pass an LD Store's name or an ancestry code in `ld`."
+             }),
            class = "opengwasr_argument", call = method)
 }
 
@@ -276,7 +283,7 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
   inform_plink_binary(ref)
   if (progress_enabled()) {
     rlang::inform(c(i = paste0("Clumping ", length(info$id), if (length(info$id) == 1) " Analysis" else " Analyses",
-                               " in PLINK Reference ", ref$path, ", as `ld` asks: ",
+                               " in PLINK Reference ", ref$path, ": ",
                                clump_setting_text(clump$r2, clump$kb), ".")),
                   class = "opengwasr_clumping")
   }

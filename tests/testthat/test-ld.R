@@ -289,8 +289,11 @@ test_that("the LD queries stay thin: each is a spec over the LD engine", {
   ns <- asNamespace("opengwasr")
   users <- Filter(function(n) is.function(ns[[n]]) && "ld_query" %in% all.names(body(ns[[n]])),
                   ls(ns, all.names = TRUE))
+  # A Local Source's og_ld_matrix() and og_clump() are the API Source's methods (#34).
   expect_setequal(users, c("og_ld_matrix.NULL", "og_clump.NULL", "og_ld_matrix.og_api_source", "og_ld_proxies.og_api_source", "og_clump.og_api_source",
-                         "og_ld_reflookup.og_api_source"))
+                         "og_ld_reflookup.og_api_source", "og_ld_matrix.og_local_source", "og_clump.og_local_source"))
+  expect_identical(ns$og_ld_matrix.og_local_source, ns$og_ld_matrix.og_api_source)
+  expect_identical(ns$og_clump.og_local_source, ns$og_clump.og_api_source)
   # Neither runs a Job, or looks anything up, on its own.
   for (m in users) {
     called <- all.names(body(ns[[m]]))
@@ -526,4 +529,84 @@ test_that("og_ld_reflookup() gives one row per variant asked, in the order asked
   expect_equal(r$alid, v)
   expect_equal(nrow(r), 3)
   expect_identical(r$present[[1]], r$present[[3]])
+})
+
+# The Source's LD resource (#34, ADR 0006): `og_api(ld_store = )` answers every LD verb that is given
+# no `ld`, and a call's `ld` overrides it for that call. Without it, nothing above changes.
+test_that("og_api(ld_store = ) holds the Source's LD resource and prints it; geno_store is refused until the API serves Genotype Stores", {
+  src_eur <- fake_source(fake, ld_store = "EUR")
+  expect_equal(src_eur$ld, "EUR")
+  expect_true("• LD resource: LD Store \"EUR\"" %in% format(src_eur))
+  expect_false(any(grepl("LD resource", format(fake_source(fake)), fixed = TRUE)))
+  expect_null(fake_source(fake)$ld)
+  e <- expect_error(fake_source(fake, geno_store = "OGL-00001"), class = "opengwasr_ld_resource_unavailable")
+  expect_s3_class(e, "opengwasr_refusal")
+  expect_false(inherits(e, "opengwasr_local_unsupported"))
+  expect_error(fake_source(fake, ld_store = c("EUR", "AFR")), class = "opengwasr_argument")
+  expect_error(fake_source(fake, ld_store = NA_character_), class = "opengwasr_argument")
+  expect_error(fake_source(fake, ld_store = 1), class = "opengwasr_argument")
+  # A PLINK Reference is given to one call, or to a Local Source: the API Source holds LD Stores only.
+  ref <- structure(list(path = "ref", plink_bin = "plink"), class = "og_plink_reference")
+  expect_error(fake_source(fake, ld_store = ref), class = "opengwasr_argument")
+})
+
+test_that("og_tophits() clumps in the API Source's LD resource without `ld`, sending what `ld` would send; `ld` overrides it", {
+  src <- fake_source(fake)
+  src_eur <- fake_source(fake, ld_store = "EUR")
+  top <- function(s, ...) suppressWarnings(og_tophits(s, cad, limit = 2, releases = rel, ...))
+  by_source <- top(src_eur)
+  sent_source <- utils::tail(ld_bodies("/api/tophits"), 1)[[1]]
+  by_ld <- top(src, ld = "EUR")
+  sent_ld <- utils::tail(ld_bodies("/api/tophits"), 1)[[1]]
+  expect_equal(sent_source, sent_ld)
+  expect_equal(sent_source$clump$store, eur)
+  expect_equal(by_source, by_ld, ignore_attr = TRUE)
+  expect_equal(unique(by_source$clump_ld), eur)
+  expect_equal(unique(by_source$clump_ld_choice), "ancestry_default")
+  expect_equal(og_provenance(by_source)$clump, og_provenance(by_ld)$clump)
+  expect_equal(og_provenance(by_source)$clump$clumps, "computed")
+  # An Unassigned Analysis, refused on `src`, is clumped in the Source's LD Store; `ld` overrides it.
+  expect_error(og_tophits(src, unassigned), class = "opengwasr_ld_unmatched")
+  in_eur <- suppressWarnings(og_tophits(src_eur, unassigned, limit = 2))
+  expect_equal(og_provenance(in_eur)$clump$ld, eur)
+  in_amr <- suppressWarnings(og_tophits(src_eur, unassigned, ld = "AMR", limit = 2))
+  expect_equal(og_provenance(in_amr)$clump$ld, "hgdp1kgp-v2-AMR-k10")
+  # The Source's LD resource is unchanged by the override.
+  again <- suppressWarnings(og_tophits(src_eur, unassigned, limit = 2))
+  expect_equal(og_provenance(again)$clump$ld, eur)
+  # A name, as `ld` takes it, is the user's choice.
+  by_name <- top(fake_source(fake, ld_store = eur))
+  expect_equal(unique(by_name$clump_ld_choice), "user")
+  # The progress message says the Source's LD resource chose, not `ld`.
+  withr::local_options(opengwasr.progress = TRUE)
+  m <- expect_message(top(src_eur), class = "opengwasr_clumping")
+  expect_match(conditionMessage(m), "as the Source's LD resource asks", fixed = TRUE)
+})
+
+test_that("og_ld_matrix(), og_ld_proxies(), og_ld_reflookup() and og_clump() read the API Source's LD resource without `ld`; `ld` overrides it", {
+  src <- fake_source(fake)
+  src_eur <- fake_source(fake, ld_store = "EUR")
+  # A plain vector has no ancestry to match: refused without an LD resource, answered with one.
+  expect_error(og_ld_matrix(src, pair), class = "opengwasr_ld_unmatched")
+  m <- og_ld_matrix(src_eur, pair)
+  expect_equal(og_provenance(m)$ld, eur)
+  expect_equal(og_provenance(m)$ld_choice, "ancestry_default")
+  expect_equal(unclass(m), unclass(og_ld_matrix(src, pair, ld = "EUR")), ignore_attr = TRUE)
+  m_afr <- suppressWarnings(og_ld_matrix(src_eur, pair, ld = "hgdp1kgp-v2-AFR-k10"))
+  expect_equal(og_provenance(m_afr)$ld, "hgdp1kgp-v2-AFR-k10")
+  expect_equal(og_provenance(m_afr)$ld_choice, "user")
+  # Associations of an Unassigned Analysis: no ancestry is matched when the Source has an LD Store.
+  expect_error(og_ld_matrix(src, associations_of(unassigned, pair)), class = "opengwasr_ld_unmatched")
+  expect_equal(og_provenance(og_ld_matrix(src_eur, associations_of(unassigned, pair)))$ld, eur)
+  px <- og_ld_proxies(src_eur, snv)
+  expect_equal(og_provenance(px)$ld, eur)
+  expect_equal(px, og_ld_proxies(src, snv, ld = "EUR"), ignore_attr = TRUE)
+  rl <- og_ld_reflookup(src_eur, snv)
+  expect_equal(og_provenance(rl)$ld, eur)
+  data <- data.frame(alid = pair, z = c(5, 4))  # no `id`: no ancestry to match
+  expect_error(og_clump(src, data), class = "opengwasr_ld_unmatched")
+  joint <- suppressWarnings(og_clump(src_eur, data))
+  expect_equal(unique(joint$clump_ld), eur)
+  expect_equal(og_provenance(joint)$clump$clumps, "computed")
+  expect_equal(joint, suppressWarnings(og_clump(src, data, ld = "EUR")), ignore_attr = TRUE)
 })

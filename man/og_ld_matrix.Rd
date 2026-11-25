@@ -7,15 +7,18 @@
 og_ld_matrix(src, variants, ld = NULL, fill_below_t_far = FALSE)
 }
 \arguments{
-\item{src}{A Source, from \code{\link[=og_api]{og_api()}}. \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
+\item{src}{A Source, from \code{\link[=og_api]{og_api()}} or \code{\link[=og_local]{og_local()}} (which reads its PLINK Reference, its rsIDs
+looked up in its Store Releases). \code{NULL} works with a PLINK Reference as \code{ld} when nothing is
 looked up: \code{variants} are rsIDs, or a data frame with an \code{rsid} column. A lookup that is needed
 without a Source stops, with class \code{opengwasr_source_required}.}
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
 
 \item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} to match the Assigned Ancestry of the Associations' Analyses
-(refused for Unassigned or mixed ancestries, and for variants given without Analyses).}
+\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} for the Source's LD resource (\code{og_api(ld_store = )},
+\code{og_local(bfile = )}), else (API Source) to match the Assigned Ancestry of the Associations'
+Analyses (refused for Unassigned or mixed ancestries, and for variants given without
+Analyses). A Local Source with neither is refused (\code{opengwasr_ld_resource_required}).}
 
 \item{fill_below_t_far}{Set pairs below the Far Threshold to 0, as above.}
 }

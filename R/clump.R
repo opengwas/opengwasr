@@ -1,4 +1,5 @@
-# Clumping: one variant per independent signal, in an LD Store.
+# Clumping: one variant per independent signal, in an LD Store or a PLINK Reference: the call's
+# `ld`, else the Source's LD resource (ld_resource(), R/ld-stores.R).
 #
 # Two ways in, as ADR 0004's clarification note says. `og_tophits()` clumps on the server
 # (`/api/tophits` with `clump`), one Job per Analysis, through one more contribution to the
@@ -30,15 +31,18 @@
 #' a message (class `opengwasr_plink_unmatched`, `count`). Provenance's `clump` names the reference's
 #' path as `ld`, and `clump_ld` is the same path.
 #'
-#' @param src A Source, from [og_api()]. `NULL` works with a PLINK Reference as `ld` when nothing is
+#' @param src A Source, from [og_api()] or [og_local()] (which clumps with its PLINK Reference, its
+#'   rsIDs looked up in its Store Releases). `NULL` works with a PLINK Reference as `ld` when nothing is
 #'   looked up: `data` has an `rsid` column, so no ALID needs its rsID from the API. A lookup that
 #'   is needed without a Source stops, with class `opengwasr_source_required`.
 #' @param data A data frame of Associations, with `alid` and `z`, and `id` for the LD Store to be
 #'   matched by the Analyses' Assigned Ancestry.
 #' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-#'   [og_plink_reference()] (clumped locally by PLINK), or `NULL` to match the Assigned
+#'   [og_plink_reference()] (clumped locally by PLINK), or `NULL` for the Source's LD resource
+#'   (`og_api(ld_store = )`, `og_local(bfile = )`), else (API Source) to match the Assigned
 #'   Ancestry of the Analyses in `data` (refused, with class `opengwasr_ld_unmatched`, when they
-#'   differ, when one is Unassigned, or when `data` has no `id`).
+#'   differ, when one is Unassigned, or when `data` has no `id`). A Local Source with neither is
+#'   refused (`opengwasr_ld_resource_required`).
 #' @param r2 The r² above which a variant joins an index variant's clump; `NULL` for the LD Store's
 #'   `t_far`. Required with a PLINK Reference.
 #' @param kb The window, in kilobases; `NULL` for the LD Store's far window. Required with a PLINK
@@ -46,7 +50,7 @@
 #' @return The rows of `data` whose variant is an index variant, in their order in `data`, with
 #'   columns `clump_ld`, `clump_ld_choice`, `clump_r2`, `clump_kb` and `clump_size` (the variants
 #'   the index variant stands for, itself included), and [og_provenance()] attached: `ld`,
-#'   `ld_choice`, `absent` and `clump`.
+#'   `ld_choice`, `absent` and `clump` (whose `clumps` is `"computed"`).
 #' @examples
 #' \dontrun{
 #' src <- og_api()
@@ -60,7 +64,7 @@ og_clump <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) UseMethod("og_c
 #' @export
 og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
   check_clump_settings(r2, kb)
-  check_plink_settings(ld, r2, kb)
+  check_plink_settings(ld_resource(src, ld), r2, kb)
   # Kept: an R argument's type (the scores sent are |z|).
   if (!is.data.frame(data) || !is.numeric(data$z)) {
     og_abort("`data` must be a data frame of Associations, with `alid` and `z` columns.", class = "opengwasr_argument")
@@ -91,6 +95,11 @@ og_clump.og_api_source <- function(src, data, ld = NULL, r2 = NULL, kb = NULL) {
 
 #' @export
 og_clump.NULL <- og_clump.og_api_source
+
+# A Local Source clumps with its PLINK Reference (or `ld`'s), its rsIDs looked up in its own Store
+# Releases. The same method: the engine reads the call from the frame UseMethod() dispatched to.
+#' @export
+og_clump.og_local_source <- og_clump.og_api_source
 
 # `og_clump()` over a PLINK Reference: each variant matched by rsID, scored by its largest |z|, clumped
 # by PLINK; the rows of `data` of each index variant, as for an LD Store, with the same columns.
@@ -132,10 +141,12 @@ clump_columns <- function(rows, ld, choice, r2, kb, size) {
   rows
 }
 
-# `og_provenance(x)$clump`: one row per Analysis clumped (one, with `id` NA, for one set).
-clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads) {
+# `og_provenance(x)$clump`: one row per Analysis clumped (one, with `id` NA, for one set). `clumps`
+# says how the Clumps were made (ADR 0006): "computed" on the fly, as every clumping is until Store
+# Releases carry stored Clumps, which will be "stored".
+clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads, clumps = "computed") {
   data.frame(id = id, ld = ld, ld_choice = choice, r2 = r2, kb = kb, hits = as.numeric(hits),
-             absent = as.numeric(absent), leads = as.numeric(leads), stringsAsFactors = FALSE)
+             absent = as.numeric(absent), leads = as.numeric(leads), clumps = clumps, stringsAsFactors = FALSE)
 }
 
 # The contribution (CONTRIBUTING.md) that clumps each Analysis's top hits on the server, one Job and
@@ -143,18 +154,20 @@ clump_summary <- function(id, ld, choice, r2, kb, hits, absent, leads) {
 # one is refused first, before any Job runs). Its `finish` adds the clumping columns and provenance
 # and warns about top hits the LD Store doesn't hold.
 clump_contribution <- function(src, clump, info, call) {
-  if (is_plink_reference(clump$ld)) {
-    return(plink_clump_contribution(choose_ld_store(src, clump$ld, call = call), clump, info, call))
+  # The call's `ld`, else the Source's LD resource; with neither, each Analysis's Assigned Ancestry.
+  ld <- ld_resource(src, clump$ld, call, clumping = TRUE)
+  if (is_plink_reference(ld)) {
+    return(plink_clump_contribution(choose_ld_store(src, ld, call = call), clump, info, call))
   }
   ancestry <- stats::setNames(as.character(info$assigned_ancestry), info$id)
-  group <- if (is.null(clump$ld)) ancestry else rep("ld", length(ancestry))
+  group <- if (is.null(ld)) ancestry else rep(if (is.null(clump$ld)) "source" else "ld", length(ancestry))
   groups <- unique(group)
   groups <- groups[order(!is.na(groups))]  # Unassigned first: refused before anything else is chosen
   per <- data.frame(id = info$id, ld = NA_character_, ld_choice = NA_character_, r2 = NA_real_, kb = NA_real_,
                     stringsAsFactors = FALSE)
   for (g in groups) {
     members <- which(group %in% g)
-    chosen <- tryCatch(choose_ld_store(src, clump$ld, ancestry[members], call),
+    chosen <- tryCatch(choose_ld_store(src, ld, ancestry[members], call),
                        opengwasr_ld_unmatched = function(e) {
                          advice <- c(i = "Or pass `clump = FALSE` for unclumped top hits.")
                          e$message <- paste0(e$message, "\n", rlang::format_error_bullets(advice))
@@ -202,17 +215,20 @@ inform_clumping <- function(ids, chosen, ancestry, settings) {
   their <- if (length(ids) == 1) "its" else "their"
   how <- switch(chosen$choice,
                 matched = paste0("matched to ", their, " Assigned Ancestry (", ancestry, ")"),
-                # `ld` named an ancestry, or the Assigned Ancestry has several LD Stores and one is declared its default.
-                ancestry_default = if (identical(ancestry, "ld")) {
-                  paste0("the default LD Store of ancestry ", chosen$store$ancestry, ", as `ld` asks")
+                # `ld` (or the Source's LD resource) named an ancestry, or the Assigned Ancestry has
+                # several LD Stores and one is declared its default.
+                ancestry_default = if (ancestry %in% c("ld", "source")) {
+                  paste0("the default LD Store of ancestry ", chosen$store$ancestry, ", as ", asked_by(ancestry), " asks")
                 } else {
                   paste0("the declared default LD Store of ", their, " Assigned Ancestry (", ancestry, ")")
                 },
-                user = "as `ld` names it")
+                user = paste0("as ", asked_by(ancestry), " names it"))
   rlang::inform(c(i = paste0("Clumping ", who, " in LD Store ", chosen$store$ld_store, ", ", how, ": ",
                              clump_setting_text(settings$r2, settings$kb), ".")),
                 class = "opengwasr_clumping")
 }
+
+asked_by <- function(group) if (identical(group, "source")) "the Source's LD resource" else "`ld`"
 
 clump_setting_text <- function(r2, kb) {
   paste0("r\u00b2 ", signif(r2, 3), " within ", big_number(kb), " kb")
@@ -244,6 +260,7 @@ format_clump <- function(clump) {
   lines <- paste0("\u2022 Clumped: ", ifelse(one_set, "one set", shown$id), " in ", shown$ld,
                   " (", shown$ld_choice, "), ", clump_setting_text(shown$r2, shown$kb), "; ",
                   big(shown$hits), ifelse(one_set, " variants, ", " top hits, "), big(shown$absent),
-                  " not in the LD Store, ", big(shown$leads), " index variants")
+                  " not in the LD Store, ", big(shown$leads), " index variants, ",
+                  shown$clumps %||% "computed")
   c(lines, if (nrow(clump) > 5) paste0("  ... and ", nrow(clump) - 5, " more Analyses: see `og_provenance(x)$clump`"))
 }

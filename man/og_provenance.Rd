@@ -21,7 +21,9 @@ API reattached you to a Job it already had.
 \item \code{retrieved}: when the answer was read, as a \code{POSIXct}.
 \item Clumped results: \code{clump}, a data frame with one row per Analysis clumped (one row, \code{id} \code{NA},
 for \code{\link[=og_clump]{og_clump()}}'s one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
-(the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants).
+(the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants),
+and \code{clumps}: \code{"computed"} (clumped on the fly, as every clumping is today) or, once Store
+Releases carry them, \code{"stored"}.
 \item LD results: \code{ld}, \code{ld_choice} and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
 }
 

@@ -33,8 +33,8 @@ og_tophits(
 \item{clump}{Clump the top hits to one per independent signal.}
 
 \item{ld}{An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} to match each Analysis's Assigned Ancestry. Only with
-\code{clump = TRUE}.}
+\code{\link[=og_plink_reference]{og_plink_reference()}}, or \code{NULL} for the Source's LD resource, else (API Source) to match each
+Analysis's Assigned Ancestry. Only with \code{clump = TRUE}. A Local Source takes only a PLINK Reference.}
 
 \item{r2, kb}{The r² above which a top hit joins an index variant's clump, and the window in
 kilobases; \code{NULL} for the LD Store's \code{t_far} and far window, but required with a PLINK
@@ -71,7 +71,13 @@ Clumped rows add \code{clump_ld}, \code{clump_ld_choice}, \code{clump_r2}, \code
 \code{og_provenance(x)$clump} has each Analysis's \code{hits}, \code{absent} and \code{leads}. Pass \code{clump = FALSE}
 for every top hit.
 
-With a PLINK Reference in \code{ld} (see \code{\link[=og_plink_reference]{og_plink_reference()}}) the clumping is local: each Analysis's
+The LD is the Source's LD resource (\code{og_api(ld_store = )}, \code{og_local(bfile = )}) unless \code{ld}
+overrides it for this call. A Local Source with neither is refused (\code{opengwasr_ld_resource_required}),
+naming the LD resources and \code{clump = FALSE}: Store Releases have no stored Clumps yet, so clumping
+is computed on the fly, and \code{og_provenance(x)$clump$clumps} is \code{"computed"}.
+
+With a PLINK Reference in \code{ld} or as the Source's LD resource (see \code{\link[=og_plink_reference]{og_plink_reference()}}) the
+clumping is local: each Analysis's
 top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
 (those not in it are left out, with a message) and clumped by PLINK, and \code{limit} is then applied
 to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an

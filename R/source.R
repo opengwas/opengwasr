@@ -17,17 +17,40 @@
 #'   `og_api(caller = "TwoSampleMR/0.8.0")` sends `opengwasr/<version> TwoSampleMR/0.8.0`. One
 #'   short string of printable characters (at most 100), `name/version` by convention; `NULL`
 #'   (the default) adds nothing.
+#' @param ld_store The Source's LD resource: an LD Store's name, or an ancestry code for that
+#'   ancestry's LD Store, as `ld` takes them. Every verb that needs LD ([og_tophits()] when it
+#'   clumps, [og_clump()], [og_ld_matrix()], [og_ld_proxies()], [og_ld_reflookup()]) uses it, and
+#'   their `ld` overrides it for one call. `NULL` (the default): each Analysis's Assigned Ancestry
+#'   chooses its LD Store. It is checked against [og_ld_stores()] when a call first needs it. See
+#'   `vignette("ld")`.
+#' @param geno_store A Genotype Store, from which LD would be computed when asked. Not available
+#'   yet: anything but `NULL` is refused (class `opengwasr_ld_resource_unavailable`) until the API
+#'   serves Genotype Stores.
 #' @return An `og_api_source`.
 #' @examples
 #' \dontrun{
 #' src <- og_api()
 #' src
+#' og_api(ld_store = "EUR")
 #' }
 #' @export
 og_api <- function(url = getOption("opengwasr.url"),
                    timeout = default_timeout(),
                    max_in_flight = default_max_in_flight(),
-                   caller = NULL) {
+                   caller = NULL,
+                   ld_store = NULL,
+                   geno_store = NULL) {
+  # The LD resource first: a refusal needs no credentials.
+  if (!is.null(geno_store)) {
+    ld_resource_unavailable("A Genotype Store on the API isn't available yet: the API doesn't serve Genotype Stores.",
+                            "Give an LD Store as `ld_store`, or leave both out to match each Analysis's Assigned Ancestry.")
+  }
+  # Kept: an R argument's type. Which names and ancestries exist is the API's list to say, when a call needs it.
+  if (!is.null(ld_store) && (!is.character(ld_store) || length(ld_store) != 1 || is.na(ld_store) || !nzchar(ld_store))) {
+    og_abort(c("`ld_store` must be one LD Store name or ancestry code, such as \"EUR\", or `NULL`.",
+               if (is_plink_reference(ld_store)) c(i = "A PLINK Reference is given to one call, as `ld`, or to a Local Source, `og_local(gwas, bfile = )`.")),
+             class = "opengwasr_argument")
+  }
   creds <- api_credentials(url)
   # Kept: it goes into a header, so it has to be one printable line.
   if (!is.null(caller) && (!is.character(caller) || length(caller) != 1 || is.na(caller) ||
@@ -50,6 +73,8 @@ og_api <- function(url = getOption("opengwasr.url"),
       timeout = timeout,
       max_in_flight = as.integer(max_in_flight),
       caller = caller,
+      # The Source's LD resource (ADR 0006): read by ld_resource() (R/ld-stores.R), never elsewhere.
+      ld = ld_store,
       signed_in_with = creds$scheme,
       user = creds$user,
       # A closure, so the key is not a visible field: str(), dput() and print() never show it.
@@ -70,7 +95,8 @@ format.og_api_source <- function(x, ...) {
     paste0("\u2022 Signed in with: ", x$signed_in_with, " (as ", x$user, ")"),
     paste0("\u2022 Timeout: ", format(x$timeout), " s"),
     paste0("\u2022 Jobs in flight: at most ", x$max_in_flight),
-    if (!is.null(x$caller)) paste0("\u2022 Caller: ", x$caller)
+    if (!is.null(x$caller)) paste0("\u2022 Caller: ", x$caller),
+    if (!is.null(x$ld)) paste0("\u2022 LD resource: LD Store \"", x$ld, "\"")
   )
 }
 

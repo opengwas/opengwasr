@@ -255,13 +255,30 @@ analyses_frame <- function(analyses) {
 }
 
 # Add the canonical `id` (assembled here: rows carry the bare `analysis_id` beside `store_id`) and
-# `requested_id`, leading the columns.
+# `requested_id`, leading the columns. Both Sources' rows end here, so each column of
+# analysis_columns is typed here, by type_analyses().
 finish_analyses <- function(analyses, requested) {
+  analyses <- type_analyses(analyses)
   analyses$id <- canonical_ids(analyses)
   analyses$requested_id <- as.character(requested)
   analyses <- analyses[, c("requested_id", "id", setdiff(names(analyses), c("requested_id", "id"))), drop = FALSE]
   rownames(analyses) <- NULL
   analyses
+}
+
+# Each column of analysis_columns as the catalogue's type, whatever the rows hold: the API's JSON
+# makes a column null in every row logical, and one of whole numbers integer.
+type_analyses <- function(analyses) {
+  for (name in intersect(names(analysis_columns), names(analyses))) {
+    analyses[[name]] <- as_analysis_type(analyses[[name]], analysis_columns[[name]])
+  }
+  analyses
+}
+
+# Values as an analysis_columns type: "text", "integer" or "real". The one conversion both Sources'
+# Analysis columns go through (type_analyses(), catalogue_value()).
+as_analysis_type <- function(x, type) {
+  switch(type, text = as.character(x), integer = as.integer(x), real = as.double(x))
 }
 
 # `<store_id>:<analysis_id>` for each row.
@@ -393,7 +410,7 @@ local_analysis_rows <- function(table, store_id, release_id, call = rlang::calle
 # too: the catalogue would never serve it, and opengwasr never rounds one.
 catalogue_value <- function(cell, name, type, store_id, release_id, call) {
   cell[!nzchar(cell) | (name %in% c("maf_threshold", "info_score_threshold") & cell %in% "NaN")] <- NA
-  if (type == "text") return(as.character(cell))
+  if (type == "text") return(as_analysis_type(cell, type))
   number <- suppressWarnings(as.numeric(cell))
   bad <- !is.na(cell) & (is.na(number) | !is.finite(number) |
                            (type == "integer" & (number != round(number) | abs(number) > .Machine$integer.max)))
@@ -405,7 +422,7 @@ catalogue_value <- function(cell, name, type, store_id, release_id, call) {
              class = "opengwasr_invalid_analyses", store_id = store_id, release_id = release_id, column = name,
              values = unique(cell[bad]), call = call)
   }
-  if (type == "integer") as.integer(number) else number
+  as_analysis_type(number, type)
 }
 
 # An Analysis's outcome type as the catalogue derives it, which the API Source returns and

@@ -20,6 +20,17 @@ test_api("og_analyses() looks up Analyses by canonical id, in the order given", 
   expect_equal(names(info)[1:2], c("requested_id", "id"))
 })
 
+test_api("og_analyses() types each catalogue column by the catalogue, even when every row is null in it", {
+  # OGS-00009:ukb-b-19953 is null in tissue, n_cases and original_sd (fixtures/world.json).
+  info <- og_analyses(src, "OGS-00009:ukb-b-19953")
+  expect_identical(info$tissue, NA_character_)
+  expect_identical(info$n_cases, NA_integer_)
+  expect_identical(info$original_sd, NA_real_)
+  # A column whose values are whole numbers keeps the catalogue's type too.
+  expect_type(og_analyses(src, bmi)$original_sd, "double")
+  expect_type(og_analyses(src, bmi)$sample_size, "integer")
+}, live = FALSE)
+
 test_api("og_analyses() answers one row per identifier given, repeats included", {
   info <- og_analyses(src, c(cad, bmi, cad))
   expect_equal(info$id, c(cad, bmi, cad))

@@ -57,11 +57,11 @@ test_that("og_local() refuses a path that isn't a Store Release, and an empty `p
   expect_error(og_local(1), class = "opengwasr_argument")
   missing <- file.path(withr::local_tempdir(), "no-such-release")
   e <- expect_error(og_local(missing), class = "opengwasr_not_store_release")
-  expect_equal(e$paths, missing)
+  expect_equal(e$paths, local_path(missing))
   expect_length(e$reasons, 1)
 
   skip_if_no_local()
-  empty <- normalizePath(withr::local_tempdir())
+  empty <- local_path(withr::local_tempdir())
   e <- expect_error(og_local(c(example_releases("dense"), empty)), class = "opengwasr_not_store_release")
   expect_equal(e$paths, empty)
 })
@@ -71,7 +71,7 @@ test_that("a manifest ogquery can't parse isn't a Store Release, and the parse e
   broken <- release_with_format("0.3.0")
   writeLines("{ not json", file.path(broken, "manifest.json"))
   e <- expect_error(og_local(broken), class = "opengwasr_not_store_release")
-  expect_equal(e$paths, normalizePath(broken))
+  expect_equal(e$paths, local_path(broken))
   expect_match(e$reasons, "JSONDecodeError", fixed = TRUE)  # Python's own error, carried on
 })
 
@@ -82,13 +82,13 @@ test_that("og_local() refuses a Store Release ogquery can't read, naming each on
   expect_s3_class(e, "opengwasr_refusal")
   expect_equal(e$format_version, "0.2.3")
   expect_equal(e$readable, "0.3")
-  expect_equal(e$paths, normalizePath(old))
+  expect_equal(e$paths, local_path(old))
 
   # A series ogquery doesn't implement is refused as its manifest is read, and each Store Release
   # keeps its own version.
   future <- release_with_format("0.4.0")
   e <- expect_error(og_local(c(old, example_releases("ragged"), future)), class = "opengwasr_format_unsupported")
-  expect_equal(e$paths, normalizePath(c(old, future)))
+  expect_equal(e$paths, local_path(c(old, future)))
   expect_equal(e$format_version, c("0.2.3", "0.4.0"))
   expect_equal(e$readable, "0.3")
 })
@@ -121,6 +121,52 @@ test_that("a refused format's version comes from the manifest, whatever ogquery'
   writeLines("{ not json", file.path(future, "manifest.json"))
   local_mocked_bindings(local_load_manifest = refuse("format_version='0.4.0'"))
   expect_true(is.na(og_local_check(future)$releases$format_version))
+})
+
+# Paths: one normaliser, forward slashes on every platform --------------------------------------
+
+test_that("paths are normalised once, with forward slashes, Windows ones included", {
+  # Windows, simulated: its separators and drive letters, which don't exist here, so nothing is
+  # resolved and only the separators change.
+  local_mocked_bindings(on_windows = function() TRUE)
+  expect_equal(normalise_path("C:\\hostedtoolcache\\windows\\Python\\3.13.17\\x64\\python.exe", resolve = FALSE),
+               "C:/hostedtoolcache/windows/Python/3.13.17/x64/python.exe")
+  expect_equal(normalise_path(c("D:\\a\\opengwasr\\releases/hyb-c", "D:/a/opengwasr/releases\\hyb")),
+               c("D:/a/opengwasr/releases/hyb-c", "D:/a/opengwasr/releases/hyb"))
+  # A missing Store Release is refused under the path as normalised.
+  e <- expect_error(og_local("D:\\data\\OGS-00011\\OGS-00011-v2"), class = "opengwasr_not_store_release")
+  expect_equal(e$paths, "D:/data/OGS-00011/OGS-00011-v2")
+})
+
+test_that("a Windows RETICULATE_PYTHON is the Python reticulate reports, whichever separators each uses", {
+  local_mocked_bindings(on_windows = function() TRUE)
+  started <- list(python = "C:/hostedtoolcache/windows/Python/3.13.17/x64/python.exe", forced = "RETICULATE_PYTHON",
+                  ephemeral = FALSE)
+  calls <- mock_python(config = started)
+  withr::local_envvar(RETICULATE_PYTHON = "C:\\hostedtoolcache\\windows\\Python\\3.13.17\\x64\\python.exe")
+  found <- local_ogquery()
+  expect_equal(found$info$python, "C:/hostedtoolcache/windows/Python/3.13.17/x64/python.exe")
+  expect_equal(found$info$chosen_by, "RETICULATE_PYTHON")
+  expect_equal(calls$required, 0)
+
+  # Reported the same way when reticulate spells it with backslashes too.
+  mock_python(config = list(python = "C:\\py\\python.exe", forced = "RETICULATE_PYTHON", ephemeral = FALSE))
+  withr::local_envvar(RETICULATE_PYTHON = "C:\\py\\python.exe")
+  expect_equal(local_ogquery()$info$python, "C:/py/python.exe")
+
+  # With no `forced`, the paths are compared: the same Python however it is spelt, or its directory.
+  started$forced <- NULL
+  for (named in c("C:\\hostedtoolcache\\windows\\Python\\3.13.17\\x64\\python.exe",
+                  "C:\\hostedtoolcache\\windows\\Python\\3.13.17\\x64")) {
+    mock_python(config = started)
+    withr::local_envvar(RETICULATE_PYTHON = named)
+    expect_equal(local_ogquery()$info$chosen_by, "RETICULATE_PYTHON")
+  }
+  mock_python(config = started)
+  withr::local_envvar(RETICULATE_PYTHON = "C:\\other\\python.exe")
+  e <- expect_error(local_ogquery(), class = "opengwasr_local_unavailable")
+  expect_equal(e$need, "chosen_python")
+  expect_equal(e$python, "C:/hostedtoolcache/windows/Python/3.13.17/x64/python.exe")
 })
 
 # Finding Python: the boundary mocked at its primitives ----------------------------------------
@@ -286,7 +332,7 @@ test_that("with no `forced`, the Python started is compared with the one named",
 test_that("a stale handle is opened again the way og_local() opens it, probe and all", {
   local_fresh_python()
   local_state$ogquery <- list(info = list(python = "/p", chosen_by = "RETICULATE_PYTHON", ogquery = "0.1.0", reads = "0.3"))
-  dir <- normalizePath(withr::local_tempdir())
+  dir <- local_path(withr::local_tempdir())
   src <- structure(list(releases = data.frame(store_id = "s", release_id = "r", format_version = "0.3.0", path = dir),
                         handles = new.env()), class = "og_local_source")
   assign(dir, "old", envir = src$handles)
@@ -321,7 +367,7 @@ test_that("og_local_check() reports the Python, the versions and every Store Rel
   empty <- withr::local_tempdir()
   check <- og_local_check(c(example_releases("dense", "hyb"), old, empty))
   expect_s3_class(check, "og_local_check")
-  expect_equal(check$python, Sys.getenv("RETICULATE_PYTHON"))
+  expect_equal(check$python, normalise_path(Sys.getenv("RETICULATE_PYTHON"), resolve = FALSE))
   expect_equal(check$chosen_by, "RETICULATE_PYTHON")
   expect_equal(check$reticulate, as.character(utils::packageVersion("reticulate")))
   expect_match(check$ogquery, "^[0-9]+\\.[0-9]+")
@@ -330,7 +376,7 @@ test_that("og_local_check() reports the Python, the versions and every Store Rel
 
   rows <- check$releases
   expect_equal(nrow(rows), 4)
-  expect_equal(rows$path, normalizePath(c(example_releases("dense", "hyb"), old, empty)))
+  expect_equal(rows$path, local_path(c(example_releases("dense", "hyb"), old, empty)))
   expect_equal(rows$store_id, c("s", "hyb", "s", NA))
   expect_equal(rows$release_id, c("r", "v1", "r", NA))
   expect_equal(rows$format_version, c("0.3.0", "0.3.0", "0.2.3", NA))

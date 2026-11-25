@@ -226,12 +226,27 @@ check_release_paths <- function(path, exist = TRUE, call = rlang::caller_env()) 
                i = "For example `og_local(c(\"/data/opengwas/OGS-00009/OGS-00009-v2\", \"/data/opengwas/OGS-00011/OGS-00011-v2\"))`."),
              class = "opengwasr_argument", call = call)
   }
+  path <- normalise_path(path)
   missing <- path[!dir.exists(path)]
   if (exist && length(missing)) {
     refuse_not_store_release(missing, rep("no such directory", length(missing)), call = call)
   }
-  normalizePath(path, mustWork = FALSE)
+  path
 }
+
+# A path as og_local() and og_local_check() store, report and compare it, normalised once: absolute,
+# and with forward slashes on every platform, so a path from system.file() or file.path() (which
+# join with "/") and one from normalizePath() or an environment variable (which use "\\" on
+# Windows) are the same string. `resolve = FALSE` changes only the separators: a Python is reported
+# as named, since resolving a virtualenv's `python` link would name the interpreter it links to,
+# not the virtualenv. A path that doesn't exist isn't resolved, but its separators still change.
+normalise_path <- function(path, resolve = TRUE) {
+  if (resolve) path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (on_windows()) path <- gsub("\\", "/", path, fixed = TRUE)
+  path
+}
+
+on_windows <- function() .Platform$OS.type == "windows"
 
 # Reading each Store Release through ogquery ----------------------------------------------------
 
@@ -359,7 +374,7 @@ local_ogquery <- function(call = rlang::caller_env()) {
   if (is.null(choice)) local_py_require()
   modules <- tryCatch(local_import_ogquery(), error = identity)
   config <- tryCatch(local_py_config(), error = function(e) NULL)
-  python <- config$python %||% choice$python %||% NA_character_
+  python <- normalise_path(config$python %||% choice$python %||% NA_character_, resolve = FALSE)
   chosen_by <- if (!is.null(config)) started_by(config) else choice$chosen_by %||% NA_character_
   if (python_swapped(choice, config)) {
     local_unavailable(c(paste0("You chose a Python with `", choice$chosen_by, "`, but reticulate started ",
@@ -412,7 +427,7 @@ python_choice <- function(config = NULL) {
   python <- Sys.getenv("RETICULATE_PYTHON")
   if (nzchar(python)) {
     if (python == "managed") return(NULL)
-    return(list(python = python, chosen_by = "RETICULATE_PYTHON", started = FALSE))
+    return(list(python = normalise_path(python, resolve = FALSE), chosen_by = "RETICULATE_PYTHON", started = FALSE))
   }
   if (nzchar(Sys.getenv("RETICULATE_PYTHON_ENV"))) {
     return(list(python = NULL, chosen_by = "RETICULATE_PYTHON_ENV", started = FALSE))
@@ -436,12 +451,13 @@ python_swapped <- function(choice, config) {
   !(by %in% user_choices && match(by, user_choices) < match(choice$chosen_by, user_choices))
 }
 
-# Whether `started` is the Python `named` names: the same file, or the `python` in the directory
-# it names (reticulate takes a directory, or its bin/, for RETICULATE_PYTHON).
+# Whether `started` is the Python `named` names: the same file, or the Python in the directory it
+# names (reticulate takes a directory, its bin/ or, on Windows, its Scripts/, for RETICULATE_PYTHON).
+# Both are normalised and resolved, so links and separators don't matter.
 same_python <- function(named, started) {
   if (is.null(named) || is.null(started)) return(FALSE)
-  candidates <- c(named, file.path(named, "python"), file.path(named, "bin", "python"))
-  normalizePath(started, mustWork = FALSE) %in% normalizePath(candidates, mustWork = FALSE)
+  candidates <- c(named, file.path(named, c("python", "python.exe", "bin/python", "Scripts/python.exe")))
+  normalise_path(started) %in% normalise_path(candidates)
 }
 
 require_reticulate <- function(call) {

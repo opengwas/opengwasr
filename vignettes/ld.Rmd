@@ -11,10 +11,10 @@ Linkage disequilibrium (LD) is how strongly two variants are inherited together,
 
 Variants are named by ALID, as everywhere in opengwasr (see [ALIDs](opengwasr.html#alids)). The sign of r refers to the first allele in each ALID.
 
-> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026 (`ld-resource-api` and `ld-resource-override` replay the same requests as `choosing-ld`, `unassigned-ld` and `ld-matrices`), except these:
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026 (`ld-resource-api` and `ld-resource-override` replay the same requests as `choosing-ld`, `unassigned-ld` and `ld-matrices`; `plink-api` and `plink-alid-rsids` replay requests recorded for [Getting started](opengwasr.html), copied here), except these:
 >
 > - `stored-clumps`: no Store Release has stored Clumps yet; reading them comes in a later step (#39). Its output is illustrative.
-> - `plink-reference` and `plink-ld-only`: they read the small synthetic PLINK Reference that comes with opengwasr, and need a PLINK binary. They run wherever PLINK 1.9 or 2 is found (`plink_ready`: genetics.binaRies, or `plink` or `plink2` on the `PATH`), as in CI; without one, as on CRAN, their code is shown unevaluated.
+> - `plink-reference`, `plink-api`, `plink-ld-only` and `plink-alid-rsids`: they read the small synthetic PLINK Reference that comes with opengwasr, and need a PLINK binary. They run wherever PLINK 1.9 or 2 is found (`plink_ready`: genetics.binaRies, or `plink` or `plink2` on the `PATH`), as in CI; without one, as on CRAN, their code is shown unevaluated.
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
@@ -86,7 +86,7 @@ og_ld_resource(og_api())
 
 ### A different LD for one call is a different Source {#ld-inherit}
 
-To use other LD for one call, make a Source like the one you have, with other LD. `inherit =` does it in one line: every argument you give replaces the inherited one, and everything else (the URL, key, timeout and `max_in_flight` of an API Source; the Store Releases of a Local Source) comes from `inherit`. Giving any LD argument replaces the inherited LD resource; it is never mixed with it.
+To use other LD for one call, make a Source like the one you have, with other LD. `inherit =` does it in one line: every argument you give replaces the inherited one, and everything else (the URL, key, timeout and `max_in_flight` of an API Source; the Store Releases of a Local Source) comes from `inherit`. Giving any LD argument replaces the inherited LD resource; it is never mixed with it. The one exception is `plink` alone: `og_local(inherit = local, plink = "plink2")` keeps the PLINK Reference's fileset and changes the PLINK that reads it.
 
 ```{r ld-resource-override, warning = FALSE}
 src_amr <- og_api(inherit = src_eur, ld_store = "AMR")
@@ -106,8 +106,10 @@ A Source's LD resource lives where the Source does: `og_api()` answers LD from t
 |---|---|---|
 | API | API | `og_tophits(og_api(), ids)` (matched by Assigned Ancestry), or `og_tophits(og_api(ld_store = "EUR"), ids)` |
 | Local | PLINK | `og_tophits(og_local(gwas = ..., bfile = ...), ids, r2 = , kb = )` |
-| Local | API | `og_clump(og_api(), og_tophits(local, ids, clump = FALSE))` |
-| API | PLINK | `og_clump(og_local(bfile = ...), og_tophits(og_api(), ids, clump = FALSE), r2 = , kb = )` |
+| Local | API | `og_clump(og_api(), og_tophits(local, ids, clump = FALSE, limit = 10000))` |
+| API | PLINK | `og_clump(og_local(bfile = ...), og_tophits(og_api(), ids, clump = FALSE, limit = 10000), r2 = , kb = )` |
+
+In the last two rows, `limit = 10000` (the most) fetches every top hit to clump: `limit` defaults to 1,000, and would cut the top hits off before they are clumped, keeping only the strongest 1,000 of each Analysis. A warning of class `opengwasr_truncated` says when it does.
 
 The last row uses a Local Source with only a PLINK Reference: an **LD-only Local Source**. It answers `og_clump()` and `og_ld_matrix()` and nothing else ([below](#plink-reference)). The third is in [LD from the API's LD Stores](local-source.html#local-ld-api).
 
@@ -334,7 +336,7 @@ A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`
 - `og_local(gwas = ..., bfile = prefix)`: Associations from your Store Releases, LD from your PLINK Reference ([Clumping and LD on a Local Source](local-source.html#local-clumping)).
 - `og_local(bfile = prefix)`: an **LD-only Local Source**, with no Store Releases. It answers `og_clump()` and `og_ld_matrix()` for data you already have, such as top hits from the API Source: the last row of the [table above](#mixing).
 
-For your own, such as `og_local(bfile = "~/ld/1kg/EUR")`, the calls are `og_clump(ld_src, og_tophits(src, ids, clump = FALSE), r2 = 0.001, kb = 10000)` and `og_ld_matrix(ld_src, rsids)`. Here, the small synthetic PLINK Reference that comes with opengwasr, 300 made-up people, whose rsIDs include a few CAD and BMI signals, clumps the CAD and BMI index variants from [above](#og-clump) together, and reads an LD matrix of rsIDs. It holds only a few of these real variants, so most are left out, as the message says; your own PLINK Reference holds far more:
+For your own, such as `og_local(bfile = "~/ld/1kg/EUR")`, the calls are `og_clump(ld_src, og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)` and `og_ld_matrix(ld_src, rsids)`. Here, the small synthetic PLINK Reference that comes with opengwasr, 300 made-up people, whose rsIDs include a few CAD and BMI signals, clumps the CAD and BMI index variants from [above](#og-clump) together, and reads an LD matrix of rsIDs. It holds only a few of these real variants, so most are left out, as the message says; your own PLINK Reference holds far more:
 
 ```{r plink-reference, eval = plink_ready}
 ld_src <- og_local(bfile = file.path(system.file("plink", package = "opengwasr"), "ref"))
@@ -355,13 +357,35 @@ round(m_local, 3)
 - `og_ld_proxies()` and `og_ld_reflookup()` read LD Stores only, so a Local Source refuses them.
 - Provenance works as before: `clump_ld` is the PLINK Reference's path, and `clump_ld_choice` is `"user"`.
 
+### Top hits from the API, clumped with PLINK {#plink-api}
+
+The last row of the [table](#mixing), end to end: BMI's top hits from the API Source, unclumped, then clumped with the PLINK Reference. Here `limit` is left at its default, so the warning says the API's top hits were cut off at 1,000 before clumping; with your own, pass `limit = 10000` to clump them all:
+
+```{r plink-api, eval = plink_ready}
+bmi_hits <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE)
+bmi_local <- og_clump(ld_src, bmi_hits, r2 = 0.001, kb = 10000)
+bmi_local[, c("id", "rsid", "alid", "z", "clump_size")]
+og_provenance(bmi_local)$clump[, c("ld_choice", "r2", "kb", "hits", "absent", "leads", "clumps")]
+```
+
 ### An LD-only Local Source {#plink-ld-only}
 
-An LD-only Local Source has no Store Releases, so it has nothing to look an ALID's rsID up in, and never calls the API. Give it variants it can match by rsID: a data frame with an `rsid` column, such as any top hits or Associations, or rsIDs. ALIDs alone are refused (class `opengwasr_gwas_store_required`, with the ALIDs in `alids`), and the error names the two ways round: give the Source the Store Releases that hold them, `og_local(gwas = ..., bfile = ...)`, or pass a data frame with an `rsid` column. Every verb that reads Associations refuses it with the same class:
+An LD-only Local Source has no Store Releases, so it has nothing to look an ALID's rsID up in, and never calls the API. Give it variants it can match by rsID: a data frame with an `rsid` column, such as any top hits or Associations, or rsIDs. ALIDs alone are refused (class `opengwasr_gwas_store_required`, with the ALIDs in `alids`), and the error names the ways round, in `forms`: give the Source the Store Releases that hold them, `og_local(gwas = ..., bfile = ...)` (`"gwas"`); pass a data frame with an `rsid` column (`"rsid_column"`); or look their rsIDs up on the API first (`"api_rsids"`). Every verb that reads Associations refuses it with the same class:
 
 ```{r plink-ld-only, eval = plink_ready, error = TRUE}
 og_ld_matrix(ld_src, c("9:22125504:C:G", "9:22098575:A:G"))
 og_tophits(ld_src, "OGS-00011:GCST003116")
+```
+
+To look the rsIDs up on the API, ask `og_variants_chrpos()` for the ALIDs' positions, and take the `rsid` of each ALID; then read the LD matrix of those rsIDs from the PLINK Reference:
+
+```{r plink-alid-rsids, eval = plink_ready}
+alids <- c("16:53767042:C:T")
+positions <- sub(":[^:]+:[^:]+$", "", alids)   # chromosome:position
+found <- og_variants_chrpos(src, positions, releases = "OGS-00011")
+rs <- found$rsid[match(alids, found$alid)]
+rs
+og_ld_matrix(ld_src, c(rs, "rs9939609"))
 ```
 
 ```{r end-recordings, include = FALSE}

@@ -75,7 +75,7 @@ local
 
 Every verb that needs LD (`og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`) uses the Source's LD resource; no verb takes an LD argument. For other LD in one call, make a Source like yours with other LD: `inherit =` keeps everything you don't give, such as `og_ld_matrix(og_api(inherit = src_eur, ld_store = "AFR"), variants)`, or `og_local(inherit = local, bfile = ...)`.
 
-A Source's LD lives where the Source does. To take Associations from one place and LD from another, fetch with one Source and clump with the other, such as `og_clump(og_local(bfile = ...), og_tophits(src, ids, clump = FALSE), r2 = 0.001, kb = 10000)` for top hits from the API clumped with your PLINK Reference ([Associations from one place, LD from another](ld.html#mixing)). [LD operations](ld.html#ld-resource) explains choosing LD in full.
+A Source's LD lives where the Source does. To take Associations from one place and LD from another, fetch with one Source and clump with the other, such as `og_clump(og_local(bfile = ...), og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)` for top hits from the API clumped with your PLINK Reference (`limit = 10000` fetches them all; the default, 1,000, would cut them off before clumping) ([Associations from one place, LD from another](ld.html#mixing)). [LD operations](ld.html#ld-resource) explains choosing LD in full.
 
 ## Credentials {#credentials}
 

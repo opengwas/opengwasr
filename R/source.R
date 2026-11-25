@@ -74,7 +74,7 @@ og_api <- function(url = getOption("opengwasr.url"),
       timeout = timeout,
       max_in_flight = as.integer(max_in_flight),
       caller = caller,
-      # The Source's LD resource (ADR 0006): read by ld_resource() (R/ld-stores.R), never elsewhere.
+      # The Source's LD resource (ADR 0006): read by og_ld_resource() (R/ld-stores.R), never elsewhere.
       ld = ld_store,
       signed_in_with = creds$scheme,
       user = creds$user,
@@ -97,7 +97,7 @@ format.og_api_source <- function(x, ...) {
     paste0("\u2022 Timeout: ", format(x$timeout), " s"),
     paste0("\u2022 Jobs in flight: at most ", x$max_in_flight),
     if (!is.null(x$caller)) paste0("\u2022 Caller: ", x$caller),
-    if (!is.null(x$ld)) paste0("\u2022 LD resource: LD Store \"", x$ld, "\"")
+    if (!is.null(og_ld_resource(x))) paste0("\u2022 LD resource: LD Store \"", og_ld_resource(x), "\"")
   )
 }
 

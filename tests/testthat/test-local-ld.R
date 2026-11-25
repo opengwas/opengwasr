@@ -210,3 +210,12 @@ test_that("`ld` overrides a Local Source's PLINK Reference for one call", {
   # The Source's own is unchanged.
   expect_identical(src$ld, ref)
 })
+
+test_that("og_ld_resource() gives a Local Source's PLINK Reference, or NULL without one", {
+  skip_if_no_local()
+  expect_null(og_ld_resource(dense_bare()))
+  ref <- local_plink_reference()
+  got <- og_ld_resource(dense_plink())
+  expect_s3_class(got, "og_plink_reference")
+  expect_identical(got, ref)
+})

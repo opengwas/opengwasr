@@ -43,6 +43,32 @@ ld_stores <- function(src, call = rlang::caller_env()) {
   stores
 }
 
+#' The LD resource a Source carries
+#'
+#' `og_ld_resource()` returns the LD resource a Source carries (ADR 0006; see `vignette("ld")`,
+#' "The Source's LD resource"): the one every verb that needs LD uses unless its `ld` overrides it.
+#' Packages built on opengwasr, such as TwoSampleMR, read it to honour the Source's LD resource.
+#'
+#' @param src A Source, from [og_api()] or [og_local()].
+#' @return For an API Source, its `ld_store` (an LD Store's name or an ancestry code), as given to
+#'   `og_api(ld_store = )`. For a Local Source, its PLINK Reference (an `og_plink_reference`, as
+#'   [og_plink_reference()] returns), from `og_local(bfile = )`. `NULL` when the Source carries none:
+#'   the API Source then matches each Analysis's Assigned Ancestry, and a Local Source refuses
+#'   anything that needs LD. Anything that isn't a Source is refused as every query function refuses
+#'   it (class `opengwasr_source_required` for `NULL`, else `opengwasr_argument`).
+#' @examples
+#' \dontrun{
+#' og_ld_resource(og_api())                    # NULL
+#' og_ld_resource(og_api(ld_store = "EUR"))    # "EUR"
+#' }
+#' @export
+og_ld_resource <- function(src) {
+  if (!is_source(src)) check_source(src)
+  src$ld
+}
+
+is_source <- function(x) inherits(x, c("og_api_source", "og_local_source"))
+
 #' Which LD resource answers this call (ADR 0006), and where it came from: the call's `ld` if given
 #' (`from = "call"`), else the Source's own (`og_api(ld_store = )`, `og_local(bfile = )`;
 #' `"source"`), else none (`"ancestry"`), which on the API Source means each Analysis's Assigned
@@ -54,7 +80,8 @@ ld_stores <- function(src, call = rlang::caller_env()) {
 #' @noRd
 ld_resource <- function(src, ld, call = rlang::caller_env(), clumping = FALSE) {
   if (inherits(ld, "og_ld_resource")) return(ld)
-  own <- if (is.list(src)) src$ld
+  # `src` may be no Source at all (`src = NULL` with a PLINK Reference as `ld`): it carries none.
+  own <- if (is_source(src)) og_ld_resource(src)
   from <- if (!is.null(ld)) "call" else if (!is.null(own)) "source" else "ancestry"
   if (from == "ancestry" && inherits(src, "og_local_source")) {
     og_abort(c(if (clumping) {

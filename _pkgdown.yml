@@ -39,6 +39,7 @@ reference:
   - og_api
   - og_local
   - og_local_check
+  - og_ld_resource
   - og_status
   - og_user
 articles:

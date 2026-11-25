@@ -44,8 +44,8 @@ library(opengwasr)
 ## What you need {#local-needs}
 
 - **Store Releases on disk.** Each GWAS Store you download is a directory, such as `/data/opengwas/OGS-00011`, holding one Store Release, such as `/data/opengwas/OGS-00011/OGS-00011-v2`. opengwasr doesn't download them for you.
-- **Python, with ogquery.** ogquery is the **Store Reader**, the library every consumer uses to read a Store Release. It is on PyPI (version 0.1.0) and needs only numpy, zarr and numcodecs. It runs on Linux, macOS and Windows, with Python 3.12 to 3.14. opengwasr calls it through reticulate. You never use ogquery by name from R.
-- **Store Release format 0.3.x.** ogquery 0.1.0 reads any format 0.3.x. A 0.2.x Store Release is refused, with its format named. The hosted Store Releases are being rebuilt at 0.3.0.
+- **Python, with ogquery.** ogquery is the **Store Reader**, the library every consumer uses to read a Store Release. It is on PyPI and needs only numpy, zarr and numcodecs. It runs on Linux, macOS and Windows, with Python 3.12 to 3.14. opengwasr calls it through reticulate. You never use ogquery by name from R.
+- **Store Release format 0.3.x.** ogquery reads any format 0.3.x. A 0.2.x Store Release is refused, with its format named. The hosted Store Releases are being rebuilt at 0.3.0.
 
 API users never need Python, reticulate or ogquery.
 
@@ -55,9 +55,11 @@ opengwasr looks for Python in this order, and your choice always wins over the a
 
 1. **`RETICULATE_PYTHON`**, if set, names the Python to use.
 2. **An environment you name to reticulate**: a conda environment or virtualenv (`reticulate::use_condaenv()`, `reticulate::use_virtualenv()`, or `RETICULATE_PYTHON_ENV`), an activated virtualenv (`VIRTUAL_ENV`), or a Python reticulate has already started in this R session.
-3. **Automatic setup.** Otherwise reticulate makes an environment with ogquery in it, using uv (`reticulate::py_require("ogquery")`).
+3. **Automatic setup.** Otherwise reticulate makes an environment with ogquery in it, using uv (`reticulate::py_require("ogquery>=0.1.0,<1")`).
 
-If the Python you chose doesn't have ogquery, opengwasr stops and says how to install it there. It never swaps your Python for the automatic one. (One gap: a `use_condaenv()` or `use_virtualenv()` call can't be seen before Python starts. Once Python has started, reticulate names the call and opengwasr reports it, but if reticulate couldn't start that environment and started its automatic one instead, only the automatic one is named, and opengwasr can't tell. `RETICULATE_PYTHON` has no such gap.)
+opengwasr reads **ogquery 0.1.0 or later, before 1.0** (`"ogquery>=0.1.0,<1"`, as pip writes it), and every install below asks for that range. Any other ogquery is refused before anything is read (`e$need` is `"ogquery_version"`, with the version found in `e$found`), including the placeholder 0.0.0 on PyPI.
+
+If the Python you chose doesn't have a supported ogquery, opengwasr stops and says how to install one there. It never swaps your Python for the automatic one. (One gap: a `use_condaenv()` or `use_virtualenv()` call can't be seen before Python starts. Once Python has started, reticulate names the call and opengwasr reports it, but if reticulate couldn't start that environment and started its automatic one instead, only the automatic one is named, and opengwasr can't tell. `RETICULATE_PYTHON` has no such gap.)
 
 ### On a laptop {#local-python-laptop}
 
@@ -70,7 +72,7 @@ Compute nodes often have no internet, so prepare the environment on a login node
 ```{bash local-python-hpc-shell, eval = FALSE}
 module load python/3.12
 python3 -m venv /home/me/venvs/ogquery
-/home/me/venvs/ogquery/bin/pip install ogquery
+/home/me/venvs/ogquery/bin/pip install "ogquery>=0.1.0,<1"
 ```
 
 Then, in your `.Renviron` (which you can open with `usethis::edit_r_environ()`), with an absolute path, because R doesn't expand `~` there:
@@ -86,7 +88,7 @@ If you use conda, make the environment on the login node instead:
 ```{bash local-python-conda-shell, eval = FALSE}
 conda create -n ogquery python=3.13
 conda activate ogquery
-pip install ogquery
+pip install "ogquery>=0.1.0,<1"
 ```
 
 Then either set `RETICULATE_PYTHON` to that environment's `python` in `.Renviron`, as above, or name the environment in R before the first `og_local()` call:
@@ -116,9 +118,10 @@ Without Python, or without ogquery in it, a Local Source stops with an error of 
 # illustrative
 Error in `og_local()`:
 ! The Python in use, /home/me/venvs/ogquery/bin/python (RETICULATE_PYTHON), can't import ogquery.
-✖ ModuleNotFoundError: No module named 'ogquery'
-ℹ Install ogquery into that Python: `/home/me/venvs/ogquery/bin/python -m pip install ogquery`, then restart R.
+ℹ Install ogquery into that Python: `/home/me/venvs/ogquery/bin/python -m pip install "ogquery>=0.1.0,<1"`, then restart R.
 ```
+
+If the automatic setup ever gives you an unsupported ogquery (an old one kept in uv's cache), the error gives the command that clears uv's cached ogquery, with the uv reticulate uses; run it and restart R, and reticulate sets up a supported one.
 
 ## Opening Store Releases {#local-open}
 

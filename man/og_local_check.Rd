@@ -15,7 +15,10 @@ An \code{og_local_check}: a list with
 \itemize{
 \item \code{python} (the Python's path) and \code{chosen_by} (how it was chosen, as for \code{\link[=og_local]{og_local()}}'s
 errors: \code{"RETICULATE_PYTHON"}, \code{"use_python"}, \code{"automatic"}, ...);
-\item \code{reticulate} and \code{ogquery}, their versions;
+\item \code{reticulate} and \code{ogquery}, their versions (\code{ogquery} is the one found, even when opengwasr
+doesn't support it);
+\item \code{ogquery_required}, the ogquery versions opengwasr supports (\code{">=0.1.0,<1"}), and
+\code{ogquery_in_range}, whether the ogquery found is one of them (\code{NA} when none is found);
 \item \code{reads}, the format series ogquery reads, such as \code{"0.3"} (any 0.3.x);
 \item \code{releases}, a data frame with one row per path: \code{path} (as given), \code{release_path} (the
 Store Release directory it resolved to: itself for a Store Release directory, the one a GWAS

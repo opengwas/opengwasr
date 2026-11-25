@@ -66,8 +66,11 @@ has already started in this session. If it lacks ogquery, the error says how to 
 there. opengwasr never swaps it for another: if reticulate can't start the Python you chose and
 starts a lower choice, its automatic one or one it found itself instead, \code{og_local()} refuses.
 Otherwise (and with \code{RETICULATE_PYTHON=managed} or \code{RETICULATE_USE_MANAGED_VENV=true}, which ask
-for it) reticulate sets one up automatically with uv (\code{reticulate::py_require("ogquery")}),
-which needs the internet the first time.
+for it) reticulate sets one up automatically with uv
+(\code{reticulate::py_require("ogquery>=0.1.0,<1")}), which needs the internet the first time.
+
+opengwasr reads ogquery \verb{>=0.1.0,<1}. An ogquery outside that range, or without
+\code{ogquery.release} (such as the placeholder 0.0.0 on PyPI), is refused before anything is read.
 
 One gap: a \code{use_virtualenv()}, \code{use_condaenv()} or \code{use_python()} call can't be seen before
 Python starts, so opengwasr declares ogquery with \code{py_require()} as for no choice. Once Python
@@ -78,12 +81,16 @@ automatic one, \code{py_config()} names only the automatic one, and opengwasr ca
 
 Without reticulate, \code{og_local()} offers to install it, or, when R isn't interactive, stops
 with \code{opengwasr_local_unavailable}, as it does whenever no Python with ogquery can be found.
-That error carries \code{e$need} (\code{"reticulate"}, \code{"python"}, \code{"ogquery"} or \code{"chosen_python"}),
+That error carries \code{e$need} (\code{"reticulate"}, \code{"python"}, \code{"ogquery"}, \code{"ogquery_version"} or
+\code{"chosen_python"}), \code{e$found} (for \code{"ogquery_version"}, the ogquery version found, or \code{NA} for
+none), \code{e$required} (the ogquery versions opengwasr supports, \code{">=0.1.0,<1"}),
 \code{e$python}, \code{e$chosen_by} (how the Python was chosen: \code{"RETICULATE_PYTHON"},
 \code{"RETICULATE_PYTHON_ENV"}, \code{"use_python"}, \code{"VIRTUAL_ENV"}, \code{"automatic"} or \code{"reticulate"}, one
 reticulate found itself), \code{e$started_by} (for \code{"chosen_python"}, how the Python reticulate
 started instead was chosen), \code{e$install} (the command that installs what is missing, when there
-is one) and \code{e$setting} (the setting that names a Python). \code{\link[=og_local_check]{og_local_check()}} reports what
+is one; for an unsupported ogquery in reticulate's automatic Python, the command that clears
+uv's cached ogquery, after which restarting R sets up a supported one) and \code{e$setting} (the
+setting that names a Python). \code{\link[=og_local_check]{og_local_check()}} reports what
 was found.
 }
 

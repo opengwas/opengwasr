@@ -105,23 +105,32 @@ python_error <- function(classes, message) {
 
 # The Python boundary mocked at its primitives, with none of reticulate's settings set, so a test
 # drives the rule above it with `withr::local_envvar()`: whether Python has started, reticulate's
-# config of it (or an error, when no Python starts), and what importing ogquery gives (or an
-# error). Returns an environment counting the calls of py_require().
+# config of it (or an error, when no Python starts), what the Python in use has of ogquery
+# (`ogquery`: whether it is installed, its version, whether it has `ogquery.release`, and whether
+# the Python has pip; an error, when `import` is one, as when no Python starts), and what importing
+# ogquery gives (or an error). Returns an environment counting the calls of py_require()
+# (`required`) and holding the requirements each was given (`packages`).
 mock_python <- function(started = FALSE,
                         config = list(python = "/opt/py/bin/python", forced = "PATH", ephemeral = FALSE),
-                        import = list(), env = parent.frame()) {
+                        import = list(), ogquery = list(installed = TRUE, version = "0.1.0", release = TRUE, pip = TRUE),
+                        env = parent.frame()) {
   local_fresh_python(env)
   withr::local_envvar(c(RETICULATE_PYTHON = NA, RETICULATE_PYTHON_ENV = NA, VIRTUAL_ENV = NA,
                         RETICULATE_USE_MANAGED_VENV = NA), .local_envir = env)
   calls <- new.env()
   calls$required <- 0
+  calls$packages <- character()
   testthat::local_mocked_bindings(
     local_reticulate_installed = function() TRUE,
     local_py_started = function() started,
     local_py_config = function() if (inherits(config, "condition")) stop(config) else config,
-    local_py_require = function() calls$required <- calls$required + 1,
+    local_py_require = function(packages) {
+      calls$required <- calls$required + 1
+      calls$packages <- c(calls$packages, packages)
+    },
+    local_find_ogquery = function() if (inherits(import, "condition")) stop(import) else ogquery,
     local_import_ogquery = function() if (inherits(import, "condition")) stop(import) else import,
-    local_ogquery_versions = function(modules) list(ogquery = "0.1.0", reads = "0.3"),
+    local_ogquery_reads = function(modules) "0.3",
     .env = env
   )
   calls

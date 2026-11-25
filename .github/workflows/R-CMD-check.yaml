@@ -57,6 +57,25 @@ jobs:
           stopifnot(file.access(plink, 1) == 0)
           cat(normalizePath(dirname(plink)), "\n", sep = "", file = Sys.getenv("GITHUB_PATH"), append = TRUE)
 
+      # PLINK 2 too, on one job: test-plink-versions.R runs both PLINKs on the committed fileset and
+      # checks they agree. OPENGWASR_TEST_PLINK2 points it at PLINK 2; every other PLINK test uses the
+      # PLINK 1.9 found on the PATH, as on the other jobs.
+      - name: Install PLINK 2 from bioconda
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release'
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: plink2
+          create-args: -c bioconda -c conda-forge plink2
+          init-shell: none
+
+      - name: Point the both-PLINKs test at PLINK 2
+        if: matrix.config.os == 'ubuntu-latest' && matrix.config.r == 'release'
+        shell: bash
+        run: |
+          plink2="$MAMBA_ROOT_PREFIX/envs/plink2/bin/plink2"
+          "$plink2" --version
+          echo "OPENGWASR_TEST_PLINK2=$plink2" >> "$GITHUB_ENV"
+
       # The Local Source reads Store Releases through ogquery in Python, which reticulate (in
       # Suggests) finds through RETICULATE_PYTHON: the local tests and the vignette's local chunks
       # run with it, and skip or show their code unevaluated without it. They never set Python up

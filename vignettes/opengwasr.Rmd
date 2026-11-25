@@ -11,7 +11,7 @@ opengwasr gives you OpenGWAS data in R: Analysis metadata, top hits, Association
 
 You never handle the API's Jobs, polling, paging or variant encodings yourself. Each call waits for its answer and returns a plain `data.frame`. When a query can't be answered exactly as you asked, opengwasr stops with an error that says why. It never quietly gives you a different answer.
 
-> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue), and `sources-local` in [Sources](#sources), which needs Python, ogquery and a PLINK Reference, which this vignette doesn't use (they run in [Querying downloaded Store Releases](local-source.html#local-clumping)).
+> **Status.** Every chunk runs, replayed from responses recorded against the development Data API on 23 November 2026, except the ones marked illustrative, each with its reason: the planned `og_rho()` (it needs a Data API endpoint that doesn't exist yet), the error you get with no key, the error for an ambiguous identifier (no identifier is ambiguous in today's catalogue). `sources-local` opens the example Store Releases that come with opengwasr, and runs only where Python and ogquery are set up (`local_ready`, as in [Querying downloaded Store Releases](local-source.html)); `sources-local-plink` also needs a PLINK binary (`plink_ready`). Elsewhere, as on CRAN, their code is shown unevaluated.
 >
 > *Developer note:* The API responses in this vignette were recorded against the development Data API, directly, with a developer key (see `vignettes/recordings.R`). Once the OpenGWAS Gateway is live (#18), re-record through it, so the vignettes show the access users will have.
 
@@ -20,6 +20,15 @@ The examples follow one Mendelian randomization question: does body mass index (
 ```{r recordings, include = FALSE}
 source("recordings.R")
 start_recordings("recordings-opengwasr")
+# The Local Source chunks in Sources run only where a Python with ogquery is set up, and a PLINK
+# binary for the one with a PLINK Reference, as in local-source.Rmd.
+local_ready <- nzchar(Sys.getenv("RETICULATE_PYTHON")) &&
+  requireNamespace("reticulate", quietly = TRUE) &&
+  reticulate::py_module_available("ogquery")
+plink_ready <- local_ready && !inherits(
+  tryCatch(opengwasr::og_plink_reference(file.path(system.file("plink", package = "opengwasr"), "ref")),
+           error = identity),
+  "error")
 ```
 
 ```{r library}
@@ -50,11 +59,21 @@ src_eur <- og_api(ld_store = "EUR")     # LD: the EUR LD Store
 src_eur
 ```
 
-```{r sources-local, eval = FALSE}
-local <- og_local(gwas = "/data/opengwas/OGS-00011", bfile = "/data/ld/1kg/EUR")  # LD: your PLINK Reference
+With Store Releases you have downloaded, such as `og_local(gwas = "/data/opengwas/OGS-00011", bfile = "/data/ld/1kg/EUR")`. Here, the small example Store Releases and PLINK Reference that come with opengwasr:
+
+```{r sources-local, eval = local_ready}
+stores <- system.file("stores", package = "opengwasr")
+local <- og_local(gwas = file.path(stores, "dense"))   # LD: none, so anything needing LD asks for one
+og_ld_resource(local)
 ```
 
-Every verb that needs LD (`og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()` and `og_ld_proxies()`) uses the Source's LD resource. Its `ld` argument overrides it for that one call, such as `og_ld_matrix(src_eur, variants, ld = "AFR")`. [LD operations](ld.html#ld-resource) explains choosing LD in full.
+```{r sources-local-plink, eval = plink_ready}
+bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
+local <- og_local(gwas = file.path(stores, "dense"), bfile = bfile)   # LD: your PLINK Reference
+local
+```
+
+Every verb that needs LD (`og_tophits()` when it clumps, `og_clump()`, `og_ld_matrix()`, `og_ld_proxies()` and `og_ld_reflookup()`) uses the Source's LD resource. Its `ld` argument overrides it for that one call, such as `og_ld_matrix(src_eur, variants, ld = "AFR")`. [LD operations](ld.html#ld-resource) explains choosing LD in full.
 
 ## Credentials {#credentials}
 

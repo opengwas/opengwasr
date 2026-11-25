@@ -1,6 +1,6 @@
 # A Source carries its LD resource; stored clumps by default, clumping on the fly otherwise
 
-A Source says where Associations come from, and also which LD resource answers LD for them. The LD resource is one of four kinds. Each kind can be on the API or on the user's machine:
+A Source says where Associations come from, and also which LD resource answers LD for them. The LD resource is one of three kinds, LD Store, Genotype Store and PLINK Reference, or none is given. Each kind can be on the API or on the user's machine:
 
 | LD resource | On the API | Local |
 |---|---|---|

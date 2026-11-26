@@ -38,10 +38,13 @@
 #' Source, such as `og_api(inherit = src, ld_store = "EUR")`.
 #'
 #' On a Local Source, PLINK clumps on your machine with its PLINK Reference (`og_local(bfile = )`),
-#' one run per Analysis. Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class `opengwasr_plink_unadjusted` (see [og_local()]). `r2` and `kb` are required (there are no defaults to take, so without them
-#' it stops, with class `opengwasr_plink_settings_required`). Variants are matched by rsID, from
-#' `data`'s `rsid` column if it has one, else the Source's Store Releases' variant table; those with
-#' no rsID match are left out, with a message (class `opengwasr_plink_unmatched`, `count`). An
+#' one run per Analysis. Its LD isn't adjusted for principal components, so the first call in a
+#' session to read each PLINK Reference warns, with class `opengwasr_plink_unadjusted` (see
+#' [og_local()]). `r2` and `kb` are required (there are no defaults to take, so without them it
+#' stops, with class `opengwasr_plink_settings_required`). Each row is matched by rsID: its own, from
+#' `data`'s `rsid` column if it has one, else its ALID's, from the Source's Store Releases' variant
+#' table; rows with no rsID match are left out, with a message (class `opengwasr_plink_unmatched`,
+#' `count`, `total`: the distinct ALID and rsID pairs). An
 #' LD-only Local Source (`og_local(bfile = )` with no `gwas`) has nothing to look an ALID up in, so
 #' `data` without an `rsid` column is refused (class `opengwasr_gwas_store_required`, with the ALIDs
 #' in `alids`, and the ways round in `forms`: see [og_local()]). A Local Source with no LD resource
@@ -129,14 +132,7 @@ og_clump.og_local_source <- og_clump.og_api_source
 # rsID, scored by their largest |z| in the set, and clumped by PLINK, one run per set; the rows of
 # `data` of each set's index variants, as for an LD Store, with the same columns.
 local_clump <- function(data, ctx, r2, kb) {
-  # Each row's rsID: its own, from an `rsid` column (as og_tophits() matches top hits), else its
-  # ALID's, looked up. NA: not in the reference, so not clumped.
-  rsid <- if (is.character(data$rsid)) {
-    own <- rsid_or_na(tolower(data$rsid))
-    ifelse(own %in% plink_bim(ctx$plink)$rsid, own, NA_character_)
-  } else {
-    ctx$matched$rsid[match(data$alid, ctx$matched$alid)]
-  }
+  rsid <- ctx$row_rsid  # each row's, as ld_prepare_plink() matched it; NA: not in the reference
   keep <- rep(FALSE, nrow(data))
   size <- rep(NA_integer_, nrow(data))
   set_of <- rep(NA_integer_, nrow(data))

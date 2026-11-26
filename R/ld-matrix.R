@@ -93,7 +93,7 @@ ld_matrix_assemble <- function(results, ctx, fill_below_t_far) {
   }
   present <- !alids %in% ctx$absent
   m <- m[present, present, drop = FALSE]
-  if (fill_below_t_far) m <- ld_fill_below_t_far(m, ctx$store$far_bp)
+  if (fill_below_t_far) m <- ld_fill_below_t_far(m, ctx$sets[[1]]$store$far_bp)  # one set: one LD Store
   structure(m, class = c("og_ld_matrix", "matrix", "array"))
 }
 

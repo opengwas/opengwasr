@@ -227,6 +227,31 @@ test_that("LD from a PLINK Reference warns that it isn't adjusted for principal 
                  class = "opengwasr_plink_unadjusted")
 })
 
+test_that("PLINK matches each row by its own rsID: rows sharing an ALID with different rsIDs, or none, are matched apart", {
+  ld_src <- local_plink_source()
+  x <- "9:22098620:A:G"
+  y <- "9:22125503:C:G"
+  data <- data.frame(id = c("a", "a", "b", "c"), alid = c(x, y, x, x),
+                     rsid = c("rs2891168", "rs1333049", "rs4977574", NA), z = c(5, 3, 9, 7), stringsAsFactors = FALSE)
+  # Four (ALID, rsID) pairs, one with no rsID: the message and `absent` count rows' pairs.
+  m <- expect_message(each <- og_clump(ld_src, data, r2 = 0.2, kb = 100), class = "opengwasr_plink_unmatched")
+  expect_equal(c(m$count, m$total), c(1, 4))
+  expect_equal(each$id, c("a", "a", "b"))
+  expect_equal(each$rsid, c("rs2891168", "rs1333049", "rs4977574"))
+  expect_equal(og_provenance(each)$absent, x)
+  expect_equal(og_provenance(each)$clump[c("id", "hits", "absent", "leads")],
+               data.frame(id = c("a", "b", "c"), hits = c(2, 1, 1), absent = c(0, 0, 1), leads = c(2, 1, 0)))
+  # As one set: rs4977574 (|z| 9) leads and absorbs rs2891168; each row keeps its own rsID, so only
+  # the row naming rs4977574 is its index variant's, not every row of its ALID.
+  joint <- suppressMessages(og_clump(ld_src, data, r2 = 0.2, kb = 100, by_analysis = FALSE))
+  expect_equal(joint$id, c("a", "b"))
+  expect_equal(joint$rsid, c("rs1333049", "rs4977574"))
+  expect_equal(joint$clump_size, c(1L, 2L))
+  # An LD matrix of the same rows: each distinct rsID the reference holds, once.
+  mat <- suppressMessages(og_ld_matrix(ld_src, data))
+  expect_setequal(sub("_.*", "", rownames(mat)), c("rs2891168", "rs1333049", "rs4977574"))
+})
+
 # The "API | PLINK" row of vignette("ld")'s table: top hits from the API Source, unclumped, clumped
 # by an LD-only Local Source's PLINK Reference.
 test_that("og_clump(og_local(bfile = ), og_tophits(og_api(), ids, clump = FALSE)) clumps the API's top hits with PLINK", {

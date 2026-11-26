@@ -19,21 +19,23 @@ ld_query <- function(src, path, variants, spec) {
     # A PLINK Reference is read on this machine: no Job to run, the same preparation and provenance.
     if (!is.null(prep$plink)) return(ld_query_plink(prep, spec, method))
     sets <- prep$sets
-    # One Job per piece of each set's ALIDs, in the set's LD Store. Jobs are submitted grouped by LD
-    # Store, as clumping top hits is (association_query()); each set's results keep piece order.
+    # One Job per piece of each set's ALIDs, in the set's LD Store, pieces in set order.
     pieces <- unlist(lapply(seq_along(sets), function(k) {
       n <- length(sets[[k]]$alids)
       lapply(if (n > 0) spec$pieces(n), function(idx) list(set = k, idx = idx))
     }), recursive = FALSE)
-    store_of <- vapply(pieces, function(p) sets[[p$set]]$store$ld_store, "")
-    pieces <- pieces[order(match(store_of, unique(store_of)))]
-    requests <- lapply(pieces, function(p) {
+    # Jobs are submitted grouped by LD Store through the association engine's own hook (a `group`
+    # over each piece's set: submit_order()), and the results are put back in piece order before
+    # anything else, so `assemble()` and provenance never see the submission order.
+    submitted <- submit_order(list(set = list(group = function(k) sets[[k]]$store$ld_store)), pieces)
+    requests <- lapply(pieces[submitted], function(p) {
       set <- sets[[p$set]]
       alids <- set$alids[p$idx]
       own <- if (is.function(spec$body)) spec$body(alids, set$store, set$rows) else spec$body
       list(path = path, body = c(list(store = set$store$ld_store, alids = as.list(alids)), own))
     })
     list(requests = requests, releases = NULL, finish = function(results) {
+      results[submitted] <- results
       # The LD Store says which of the variants it doesn't hold, in each Job; a variant it doesn't
       # hold is absent whichever Job asked.
       absent_of <- function(rs) unique(unlist(lapply(rs, function(r) r$job$metadata$absent)))
@@ -52,24 +54,32 @@ ld_query <- function(src, path, variants, spec) {
           if (length(left_out) > 0) warn_ld_absent(left_out, store, method)
         }
       }
-      ctx <- list(alids = prep$alids, absent = absent, store = prep$store, choice = prep$choice,
-                  variants = variants, rsid_map = prep$rsid_map, unresolved = prep$unresolved, sets = sets)
+      ctx <- list(alids = prep$alids, absent = absent, variants = variants, rsid_map = prep$rsid_map,
+                  unresolved = prep$unresolved, sets = sets)
       value <- spec$assemble(results, ctx)
       ld_jobs <- lapply(results, function(r) { r$job$releases <- character(); r$job })
       # The LD Store is `ld`, not a Store Release.
       list(value = value, jobs = c(lookup_jobs(prep$jobs), ld_jobs),
-           provenance = c(list(ld = unique(stores), ld_choice = unique(vapply(sets, `[[`, "", "choice")),
-                               ld_from = prep$from, absent = c(absent, prep$unresolved)),
+           provenance = c(ld_store_pairs(stores, vapply(sets, `[[`, "", "choice")),
+                          list(ld_from = prep$from, absent = c(absent, prep$unresolved)),
                           if (!is.null(spec$provenance)) spec$provenance(results, ctx)))
     })
   })
 }
 
-# The ALIDs to ask the LD Store about, and the LD Store: `list(alids, store, choice, from, unresolved,
-# jobs, sets)`. The LD Store is chosen before any Job runs, so a refusal costs none. The LD is the
-# Source's LD resource (ld_resource()): only with none is the Assigned Ancestry matched. `sets`
-# (ld_sets()) has one set of every variant unless `by` splits a data frame's rows; `store` and
-# `choice` are the first set's.
+# The LD Store (or LD Stores) used, for provenance: each with how it was chosen, `ld[i]` with
+# `ld_choice[i]`, once for each pair, in order of first use. One for every query but og_clump()'s
+# per Analysis.
+ld_store_pairs <- function(stores, choices) {
+  first <- !duplicated(paste(stores, choices, sep = "\r"))
+  list(ld = stores[first], ld_choice = choices[first])
+}
+
+# The ALIDs to ask the LD Store about, and the sets to answer: `list(alids, from, unresolved, jobs,
+# rsid_map, sets)`, each set with its LD Store and how it was chosen (ld_sets()). The LD Stores are
+# chosen before any Job runs, so a refusal costs none. The LD is the Source's LD resource
+# (ld_resource()): only with none is the Assigned Ancestry matched. `sets` has one set of every
+# variant unless `by` splits a data frame's rows.
 ld_prepare <- function(src, variants, deadline, call, by = NULL) {
   resource <- ld_resource(src, call)
   if (is.data.frame(variants)) {
@@ -95,8 +105,8 @@ ld_prepare <- function(src, variants, deadline, call, by = NULL) {
     rows <- sets[[k]]$rows
     sets[[k]]$alids <- if (is.null(rows)) resolved$alids else resolved$alids[resolved$alids %in% variants$alid[rows]]
   }
-  list(alids = resolved$alids, store = chosen$store, choice = chosen$choice, from = chosen$from,
-       unresolved = resolved$unresolved, jobs = resolved$jobs, rsid_map = resolved$map, sets = sets)
+  list(alids = resolved$alids, from = chosen$from, unresolved = resolved$unresolved, jobs = resolved$jobs,
+       rsid_map = resolved$map, sets = sets)
 }
 
 # The sets an LD query answers, each `list(id, rows, chosen, store, choice)`: one set of every

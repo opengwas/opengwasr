@@ -35,8 +35,8 @@
 #'     Source's LD resource) or `"ancestry"` (each Analysis's Assigned Ancestry, on an API Source with
 #'     none).
 #'   * LD results: `ld`, `ld_choice`, `ld_from` (as above) and `absent` (see [og_ld_matrix()]).
-#'     [og_clump()] of Analyses matched to several LD Stores gives each in `ld`, and each way they
-#'     were chosen in `ld_choice`.
+#'     [og_clump()] of Analyses matched to several LD Stores gives each in `ld`, and how each was
+#'     chosen in `ld_choice`, one for one.
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class
 #'   `opengwasr_no_provenance`; one whose rows changed after `rbind()` or subsetting keeps a stale
@@ -130,8 +130,8 @@ format.og_provenance <- function(x, ...) {
     paste0("\u2022 Query: ", x$query),
     paste0("\u2022 Store Releases: ", paste(x$store_releases, collapse = ", ")),
     # og_clump() of Analyses matched to several LD Stores names each.
-    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", paste(x$ld, collapse = ", "), " (",
-                               paste(x$ld_choice, collapse = ", "), "); ", length(x$absent), " variant(s) absent"),
+    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", paste0(x$ld, " (", x$ld_choice, ")", collapse = ", "), "; ",
+                               length(x$absent), " variant(s) absent"),
     if (!is.null(x$clump)) format_clump(x$clump),
     paste0("\u2022 Jobs: ", if (length(x$job_ids)) paste(x$job_ids, collapse = ", ") else "none"),
     counts,

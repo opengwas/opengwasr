@@ -299,8 +299,8 @@ plink_clump <- function(ref, rsid, z, r2, kb, call = rlang::caller_env()) {
   list(leads = rsids[rsids %in% ids], size = clumped$TOTAL[match(rsid, ids)] + 1L)
 }
 
-# LD from a PLINK Reference is the raw genotypes' (ADR 0006): unlike the LD Stores and Genotype
-# Stores, it isn't adjusted for principal components. Said once per session for each reference
+# LD from a PLINK Reference is the raw genotypes' (GLOSSARY, "PLINK Reference"): unlike the LD Stores
+# and Genotype Stores, it isn't adjusted for principal components. Said once per session for each reference
 # (rlang's frequency, keyed by its path), so a loop of calls doesn't repeat it.
 warn_plink_unadjusted <- function(ref, call = rlang::caller_env()) {
   og_warn(c(paste0("LD from a PLINK Reference is computed from its genotypes without adjusting for population ",
@@ -337,36 +337,51 @@ inform_plink_binary <- function(ref) {
 is_plink_reference <- function(x) inherits(x, "og_plink_reference")
 
 # A Local Source's PLINK Reference: the variants are matched to it by rsID now, so the message and
-# any refusal come before PLINK runs. An ALID's rsID is its row's `rsid` when `variants` is a data
-# frame of Associations that has one, else the Source's Store Releases' variant table says (one
-# lookup by position); an LD-only Local Source has none, so such ALIDs are refused.
-# `kinds` and `chosen` are what ld_prepare() classified and choose_ld_store() decided. Returns what ld_prepare() does, with `plink = list(ref, map, present)`: `map` has one row per
-# variant given (`alid`, NA for an rsID; `rsid`, NA for none) and `present` says which the reference holds.
+# any refusal come before PLINK runs. A data frame of Associations is matched row by row: each row
+# by its own `rsid` if it has that column (as og_tophits() matches top hits), else by its ALID's
+# rsID in the Source's Store Releases' variant table (one lookup by position); an LD-only Local
+# Source has none, so such ALIDs are refused. A vector's ALIDs are looked up the same way.
+# `kinds` and `chosen` are what ld_prepare() classified and choose_ld_store() decided. Returns what
+# ld_prepare() does, with `plink = list(ref, map, present, row_rsid)`: `map` has one row per distinct
+# variant given (`alid`, NA for an rsID; `rsid`, NA for none), a data frame's being its rows'
+# distinct (`alid`, `rsid`) pairs; `present` says which the reference holds; `row_rsid` is each row
+# of a data frame's rsID in the reference (NA: not matched, so left out).
 ld_prepare_plink <- function(src, variants, kinds, chosen, deadline, call) {
   ref <- plink_with_version(chosen$plink, call)  # one made before its version was recorded: read it now
   jobs <- list()
+  lookup <- function(alids) {
+    check_gwas_source(src, call, alids = alids)
+    found <- plink_rsids_of(src, alids, deadline, call)
+    jobs <<- found$jobs
+    found$rsid[match(alids, found$alid)]
+  }
+  bim <- plink_bim(ref)
+  row_rsid <- NULL
   if (is.data.frame(variants)) {
-    rsid <- if (is.character(variants$rsid)) variants$rsid[match(kinds$alids, variants$alid)]
-    map <- data.frame(alid = kinds$alids, rsid = rsid %||% rep(NA_character_, length(kinds$alids)),
-                      stringsAsFactors = FALSE)
-    lookup_for <- if (is.null(rsid)) kinds$alids
+    own <- if (is.character(variants$rsid)) variants$rsid else lookup(kinds$alids)[match(variants$alid, kinds$alids)]
+    matched <- plink_match(own, bim)
+    row_rsid <- ifelse(matched$present, matched$rsid, NA_character_)
+    first <- !duplicated(paste(variants$alid, matched$rsid, sep = "\r"))
+    map <- data.frame(alid = variants$alid[first], rsid = matched$rsid[first], stringsAsFactors = FALSE)
+    present <- matched$present[first]
   } else {
-    map <- data.frame(alid = c(kinds$alids, rep(NA_character_, length(kinds$rsids))),
-                      rsid = c(rep(NA_character_, length(kinds$alids)), kinds$rsids), stringsAsFactors = FALSE)
-    lookup_for <- kinds$alids
+    rsid <- c(if (length(kinds$alids) > 0) lookup(kinds$alids), kinds$rsids)
+    matched <- plink_match(rsid, bim)
+    map <- data.frame(alid = c(kinds$alids, rep(NA_character_, length(kinds$rsids))), rsid = matched$rsid,
+                      stringsAsFactors = FALSE)
+    present <- matched$present
   }
-  if (length(lookup_for) > 0) {
-    check_gwas_source(src, call, alids = lookup_for)
-    found <- plink_rsids_of(src, lookup_for, deadline, call)
-    map$rsid[match(lookup_for, map$alid)] <- found$rsid[match(lookup_for, found$alid)]
-    jobs <- found$jobs
-  }
-  map$rsid <- rsid_or_na(tolower(map$rsid))
-  present <- !is.na(map$rsid) & map$rsid %in% plink_bim(ref)$rsid
   inform_plink_binary(ref)
   inform_plink_unmatched(nrow(map), sum(!present))
-  list(alids = kinds$alids, store = chosen$store, choice = chosen$choice, from = chosen$from, unresolved = character(),
-       jobs = jobs, plink = list(ref = ref, map = map, present = present))
+  list(alids = kinds$alids, from = chosen$from, unresolved = character(), jobs = jobs,
+       plink = list(ref = ref, map = map, present = present, row_rsid = row_rsid))
+}
+
+# The one rule for matching rsIDs to a PLINK Reference (`bim`, plink_bim()): `rsid` as the reference
+# names them (lower case; "." is none), and whether it holds each.
+plink_match <- function(rsid, bim) {
+  rsid <- rsid_or_na(tolower(as.character(rsid)))
+  list(rsid = rsid, present = !is.na(rsid) & rsid %in% bim$rsid)
 }
 
 # The rsID of each ALID, from the Source's GWAS Stores' variant tables (one lookup by position, in the sole
@@ -388,15 +403,15 @@ plink_rsids_of <- function(src, alids, deadline, call) {
 # with what was pinned now (the variants matched).
 ld_query_plink <- function(prep, spec, method) {
   plink <- prep$plink
-  left_out <- with(plink$map, ifelse(is.na(alid), rsid, alid))[!plink$present]
-  ctx <- list(alids = prep$alids, absent = left_out, store = prep$store, choice = prep$choice,
-              matched = plink$map[plink$present, , drop = FALSE], plink = plink$ref, sets = prep$sets,
-              call = method)
+  left_out <- unique(with(plink$map, ifelse(is.na(alid), rsid, alid))[!plink$present])
+  ctx <- list(alids = prep$alids, absent = left_out, matched = plink$map[plink$present, , drop = FALSE],
+              row_rsid = plink$row_rsid, plink = plink$ref, sets = prep$sets, call = method)
+  set <- prep$sets[[1]]  # one PLINK Reference for every set
   jobs <- prep$jobs
   list(requests = list(), releases = NULL, finish = function(results) {
     done <- spec$local(ctx)
     list(value = done$value, jobs = jobs,
-         provenance = c(list(ld = prep$store$ld_store, ld_choice = prep$choice, ld_from = prep$from, absent = left_out,
+         provenance = c(list(ld = set$store$ld_store, ld_choice = set$choice, ld_from = prep$from, absent = left_out,
                              plink_bin = plink$ref$plink_bin, plink_version = plink$ref$plink_version), done$provenance))
   })
 }
@@ -425,7 +440,8 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
                         advice = "Raise the threshold's strictness, or clump on the API Source, whose LD Stores clump every top hit.")
     },
     finish = function(rows, results, pieces, call) {
-      in_ref <- !is.na(rows$rsid) & tolower(rows$rsid) %in% plink_bim(ref)$rsid
+      matched <- plink_match(rows$rsid, plink_bim(ref))
+      in_ref <- matched$present
       keep <- rep(FALSE, nrow(rows))
       size <- rep(1L, nrow(rows))
       summary <- clump_summary(info$id, chosen$store$ld_store, chosen$choice, clump$r2, clump$kb, 0, 0, 0)
@@ -436,7 +452,7 @@ plink_clump_contribution <- function(chosen, clump, info, call) {
         summary$hits[[i]] <- sum(mine)
         summary$absent[[i]] <- sum(mine) - length(at)
         if (length(at) == 0) next
-        rsid <- tolower(rows$rsid[at])
+        rsid <- matched$rsid[at]
         clumped <- plink_clump(ref, rsid, rows$z[at], clump$r2, clump$kb, call)
         leads <- clumped$leads  # in the API's order: strongest first
         summary$leads[[i]] <- length(leads)

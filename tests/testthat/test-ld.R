@@ -478,13 +478,51 @@ test_that("og_clump() clumps each Analysis on its own, one Job each in the LD St
                data.frame(id = c(bmi_analysis, cad, afr_analysis), ld = c(eur, eur, "hgdp1kgp-v2-AFR-k10"),
                           hits = c(2, 5, 3), absent = c(0, 0, 1), leads = c(1, 2, 1)))
   expect_equal(prov$ld, c(eur, "hgdp1kgp-v2-AFR-k10"))
-  expect_equal(prov$ld_choice, "matched")
+  expect_equal(prov$ld_choice, c("matched", "matched"))
   expect_equal(prov$ld_from, "ancestry")
   expect_length(prov$job_ids, 3)
-  expect_match(format(prov), "LD Store: hgdp1kgp-v2-EUR-k10, hgdp1kgp-v2-AFR-k10 (matched)", fixed = TRUE, all = FALSE)
+  expect_match(format(prov), "LD Store: hgdp1kgp-v2-EUR-k10 (matched), hgdp1kgp-v2-AFR-k10 (matched)", fixed = TRUE, all = FALSE)
   # og_submit() collects the very same answer.
   handle <- og_submit(src, og_clump, data)
   expect_equal(suppressWarnings(og_job_result(src, handle)), each, ignore_attr = TRUE)
+})
+
+test_that("og_clump()'s Jobs are submitted grouped by LD Store, and answered in the order of the Analyses in data", {
+  fake_set(fake, "afr_analysis", "true", "false")
+  src <- fake_source(fake)
+  hits <- suppressWarnings(og_tophits(src, c(cad, afr_analysis, bmi_analysis), clump = FALSE, limit = 10000))
+  # EUR, AFR, EUR in data; submitted EUR, EUR, AFR.
+  before <- length(ld_bodies("/api/ld/clump"))
+  handle <- og_submit(src, og_clump, hits)
+  sent <- utils::tail(ld_bodies("/api/ld/clump"), -before)
+  expect_equal(vapply(sent, `[[`, "", "store"), c(eur, eur, "hgdp1kgp-v2-AFR-k10"))
+  expect_equal(lapply(sent, function(b) unlist(b$alids)), list(hits$alid[1:5], hits$alid[9:10], hits$alid[6:8]))
+  # The Jobs (the fake gives the same body the same Job) come back in piece order: CAD, AFR, BMI.
+  each <- suppressWarnings(og_clump(src, hits))
+  expect_equal(og_provenance(each)$job_ids, handle$job_ids[c(1, 3, 2)])
+  expect_equal(og_provenance(suppressWarnings(og_job_result(src, handle)))$job_ids, handle$job_ids[c(1, 3, 2)])
+  expect_equal(og_provenance(each)$clump$id, c(cad, afr_analysis, bmi_analysis))
+})
+
+test_that("og_clump()'s provenance pairs each LD Store with how it was chosen", {
+  fake_set(fake, "afr_analysis", "true", "false")
+  fake_set(fake, "ld_two_eur", "true", "false")
+  fake_set(fake, "ld_declared_default", "true", "false")
+  src <- fake_source(fake)
+  hits <- suppressWarnings(og_tophits(src, c(cad, afr_analysis, bmi_analysis), clump = FALSE, limit = 10000))
+  each <- suppressWarnings(og_clump(src, hits))
+  prov <- og_provenance(each)
+  expect_equal(prov$ld, c(eur, "hgdp1kgp-v2-AFR-k10"))
+  expect_equal(prov$ld_choice, c("ancestry_default", "matched"))
+  expect_equal(prov$clump$ld_choice, c("ancestry_default", "matched", "ancestry_default"))
+  expect_match(format(prov), "LD Store: hgdp1kgp-v2-EUR-k10 (ancestry_default), hgdp1kgp-v2-AFR-k10 (matched);",
+               fixed = TRUE, all = FALSE)
+  # Three LD Stores, two ways of choosing: each named with its own.
+  prov$ld <- c("A", "B", "C")
+  prov$ld_choice <- c("matched", "user", "matched")
+  expect_match(format(prov), "LD Store: A (matched), B (user), C (matched);", fixed = TRUE, all = FALSE)
+  expect_equal(ld_store_pairs(c("A", "B", "A", "C"), c("matched", "user", "matched", "matched")),
+               list(ld = c("A", "B", "C"), ld_choice = c("matched", "user", "matched")))
 })
 
 test_that("og_tophits(clump = TRUE) and og_clump() of the unclumped top hits give each Analysis the same index variants", {

@@ -27,8 +27,8 @@ Releases carry them, \code{"stored"}. \code{ld_from} says where the LD came from
 Source's LD resource) or \code{"ancestry"} (each Analysis's Assigned Ancestry, on an API Source with
 none).
 \item LD results: \code{ld}, \code{ld_choice}, \code{ld_from} (as above) and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
-\code{\link[=og_clump]{og_clump()}} of Analyses matched to several LD Stores gives each in \code{ld}, and each way they
-were chosen in \code{ld_choice}.
+\code{\link[=og_clump]{og_clump()}} of Analyses matched to several LD Stores gives each in \code{ld}, and how each was
+chosen in \code{ld_choice}, one for one.
 }
 
 A data frame whose provenance was dropped (by \code{merge()}, say) raises an error of class

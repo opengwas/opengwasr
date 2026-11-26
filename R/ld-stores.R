@@ -144,6 +144,21 @@ choose_ld_store <- function(src, ancestries = NULL, call = rlang::caller_env()) 
   chosen
 }
 
+# An LD Store for each Analysis (`ancestry`: their Assigned Ancestries, NA for Unassigned, named by
+# Analysis id), as clumping each on its own needs (og_tophits(clump = TRUE), og_clump()): the
+# Source's LD resource for all, else the one matching each Analysis's Assigned Ancestry. Each is
+# chosen once per ancestry, Unassigned first, so a refusal comes before anything else is chosen.
+# Returns `groups` (the ancestry of each choice, or "source"), `chosen` (choose_ld_store() of
+# each) and `of` (for each Analysis, which of `chosen` is its).
+choose_ld_store_each <- function(src, ancestry, call = rlang::caller_env()) {
+  resource <- ld_resource(src, call)
+  group <- if (resource$from == "ancestry") unname(ancestry) else rep(resource$from, length(ancestry))
+  groups <- unique(group)
+  groups <- groups[order(!is.na(groups))]  # Unassigned first: refused before anything else is chosen
+  chosen <- lapply(groups, function(g) choose_ld_store(src, ancestry[group %in% g], call))
+  list(groups = groups, chosen = chosen, of = match(group, groups))
+}
+
 # choose_ld_store() once the LD resource is known (`ld`: a PLINK Reference, an LD Store name or
 # ancestry code, or NULL to match `ancestries`). A Local Source's is always a PLINK Reference
 # (ld_resource() refused one with none), so everything after the first branch is the API Source's.

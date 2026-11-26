@@ -7,6 +7,7 @@ withr::local_options(opengwasr.poll_cap = 0.05, opengwasr.progress = FALSE)
 eur <- "hgdp1kgp-v2-EUR-k10"
 cad <- "OGS-00011:GCST003116"
 afr_analysis <- "OGS-00011:GCST90475090"
+bmi_analysis <- "OGS-00011:GCST90029007"
 unassigned <- "OGS-00017:finngen-r13-I9_CHD"
 snv <- "16:53767042:C:T"
 pair <- c("16:53772541:A:G", snv)
@@ -422,44 +423,117 @@ test_api("og_tophits(): the Source's `ld_store` names an LD Store or an ancestry
   }
 })
 
-test_api("og_clump() clumps a data frame of Associations as one set, in the LD Store of its Analyses' ancestry", {
+test_api("og_clump() clumps an Analysis's Associations in the LD Store of its ancestry; by_analysis = FALSE clumps them as one set", {
   top <- suppressWarnings(og_tophits(src, cad, clump = FALSE, limit = 5, releases = rel))
-  joint <- suppressWarnings(og_clump(src, top))
-  expect_true(all(joint$alid %in% top$alid))
-  expect_equal(utils::tail(names(joint), 5), clump_columns)
-  expect_equal(unique(joint$clump_ld), eur)
-  expect_equal(unique(joint$clump_ld_choice), "matched")
-  expect_equal(unique(joint$clump_r2), t_far(src, "EUR"))
-  prov <- og_provenance(joint)
-  expect_true(is.na(prov$clump$id))
-  expect_equal(prov$clump$leads, nrow(joint))
-  expect_equal(sum(joint$clump_size) + prov$clump$absent, nrow(top))
-  expect_equal(prov$query, "og_clump()")
+  each <- suppressWarnings(og_clump(src, top))
+  expect_true(all(each$alid %in% top$alid))
+  expect_equal(utils::tail(names(each), 5), clump_columns)
+  expect_equal(unique(each$clump_ld), eur)
+  expect_equal(unique(each$clump_ld_choice), "matched")
+  expect_equal(unique(each$clump_r2), t_far(src, "EUR"))
+  prov <- og_provenance(each)
+  expect_equal(prov$clump$id, cad)
+  expect_equal(prov$clump$leads, nrow(each))
+  expect_equal(sum(each$clump_size) + prov$clump$absent, nrow(top))
+  expect_equal(prov$query, "og_clump(by_analysis = TRUE)")
+  # One Analysis is one set either way: the same rows, the provenance saying how.
+  joint <- suppressWarnings(og_clump(src, top, by_analysis = FALSE))
+  expect_equal(joint, each, ignore_attr = TRUE)
+  expect_true(is.na(og_provenance(joint)$clump$id))
+  expect_equal(og_provenance(joint)$query, "og_clump(by_analysis = FALSE)")
   if (backend == "fake") {
-    expect_equal(joint$alid, c("9:22098620:A:G", "9:22098575:A:G"))
-    expect_equal(joint$clump_size, c(3L, 2L))
+    expect_equal(each$alid, c("9:22098620:A:G", "9:22098575:A:G"))
+    expect_equal(each$clump_size, c(3L, 2L))
     sent <- utils::tail(ld_bodies("/api/ld/clump"), 1)[[1]]
     expect_equal(unlist(sent$scores), abs(top$z))
     expect_equal(sent[c("store", "r2", "kb")], list(store = eur, r2 = t_far(src, "EUR"), kb = 10000))
   }
 })
 
-test_that("og_clump(): Associations of mixed or Unassigned ancestry are refused unless the Source has an LD Store; a variant in several Analyses is ranked by its largest |z|", {
+test_that("og_clump() clumps each Analysis on its own, one Job each in the LD Store of its own ancestry, and keeps data's order", {
+  fake_set(fake, "afr_analysis", "true", "false")
+  src <- fake_source(fake)
+  ids <- c(cad, afr_analysis, bmi_analysis)
+  hits <- suppressWarnings(og_tophits(src, ids, clump = FALSE, limit = 10000))
+  # Interleaved, so that the order kept is data's, not the Analyses'.
+  data <- hits[c(9, 1, 6, 10, 2, 7, 3, 8, 4, 5), ]
+  before <- length(ld_bodies("/api/ld/clump"))
+  w <- expect_warning(each <- og_clump(src, data), class = "opengwasr_ld_absent_variants")
+  expect_equal(w$ld_store, "hgdp1kgp-v2-AFR-k10")
+  expect_equal(w$ids, "1:5999:A:G")
+  expect_equal(each$id, c(bmi_analysis, cad, afr_analysis, cad))
+  expect_equal(each$alid, c("16:53767042:A:C", "9:22098620:A:G", "1:5000:A:G", "9:22098575:A:G"))
+  expect_equal(each$clump_size, c(2L, 3L, 2L, 2L))
+  expect_equal(each$clump_ld, c(eur, eur, "hgdp1kgp-v2-AFR-k10", eur))
+  expect_equal(each$clump_r2, c(t_far(src, "EUR"), t_far(src, "EUR"), t_far(src, "AFR"), t_far(src, "EUR")))
+  expect_equal(unique(each$clump_ld_choice), "matched")
+  # One Job per Analysis, submitted grouped by LD Store; each scored by its own rows.
+  sent <- utils::tail(ld_bodies("/api/ld/clump"), -before)
+  expect_equal(vapply(sent, `[[`, "", "store"), c(eur, eur, "hgdp1kgp-v2-AFR-k10"))
+  expect_equal(lapply(sent, function(b) unlist(b$alids)),
+               list(c("16:53767042:A:C", "16:53800000:A:G"), hits$alid[1:5], hits$alid[6:8]))
+  # Provenance: one row per Analysis, in order of first appearance, and each LD Store used.
+  prov <- og_provenance(each)
+  expect_equal(prov$clump[c("id", "ld", "hits", "absent", "leads")],
+               data.frame(id = c(bmi_analysis, cad, afr_analysis), ld = c(eur, eur, "hgdp1kgp-v2-AFR-k10"),
+                          hits = c(2, 5, 3), absent = c(0, 0, 1), leads = c(1, 2, 1)))
+  expect_equal(prov$ld, c(eur, "hgdp1kgp-v2-AFR-k10"))
+  expect_equal(prov$ld_choice, "matched")
+  expect_equal(prov$ld_from, "ancestry")
+  expect_length(prov$job_ids, 3)
+  expect_match(format(prov), "LD Store: hgdp1kgp-v2-EUR-k10, hgdp1kgp-v2-AFR-k10 (matched)", fixed = TRUE, all = FALSE)
+  # og_submit() collects the very same answer.
+  handle <- og_submit(src, og_clump, data)
+  expect_equal(suppressWarnings(og_job_result(src, handle)), each, ignore_attr = TRUE)
+})
+
+test_that("og_tophits(clump = TRUE) and og_clump() of the unclumped top hits give each Analysis the same index variants", {
+  fake_set(fake, "afr_analysis", "true", "false")
+  src <- fake_source(fake)
+  ids <- c(cad, afr_analysis, bmi_analysis)
+  for (settings in list(list(r2 = NULL, kb = NULL), list(r2 = 0.1, kb = 1000))) {
+    by_tophits <- suppressWarnings(og_tophits(src, ids, r2 = settings$r2, kb = settings$kb))
+    hits <- suppressWarnings(og_tophits(src, ids, clump = FALSE, limit = 10000))
+    by_clump <- suppressWarnings(og_clump(src, hits, r2 = settings$r2, kb = settings$kb))
+    expect_equal(by_clump$id, c(cad, cad, afr_analysis, bmi_analysis))
+    expect_equal(by_clump$alid, c("9:22098620:A:G", "9:22098575:A:G", "1:5000:A:G", "16:53767042:A:C"))
+    expect_equal(by_clump[c("id", "alid", clump_columns)], by_tophits[c("id", "alid", clump_columns)])
+    expect_equal(og_provenance(by_clump)$clump, og_provenance(by_tophits)$clump)
+  }
+})
+
+test_that("og_clump(): Unassigned Analyses, and data with no id, are refused before any Job; by_analysis = FALSE refuses mixed ancestries, and ranks a variant by its largest |z|", {
   fake_set(fake, "afr_analysis", "true", "false")
   src <- fake_source(fake)
   before <- length(ld_bodies("/api/ld/clump"))
   mixed <- data.frame(id = c(cad, afr_analysis), alid = pair, z = c(5, -9))
-  expect_error(og_clump(src, mixed), class = "opengwasr_ld_unmatched")
-  expect_error(og_clump(src, data.frame(id = unassigned, alid = snv, z = 3)), class = "opengwasr_ld_unmatched")
-  expect_error(og_clump(src, mixed[c("alid", "z")]), class = "opengwasr_ld_unmatched")
+  expect_error(og_clump(src, mixed, by_analysis = FALSE), class = "opengwasr_ld_unmatched")
+  for (by_analysis in c(TRUE, FALSE)) {
+    expect_error(og_clump(src, data.frame(id = unassigned, alid = snv, z = 3), by_analysis = by_analysis),
+                 class = "opengwasr_ld_unmatched")
+    expect_error(og_clump(src, rbind(mixed, data.frame(id = unassigned, alid = snv, z = 3)), by_analysis = by_analysis),
+                 class = "opengwasr_ld_unmatched")
+    expect_error(og_clump(src, mixed[c("alid", "z")], by_analysis = by_analysis), class = "opengwasr_ld_unmatched")
+  }
   expect_length(ld_bodies("/api/ld/clump"), before)
   expect_error(og_clump(with_ld(src, "EUR"), mixed["alid"]), class = "opengwasr_argument")
   expect_error(og_clump(with_ld(src, "EUR"), mixed, r2 = "0.1"), class = "opengwasr_argument")
+  for (bad in list(NA, "yes", c(TRUE, FALSE), 1)) {
+    expect_error(og_clump(with_ld(src, "EUR"), mixed, by_analysis = bad), class = "opengwasr_argument")
+  }
   twice <- rbind(mixed, data.frame(id = afr_analysis, alid = snv, z = 2))
-  kept <- og_clump(with_ld(src, "EUR"), twice)
+  kept <- og_clump(with_ld(src, "EUR"), twice, by_analysis = FALSE)
   expect_equal(unlist(utils::tail(ld_bodies("/api/ld/clump"), 1)[[1]]$scores), c(5, 9))
   expect_equal(unique(kept$clump_ld_choice), "ancestry_default")
   expect_true(all(twice$id[twice$alid %in% kept$alid] %in% kept$id))
+  # Per Analysis, each set is scored by its own rows: the Source's one LD Store for both.
+  each <- og_clump(with_ld(src, "EUR"), twice)
+  sent <- utils::tail(ld_bodies("/api/ld/clump"), 2)
+  expect_equal(lapply(sent, function(b) unlist(b$scores)), list(5, 9))
+  # Every Association of an index variant in its set: both of the AFR Analysis's rows of snv.
+  expect_equal(each$id, c(cad, afr_analysis, afr_analysis))
+  expect_equal(each$alid, c(pair, snv))
+  expect_equal(og_provenance(each)$ld_from, "source")
 })
 
 test_that("every r2 in a request body, at any depth, is sent rounded up to 15 digits, never down", {

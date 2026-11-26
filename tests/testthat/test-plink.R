@@ -150,6 +150,48 @@ test_that("og_clump() ranks a variant listed in several Analyses by its largest 
   expect_equal(out$rsid, c("rs4977574", "rs4977574"))
 })
 
+test_that("og_clump() with PLINK clumps each Analysis on its own, one PLINK run each; by_analysis = FALSE clumps them as one set", {
+  ld_src <- local_plink_source()
+  # rs2891168 and rs4977574 are in LD (r^2 above 0.4, 45 bp apart). Analysis "a" has both, "b"
+  # rs4977574, its strongest, and rs1333049; rows interleaved, so the order kept is data's.
+  data <- data.frame(id = c("a", "b", "a", "b"),
+                     alid = c("9:22098620:A:G", "9:22098575:A:G", "9:22098575:A:G", "9:22125503:C:G"),
+                     rsid = c("rs2891168", "rs4977574", "rs4977574", "rs1333049"), z = c(5, -9, 4, 3),
+                     stringsAsFactors = FALSE)
+  d <- fixture_dosage()
+  expect_gt(stats::cor(d[, "rs2891168"], d[, "rs4977574"])^2, 0.4)
+  runs <- 0
+  real_run <- plink_run
+  local_mocked_bindings(plink_run = function(...) { runs <<- runs + 1; real_run(...) })
+  each <- og_clump(ld_src, data, r2 = 0.2, kb = 100)
+  expect_equal(runs, 2)
+  # Each Analysis keeps its own strongest: rs2891168 leads "a" (absorbing its rs4977574), and
+  # rs4977574 leads "b", where nothing it is in LD with competes.
+  for (id in c("a", "b")) {
+    mine <- data[data$id == id, ]
+    want <- expected_clump(mine$rsid, abs(mine$z), 0.2, 100)
+    expect_equal(each$rsid[each$id == id], mine$rsid[mine$rsid %in% want$lead])
+  }
+  expect_equal(each$id, c("a", "b", "b"))
+  expect_equal(each$rsid, c("rs2891168", "rs4977574", "rs1333049"))
+  expect_equal(each$clump_size, c(2L, 1L, 1L))
+  clump <- og_provenance(each)$clump
+  expect_equal(clump[c("id", "hits", "absent", "leads")], data.frame(id = c("a", "b"), hits = c(2, 2), absent = c(0, 0), leads = c(1, 2)))
+  expect_equal(og_provenance(each)$query, "og_clump(r2 = 0.2, kb = 100, by_analysis = TRUE)")
+  # As one set, rs4977574 (|z| 9, in "b") leads, absorbs rs2891168, and keeps both its Associations.
+  runs <- 0
+  joint <- og_clump(ld_src, data, r2 = 0.2, kb = 100, by_analysis = FALSE)
+  expect_equal(runs, 1)
+  want <- expected_clump(unique(data$rsid), c(5, 9, 3), 0.2, 100)
+  expect_equal(unique(joint$rsid), want$lead)
+  expect_equal(joint$id, c("b", "a", "b"))
+  expect_equal(joint$rsid, c("rs4977574", "rs4977574", "rs1333049"))
+  expect_equal(joint$clump_size, c(2L, 2L, 1L))
+  expect_true(is.na(og_provenance(joint)$clump$id))
+  # With no `id` column, one set either way.
+  expect_equal(og_clump(ld_src, data[-1], r2 = 0.2, kb = 100), joint[-1], ignore_attr = TRUE)
+})
+
 # The "API | PLINK" row of vignette("ld")'s table: top hits from the API Source, unclumped, clumped
 # by an LD-only Local Source's PLINK Reference.
 test_that("og_clump(og_local(bfile = ), og_tophits(og_api(), ids, clump = FALSE)) clumps the API's top hits with PLINK", {

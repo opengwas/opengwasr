@@ -748,7 +748,7 @@ og_provenance(cad)
     ## • Clumped: OGS-00011:GCST003116 in hgdp1kgp-v2-EUR-k10 (matched), r² 0.0319 within 10,000 kb; 2,194 top hits, 234 not in the LD Store, 49 index variants, computed
     ## • Jobs: 86d6e51a
     ## • Rows: 49 returned of 49 matching
-    ## • Retrieved: 2026-11-26 10:17:34 UTC
+    ## • Retrieved: 2026-11-26 13:18:02 UTC
 
 ``` r
 

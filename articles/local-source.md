@@ -365,7 +365,7 @@ og_provenance(top)
     ## • Store Releases: s/r
     ## • Jobs: none
     ## • Rows: 5 returned of 5 matching (truncated)
-    ## • Retrieved: 2026-11-26 10:17:41 UTC
+    ## • Retrieved: 2026-11-26 13:18:09 UTC
 
 A local result’s provenance names the Store Releases read, and no Jobs:
 a Local Source answers at once.

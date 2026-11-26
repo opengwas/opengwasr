@@ -419,9 +419,10 @@ head(bmi[, c("id", "analysis_label", "sample_size")], 3)
 
 ## Variants are named by ALID
 
-opengwasr names every variant by its **ALID**, as the GWAS Stores and LD
-Stores do. An ALID is `chromosome:position:A1:A2`, such as
-`16:53767042:C:T`:
+opengwasr names every variant by its **ALID** (Alphabetic Variant ID),
+as the GWAS Stores and LD Stores do. The name comes from how the alleles
+of an SNV are ordered, alphabetically, as the list below sets out. An
+ALID is `chromosome:position:A1:A2`, such as `16:53767042:C:T`:
 
 - `chromosome` is `1` to `22`, `X`, `Y` or `MT`, with no `chr` prefix.
   Other contig names (such as GRCh38 alt contigs) are kept as given, as
@@ -1000,7 +1001,7 @@ og_provenance(top)
     ## • Store Releases: OGS-00011/OGS-00011-completed
     ## • Jobs: 60057995
     ## • Rows: 3 returned of 3 matching (truncated)
-    ## • Retrieved: 2026-11-26 10:17:55 UTC
+    ## • Retrieved: 2026-11-26 13:18:22 UTC
 
 Record the Store Releases alongside your analysis. They identify exactly
 which data answered.

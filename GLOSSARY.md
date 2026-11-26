@@ -29,9 +29,10 @@ version, snapshot
 on: SD units for continuous traits, log odds for binary ones. *Avoid*:
 units, original scale
 
-**ALID**: A variant’s identity, `chromosome:position:A1:A2` on GRCh38:
-alleles of one length in alphabetical order, an indel’s reference allele
-first. `A1` is the effect allele. *Avoid*: SNP id, variant id, chrpos
+**ALID**: Short for Alphabetic Variant ID: a variant’s identity,
+`chromosome:position:A1:A2` on GRCh38: alleles of one length in
+alphabetical order, an indel’s reference allele first. `A1` is the
+effect allele. *Avoid*: SNP id, variant id, chrpos
 
 **Rho Matrix**: The null correlation (sample overlap times phenotypic
 correlation) between every pair of Analyses in a GWAS Store with a Dense

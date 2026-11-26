@@ -340,11 +340,13 @@ A PLINK Reference has no default `r2` and `kb` of its own, so clumping with one 
 og_tophits(src, "s:bmi_irn")
 ```
 
-To clump Associations you already have, use `og_clump()`. It uses the Source's LD resource too, and clumps each Analysis's rows on their own, one PLINK run per Analysis, so here it gives the same index variants as `og_tophits()` above:
+To clump Associations you already have, use `og_clump()`. It uses the Source's LD resource too, and clumps each Analysis's rows on their own, one PLINK run per Analysis, so here it gives each Analysis the same index variants as `og_tophits(src, c("s:bmi_irn", "hyb:trait_a"), r2 = 0.001, kb = 10000)` would. Each row is matched by its own rsID: `hyb:trait_a`'s top hit at `1:1000:A:G` has none, so it is left out, although `s:bmi_irn`'s row of the same ALID has one:
 
 ```{r local-og-clump, eval = plink_ready}
-hits <- og_tophits(src, "s:bmi_irn", clump = FALSE)
-og_clump(src, hits, r2 = 0.001, kb = 10000)[, c("alid", "rsid", "z", "clump_size")]
+hits <- og_tophits(src, c("s:bmi_irn", "hyb:trait_a"), clump = FALSE)
+clumped <- og_clump(src, hits, r2 = 0.001, kb = 10000)
+clumped[, c("id", "alid", "rsid", "z", "clump_size")]
+og_provenance(clumped)$clump[, c("id", "hits", "absent", "leads")]
 ```
 
 ### LD matrices {#local-ld-matrix}

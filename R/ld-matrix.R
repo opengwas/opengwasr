@@ -65,7 +65,7 @@ og_ld_matrix.og_api_source <- function(src, variants, fill_below_t_far = FALSE) 
     assemble = function(results, ctx) ld_matrix_assemble(results, ctx, fill_below_t_far),
     # A PLINK Reference holds every pair, so `fill_below_t_far` has nothing to fill.
     local = function(ctx) {
-      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid))
+      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid), ctx$call)
       list(value = structure(m, class = c("og_ld_matrix", "matrix", "array")), provenance = NULL)
     }))
 }

@@ -144,7 +144,7 @@ local_clump <- function(data, ctx, r2, kb) {
   for (k in seq_along(ctx$sets)) {
     set <- ctx$sets[[k]]
     at <- set$rows[!is.na(rsid[set$rows])]
-    clumped <- plink_clump(ctx$plink, rsid[at], data$z[at], r2, kb)
+    clumped <- plink_clump(ctx$plink, rsid[at], data$z[at], r2, kb, ctx$call)
     lead <- rsid[at] %in% clumped$leads
     keep[at[lead]] <- TRUE
     size[at[lead]] <- clumped$size[lead]

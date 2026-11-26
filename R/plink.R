@@ -390,7 +390,8 @@ ld_query_plink <- function(prep, spec, method) {
   plink <- prep$plink
   left_out <- with(plink$map, ifelse(is.na(alid), rsid, alid))[!plink$present]
   ctx <- list(alids = prep$alids, absent = left_out, store = prep$store, choice = prep$choice,
-              matched = plink$map[plink$present, , drop = FALSE], plink = plink$ref, sets = prep$sets)
+              matched = plink$map[plink$present, , drop = FALSE], plink = plink$ref, sets = prep$sets,
+              call = method)
   jobs <- prep$jobs
   list(requests = list(), releases = NULL, finish = function(results) {
     done <- spec$local(ctx)

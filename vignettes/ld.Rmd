@@ -109,7 +109,7 @@ A Source's LD resource lives where the Source does: `og_api()` answers LD from t
 | Local | API | `og_clump(og_api(), og_tophits(local, ids, clump = FALSE, limit = 10000))` |
 | API | PLINK | `og_clump(og_local(bfile = ...), og_tophits(og_api(), ids, clump = FALSE, limit = 10000), r2 = , kb = )` |
 
-In the last two rows, `limit = 10000` (the most) fetches every top hit to clump: `limit` defaults to 1,000, and would cut the top hits off before they are clumped, keeping only the strongest 1,000 of each Analysis. A warning of class `opengwasr_truncated` says when it does.
+`og_clump()` clumps each Analysis's rows on their own, as `og_tophits()` does, so every row gives each Analysis its own index variants ([Clumping data you already have](#og-clump)). In the last two rows, `limit = 10000` (the most) fetches every top hit to clump: `limit` defaults to 1,000, and would cut the top hits off before they are clumped, keeping only the strongest 1,000 of each Analysis. A warning of class `opengwasr_truncated` says when it does.
 
 The last row uses a Local Source with only a PLINK Reference: an **LD-only Local Source**. It answers `og_clump()` and `og_ld_matrix()` and nothing else ([below](#plink-reference)). The third is in [LD from the API's LD Stores](local-source.html#local-ld-api).
 
@@ -124,7 +124,7 @@ both <- og_tophits(src, c("OGS-00011:GCST003116", "OGS-00013:GCST90475090"))
 unique(both[, c("id", "clump_ld", "clump_ld_choice", "clump_r2", "clump_kb")])
 ```
 
-`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is clumped against African LD, at that LD Store's own `t_far`. A non-European Analysis is never given European LD unless you ask for it. An LD matrix or LD proxies of a data frame of Associations choose the same way, from its `id` column, and `og_provenance()` records the choice in `ld` and `ld_choice`.
+`OGS-00013:GCST90475090` (HbA1c, Assigned Ancestry AFR) is clumped against African LD, at that LD Store's own `t_far`. A non-European Analysis is never given European LD unless you ask for it. `og_clump()` matches each Analysis's own LD Store the same way, from its `id` column. An LD matrix or LD proxies of a data frame of Associations need one LD Store for all its Analyses, matched from its `id` column, and `og_provenance()` records the choice in `ld` and `ld_choice`.
 
 If several LD Stores serve one ancestry, opengwasr uses the one the LD Store list declares as that ancestry's default, and `clump_ld_choice` (or `ld_choice`) says `"ancestry_default"`. Today each ancestry has one LD Store. (`og_ld_stores()`'s `default` column says which; it is `NA` until the API declares one, and an ancestry with several LD Stores and no declared default is refused.)
 
@@ -145,7 +145,7 @@ basophils <- og_tophits(og_api(inherit = src, ld_store = "AMR"), "OGS-00014:GCST
 unique(basophils$clump_ld)
 ```
 
-The same refusal applies whenever one LD Store is needed for several Analyses (an LD matrix, or `og_clump()`), and their ancestries differ or one of them is Unassigned. One LD Store is never applied to a different ancestry without your say-so.
+The same refusal applies whenever one LD Store is needed for several Analyses (an LD matrix, or `og_clump(by_analysis = FALSE)`), and their ancestries differ or one of them is Unassigned. One LD Store is never applied to a different ancestry without your say-so.
 
 ## LD matrices {#ld-matrices}
 
@@ -291,23 +291,21 @@ Fields, as the API sends them: `e$reason` (here `"threshold_below_t_far"`), `e$s
 
 ### Clumping data you already have {#og-clump}
 
-`og_clump()` clumps any data frame of Associations as one set, such as the top hits of several Analyses together. It needs `alid` and `z`, and an `id` column if the LD Store is to be matched by ancestry. A variant listed several times is ranked by its largest |z|, and every Association of a kept variant is returned. Here the 100 strongest index variants of each Analysis are clumped together:
+`og_clump()` clumps a data frame of Associations you already have, such as top hits fetched unclumped from another Source. It needs `alid` and `z`, and an `id` column saying which Analysis each row is from. It takes `r2` and `kb` exactly as `og_tophits()` does, and uses the Source's LD resource.
+
+- **Each Analysis is clumped on its own** (`by_analysis = TRUE`, the default), as `og_tophits()` does, so `og_clump(src, og_tophits(src, ids, clump = FALSE, limit = 10000))` gives each Analysis the same index variants as `og_tophits(src, ids)`.
+- **Each Analysis gets its own LD Store**: with no LD resource on the API Source, the one matching its Assigned Ancestry, as in [Matching by Assigned Ancestry](#ld-store-matching), so Analyses of different ancestries can be clumped in one call.
+- **The rows come back in their order in `data`**: the rows of each Analysis's index variants, with the [clumping columns](#clumping-provenance).
+- **A data frame with no `id` column is one set.** It has no Assigned Ancestry to match, so the Source needs an LD resource, such as `og_clump(src_eur, data)`.
+
+To clump several Analyses together, as one set whose index variants compete, such as the instruments of a multivariable MR, pass `by_analysis = FALSE`: a variant listed several times is then ranked by its largest |z|, every Association of a kept variant is returned, and with no LD resource on the API Source every Analysis must share one Assigned Ancestry (else `opengwasr_ld_unmatched`, as [above](#unassigned-and-mixed-ancestry)). Here the 100 strongest index variants of BMI and of LDL cholesterol are clumped together:
 
 ```{r og-clump, warning = FALSE, message = FALSE}
 bmi <- og_tophits(src, "OGS-00011:GCST90029007", limit = 100)
 ldl <- og_tophits(src, "OGS-00011:GCST90002412", limit = 100)
-joint <- og_clump(src, rbind(bmi, ldl))
+joint <- og_clump(src, rbind(bmi, ldl), by_analysis = FALSE)
 table(joint$id)
 ```
-
-`og_clump()` takes `r2` and `kb` exactly as `og_tophits()` does, and uses the Source's LD resource. With none on the API Source, every Analysis in `data` must share one Assigned Ancestry:
-
-```{r og-clump-mixed, error = TRUE, warning = FALSE, message = FALSE}
-hba1c_afr <- og_tophits(src, "OGS-00013:GCST90475090", limit = 100)
-og_clump(src, rbind(bmi, hba1c_afr))
-```
-
-A data frame with no `id` column has no Assigned Ancestry to match, so the Source needs an LD resource, such as `og_clump(src_eur, data)`.
 
 ### Clumping provenance {#clumping-provenance}
 
@@ -336,21 +334,21 @@ A **PLINK Reference** is a PLINK binary genotype fileset (`.bed`, `.bim`, `.fam`
 - `og_local(gwas = ..., bfile = prefix)`: Associations from your Store Releases, LD from your PLINK Reference ([Clumping and LD on a Local Source](local-source.html#local-clumping)).
 - `og_local(bfile = prefix)`: an **LD-only Local Source**, with no Store Releases. It answers `og_clump()` and `og_ld_matrix()` for data you already have, such as top hits from the API Source: the last row of the [table above](#mixing).
 
-For your own, such as `og_local(bfile = "~/ld/1kg/EUR")`, the calls are `og_clump(ld_src, og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)` and `og_ld_matrix(ld_src, rsids)`. Here, the small synthetic PLINK Reference that comes with opengwasr, 300 made-up people, whose rsIDs include a few CAD and BMI signals, clumps the CAD and BMI index variants from [above](#og-clump) together, and reads an LD matrix of rsIDs. It holds only a few of these real variants, so most are left out, as the message says; your own PLINK Reference holds far more:
+For your own, such as `og_local(bfile = "~/ld/1kg/EUR")`, the calls are `og_clump(ld_src, og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)` and `og_ld_matrix(ld_src, rsids)`. Here, the small synthetic PLINK Reference that comes with opengwasr, 300 made-up people, whose rsIDs include a few CAD and BMI signals, clumps the CAD and BMI index variants from [above](#og-clump), each Analysis on its own, and reads an LD matrix of rsIDs. It holds only a few of these real variants, so most are left out, as the message says; your own PLINK Reference holds far more:
 
 ```{r plink-reference, eval = plink_ready}
 ld_src <- og_local(bfile = file.path(system.file("plink", package = "opengwasr"), "ref"))
 ld_src
 og_ld_resource(ld_src)$plink_version   # the PLINK that was found, 1.9 or 2
-joint_local <- og_clump(ld_src, rbind(cad, bmi), r2 = 0.001, kb = 10000)
-joint_local[, c("id", "rsid", "alid", "z", "clump_r2", "clump_kb", "clump_size")]
+clumped_local <- og_clump(ld_src, rbind(cad, bmi), r2 = 0.001, kb = 10000)
+clumped_local[, c("id", "rsid", "alid", "z", "clump_r2", "clump_kb", "clump_size")]
 m_local <- og_ld_matrix(ld_src, c("rs4977574", "rs2891168", "rs1333049", "rs1421085"))
 round(m_local, 3)
 ```
 
 - **Variants are matched by rsID,** because PLINK References are usually on GRCh37 while ALIDs are on GRCh38. Variants without an rsID match are left out, and the message says how many. An LD matrix from a PLINK Reference is named `<rsid>_<allele>_<allele>` with the PLINK Reference's alleles, as ieugwasr named it, and the sign of r again refers to the first allele in each name.
 - **`r2` and `kb` are required.** A PLINK Reference has no recorded defaults, so opengwasr won't choose for you. Without them, `og_tophits()` and `og_clump()` stop and ask for both.
-- **`og_clump()` clumps its rows as one set.** `og_tophits()` on a Local Source with a PLINK Reference clumps each Analysis's top hits separately; to do the same with top hits from the API, clump them one Analysis at a time: `lapply(split(top, top$id), function(x) og_clump(ld_src, x, r2 = 0.001, kb = 10000))`.
+- **Each Analysis is clumped on its own,** one PLINK run per Analysis, as `og_tophits()` does on a Local Source with a PLINK Reference, so top hits from the API get the index variants `og_tophits()` would give with this PLINK Reference.
 - **PLINK itself** is PLINK 1.9, or PLINK 2 from build 2.0.0-a.6.0 (November 2024) on, the first with every option opengwasr uses. `og_local(bfile = , plink = )` takes its path, or a command on your `PATH` such as `plink = "plink2"`; as in a shell, a name without a `/` is a command. Without `plink`, opengwasr looks in the genetics.binaRies package if it is installed, then for `plink`, then `plink2`, on your `PATH`, and takes the first that is a supported PLINK. Another program called `plink`, such as PuTTY's, or an older PLINK, is skipped. If none is supported, the error (class `opengwasr_plink_not_found`) lists what it skipped, in `skipped`, and says how to install PLINK.
 - **Its version** is read once, when the Source is made, and kept on its PLINK Reference (`og_ld_resource(ld_src)$plink_version`) and in provenance (`og_provenance(x)$plink_version`, beside `plink_bin`). A PLINK you name that isn't supported, such as 1.07, is refused (class `opengwasr_plink_unsupported`, with the `version` found and the versions `supported`). If a supported `plink` or `plink2` is on your `PATH`, the error suggests it.
 - **PLINK 1.9 and PLINK 2 give the same answer.** opengwasr asks each for the same thing in its own words: an LD matrix of r with the reference's allele order kept (`--r square --keep-allele-order` in 1.9, `--r-unphased square ref-based` in 2), and clumping with `--clump`, read from `.clumped` or `.clumps`. On the PLINK Reference that comes with opengwasr, both give the same clumps, and r equal to within 1e-6.
@@ -359,7 +357,7 @@ round(m_local, 3)
 
 ### Top hits from the API, clumped with PLINK {#plink-api}
 
-The last row of the [table](#mixing), end to end: BMI's top hits from the API Source, unclumped, then clumped with the PLINK Reference. Here `limit` is left at its default, so the warning says the API's top hits were cut off at 1,000 before clumping; with your own, pass `limit = 10000` to clump them all:
+The last row of the [table](#mixing), end to end: BMI's top hits from the API Source, unclumped, then clumped with the PLINK Reference, each Analysis on its own. Here `limit` is left at its default, so the warning says the API's top hits were cut off at 1,000 before clumping; with your own, pass `limit = 10000` to clump them all:
 
 ```{r plink-api, eval = plink_ready}
 bmi_hits <- og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE)

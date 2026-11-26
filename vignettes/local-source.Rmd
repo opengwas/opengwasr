@@ -285,7 +285,7 @@ The LD is chosen on the Source, and only there: no verb takes an LD argument. A 
 | Local | API | `og_clump(og_api(), og_tophits(local, ids, clump = FALSE, limit = 10000))` ([below](#local-ld-api)) |
 | API | PLINK | `og_clump(og_local(bfile = ...), og_tophits(og_api(), ids, clump = FALSE, limit = 10000), r2 = , kb = )` ([Using a PLINK Reference](ld.html#plink-reference)) |
 
-`limit = 10000` (the most) fetches every top hit to clump: its default, 1,000, would cut them off before clumping, with an `opengwasr_truncated` warning.
+`og_clump()` clumps each Analysis's rows on their own, as `og_tophits()` does, so every row gives each Analysis its own index variants. `limit = 10000` (the most) fetches every top hit to clump: its default, 1,000, would cut them off before clumping, with an `opengwasr_truncated` warning.
 
 ### Clumping top hits {#local-clumping-tophits}
 
@@ -338,7 +338,7 @@ A PLINK Reference has no default `r2` and `kb` of its own, so clumping with one 
 og_tophits(src, "s:bmi_irn")
 ```
 
-To clump Associations you already have, as one set, use `og_clump()`. It uses the Source's LD resource too:
+To clump Associations you already have, use `og_clump()`. It uses the Source's LD resource too, and clumps each Analysis's rows on their own, one PLINK run per Analysis, so here it gives the same index variants as `og_tophits()` above:
 
 ```{r local-og-clump, eval = plink_ready}
 hits <- og_tophits(src, "s:bmi_irn", clump = FALSE)
@@ -373,12 +373,12 @@ og_ld_matrix(with_ld, c("rs5000", "rs1000"))
 To clump Associations from your Store Releases with LD from the API's LD Stores, do it in two steps, naming the API Source yourself: read the top hits unclumped from your Store Releases, then clump them with `og_clump()` on the API Source. This needs your OpenGWAS token (see [Credentials](opengwasr.html#credentials)). Nothing goes to the API unless you write `og_api()`.
 
 ```{r local-ld-api, eval = FALSE}
-hits <- og_tophits(local, "OGS-00011:GCST003116", clump = FALSE, limit = 10000)
-cad <- og_clump(og_api(), hits)                  # the LD Store matching the Analysis's Assigned Ancestry
-cad <- og_clump(og_api(ld_store = "EUR"), hits)  # or the EUR LD Store
+hits <- og_tophits(local, c("OGS-00011:GCST003116", "OGS-00011:GCST90029007"), clump = FALSE, limit = 10000)
+top <- og_clump(og_api(), hits)                  # each Analysis in the LD Store matching its Assigned Ancestry
+top <- og_clump(og_api(ld_store = "EUR"), hits)  # or each in the EUR LD Store
 ```
 
-`og_clump()` clumps its rows as one set, so give it one Analysis's top hits at a time, or those of Analyses of one ancestry. The LD Store's own `r2` and `kb` apply, as on the API Source (see [Clumping](ld.html#clumping)).
+`og_clump()` clumps each Analysis's top hits on their own, as `og_tophits()` does on the API Source, so Analyses of different ancestries can go in one call. The LD Store's own `r2` and `kb` apply, as on the API Source (see [Clumping](ld.html#clumping)).
 
 ## TwoSampleMR on a Local Source {#local-twosamplemr}
 

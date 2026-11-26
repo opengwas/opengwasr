@@ -6,7 +6,7 @@
 #' The matrix is named by ALID, on both dimensions; the sign of r refers to the first allele in each
 #' name. `variants` are ALIDs or rsIDs (an rsID stands for every ALID it names), or a data frame of
 #' Associations, whose `alid` column names the variants and whose Analyses' Assigned Ancestry chooses
-#' the LD Store when `ld` is `NULL`. A variant the LD Store doesn't hold is left out of the matrix,
+#' the LD Store when the Source has no LD resource. A variant the LD Store doesn't hold is left out of the matrix,
 #' with a warning of class `opengwasr_ld_absent_variants` (`count`, `ids`); they are in
 #' `og_provenance(m)$absent`.
 #'
@@ -18,11 +18,20 @@
 #' `far_bp` of each other, that it doesn't hold (so its r² is below the LD Store's Far Threshold)
 #' is set to 0. Pairs further apart, or on different chromosomes, stay `NA`.
 #'
-#' With a PLINK Reference as `ld` (see [og_plink_reference()]), PLINK computes the matrix on your
-#' machine. Variants are matched to the reference by rsID (an ALID by its `rsid` column, if
-#' `variants` is a data frame that has one, else by the GWAS Stores' variant table); those with no
-#' rsID, or not in the reference, are left out, with a message (class `opengwasr_plink_unmatched`,
-#' `count`). The matrix holds every pair, in the order of `variants`, and is named
+#' The LD is the Source's LD resource: on the API Source its `ld_store` (`og_api(ld_store = )`), else
+#' the LD Store matching the Assigned Ancestry of the Associations' Analyses (refused for Unassigned
+#' or mixed ancestries, and for variants given without Analyses). For other LD, pass another Source,
+#' such as `og_api(inherit = src, ld_store = "EUR")`.
+#'
+#' On a Local Source, PLINK computes the matrix on your machine from its PLINK Reference
+#' (`og_local(bfile = )`). Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class `opengwasr_plink_unadjusted` (see [og_local()]). Variants are matched to the reference by rsID (an ALID by its `rsid`
+#' column, if `variants` is a data frame that has one, else by the Source's Store Releases' variant
+#' table); those with no rsID, or not in the reference, are left out, with a message (class
+#' `opengwasr_plink_unmatched`, `count`). An LD-only Local Source (`og_local(bfile = )` with no
+#' `gwas`) has nothing to look an ALID up in, so ALIDs without an `rsid` column are refused (class
+#' `opengwasr_gwas_store_required`, with the ALIDs in `alids`, and the ways round in `forms`: see
+#' [og_local()]). A Local Source with no LD resource is refused (`opengwasr_ld_resource_required`).
+#' The matrix holds every pair, in the order of `variants`, and is named
 #' `<rsid>_<allele>_<allele>` with the reference's alleles: the sign of r refers to the first one.
 #' `fill_below_t_far` doesn't apply. Provenance's `ld` is the reference's path.
 #'
@@ -30,44 +39,42 @@
 #' `t_far`, `near_bp` and `far_bp`); a choice of LD Store that can't be made without guessing is
 #' refused by opengwasr (`opengwasr_ld_unmatched`, with the LD Stores in `ld_stores`).
 #'
-#' @param src A Source, from [og_api()]. `NULL` works with a PLINK Reference as `ld` when nothing is
-#'   looked up: `variants` are rsIDs, or a data frame with an `rsid` column. A lookup that is needed
-#'   without a Source stops, with class `opengwasr_source_required`.
+#' @param src A Source, from [og_api()] or [og_local()], which carries the LD resource.
 #' @param variants ALIDs and rsIDs, or a data frame of Associations.
-#' @param ld An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-#'   [og_plink_reference()], or `NULL` to match the Assigned Ancestry of the Associations' Analyses
-#'   (refused for Unassigned or mixed ancestries, and for variants given without Analyses).
 #' @param fill_below_t_far Set pairs below the Far Threshold to 0, as above.
 #' @return A numeric matrix (class `og_ld_matrix`, which is also a `matrix`) with [og_provenance()] attached: `ld` (the LD Store that answered),
 #'   `ld_choice` (`"user"`, `"ancestry_default"` or `"matched"`) and `absent`.
 #' @examples
 #' \dontrun{
-#' src <- og_api()
-#' m <- og_ld_matrix(src, c("16:53772541:A:G", "16:53767042:C:T"), ld = "EUR")
+#' src <- og_api(ld_store = "EUR")
+#' m <- og_ld_matrix(src, c("16:53772541:A:G", "16:53767042:C:T"))
 #' og_provenance(m)$ld
 #' }
 #' @export
-og_ld_matrix <- function(src, variants, ld = NULL, fill_below_t_far = FALSE) UseMethod("og_ld_matrix")
+og_ld_matrix <- function(src, variants, fill_below_t_far = FALSE) UseMethod("og_ld_matrix")
 
 #' @export
-og_ld_matrix.og_api_source <- function(src, variants, ld = NULL, fill_below_t_far = FALSE) {
+og_ld_matrix.og_api_source <- function(src, variants, fill_below_t_far = FALSE) {
   # Kept: an R argument's type.
   if (!is_flag(fill_below_t_far)) {
     og_abort("`fill_below_t_far` must be `TRUE` or `FALSE`.", class = "opengwasr_argument")
   }
-  ld_query(src, "api/ld/matrix", variants, ld, list(
+  ld_query(src, "api/ld/matrix", variants, list(
     # Every pair is in some piece: pieces of two chunks hold every pair of their union.
     pieces = function(n) lapply(split_pairs(n, job_limits()$ld_matrix), function(p) union(p$a, p$b)),
     assemble = function(results, ctx) ld_matrix_assemble(results, ctx, fill_below_t_far),
     # A PLINK Reference holds every pair, so `fill_below_t_far` has nothing to fill.
     local = function(ctx) {
-      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid))
+      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid), ctx$call)
       list(value = structure(m, class = c("og_ld_matrix", "matrix", "array")), provenance = NULL)
     }))
 }
 
+# A Local Source reads its PLINK Reference, its rsIDs looked up in its own Store Releases (an LD-only
+# one has none to look in). The same method: the engine reads the call from the frame UseMethod()
+# dispatched to.
 #' @export
-og_ld_matrix.NULL <- og_ld_matrix.og_api_source
+og_ld_matrix.og_local_source <- og_ld_matrix.og_api_source
 
 # The one matrix of every present variant, from the Jobs' rows. A row is `alid` and `r`, its r with
 # each of the rows' variants in the same order (null, where the LD Store holds no r, is NA).
@@ -86,7 +93,7 @@ ld_matrix_assemble <- function(results, ctx, fill_below_t_far) {
   }
   present <- !alids %in% ctx$absent
   m <- m[present, present, drop = FALSE]
-  if (fill_below_t_far) m <- ld_fill_below_t_far(m, ctx$store$far_bp)
+  if (fill_below_t_far) m <- ld_fill_below_t_far(m, ctx$sets[[1]]$store$far_bp)  # one set: one LD Store
   structure(m, class = c("og_ld_matrix", "matrix", "array"))
 }
 

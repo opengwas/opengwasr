@@ -7,7 +7,8 @@
 #' Provenance of a query's result
 #'
 #' `og_provenance(x)` says how `x` was produced: the call, the Store Releases that answered, the
-#' Job ids, and the API's counts, including whether `limit` cut any off (`total`, `truncated`).
+#' Job ids, and the counts, including whether `limit` cut any off (`total`, `truncated`). A Local
+#' Source runs no Jobs: its answers record no Job ids, and no cost estimate.
 #'
 #' It is attached to the data frame a query function returns, and describes exactly those rows. After
 #' you `rbind()` or subset the rows they are no longer what the query returned: the attribute may
@@ -21,14 +22,21 @@
 #' @return A list of class `og_provenance`:
 #'   * `query`: the call and its arguments, as text; `args`: the arguments as a list.
 #'   * `store_releases`: the Store Releases that answered, as `<store_id>/<release_id>`.
-#'   * `job_ids`: the API's Job ids; `existing`: whether the API reattached you to a Job it already had.
+#'   * `job_ids`: the API's Job ids (none for what a Local Source answered); `existing`: whether the
+#'     API reattached you to a Job it already had.
 #'   * `cost_estimate`: the API's cost estimate for the Jobs, summed.
 #'   * `total`, `truncated`: how many Associations matched (what the API counted), and whether `limit` cut any off; `returned`: the rows of `x`.
 #'   * `retrieved`: when the answer was read, as a `POSIXct`.
 #'   * Clumped results: `clump`, a data frame with one row per Analysis clumped (one row, `id` `NA`,
-#'     for [og_clump()]'s one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
-#'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants).
-#'   * LD results: `ld`, `ld_choice` and `absent` (see [og_ld_matrix()]).
+#'     for [og_clump()] of one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
+#'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants),
+#'     and `clumps`: `"computed"` (clumped on the fly, as every clumping is today) or, once Store
+#'     Releases carry them, `"stored"`. `ld_from` says where the LD came from: `"source"` (the
+#'     Source's LD resource) or `"ancestry"` (each Analysis's Assigned Ancestry, on an API Source with
+#'     none).
+#'   * LD results: `ld`, `ld_choice`, `ld_from` (as above) and `absent` (see [og_ld_matrix()]).
+#'     [og_clump()] of Analyses matched to several LD Stores gives each in `ld`, and how each was
+#'     chosen in `ld_choice`, one for one.
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class
 #'   `opengwasr_no_provenance`; one whose rows changed after `rbind()` or subsetting keeps a stale
@@ -60,7 +68,8 @@ og_provenance <- function(x) {
 #' @param x The result data frame.
 #' @param query The call as text, such as `"og_tophits(limit = 3)"`.
 #' @param args The call's arguments, as a list.
-#' @param jobs The `job` element of each collected Job that produced `x`.
+#' @param jobs The `job` element of each collected Job that produced `x`. A Local Source's answer
+#'   (R/local-request.R) has `job_id` NA: it ran no Job, so has no id to record.
 #' @param ... Further fields, for functions with more to record (clumping, LD).
 #' @noRd
 attach_provenance <- function(x, query, args, jobs, ...) {
@@ -72,7 +81,10 @@ attach_provenance <- function(x, query, args, jobs, ...) {
       args = args,
       store_releases = unique(unlist(lapply(jobs, `[[`, "releases"))) %||% character(),
       fingerprint = provenance_fingerprint(x),
-      job_ids = vapply(jobs, function(j) j$job_id, ""),
+      job_ids = {
+        ids <- vapply(jobs, function(j) j$job_id, "")
+        ids[!is.na(ids)]
+      },
       cost_estimate = {
         cost <- vapply(jobs, function(j) as.numeric(j$cost_estimate %||% NA), 0)
         if (anyNA(cost)) NA_real_ else sum(cost)
@@ -117,10 +129,11 @@ format.og_provenance <- function(x, ...) {
     paste0("\u2500\u2500 opengwasr provenance ", strrep("\u2500", 17)),
     paste0("\u2022 Query: ", x$query),
     paste0("\u2022 Store Releases: ", paste(x$store_releases, collapse = ", ")),
-    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", x$ld, " (", x$ld_choice, "); ",
+    # og_clump() of Analyses matched to several LD Stores names each.
+    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", paste0(x$ld, " (", x$ld_choice, ")", collapse = ", "), "; ",
                                length(x$absent), " variant(s) absent"),
     if (!is.null(x$clump)) format_clump(x$clump),
-    paste0("\u2022 Jobs: ", paste(x$job_ids, collapse = ", ")),
+    paste0("\u2022 Jobs: ", if (length(x$job_ids)) paste(x$job_ids, collapse = ", ") else "none"),
     counts,
     paste0("\u2022 Retrieved: ", retrieved)
   )

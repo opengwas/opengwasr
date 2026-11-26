@@ -23,12 +23,36 @@
 #'   where it gave one in `api_reasons` (`NA` otherwise), and, for a retired Analysis, every
 #'   successor the API named in `superseded_by`.
 #'
-#' @param src A Source, from [og_api()].
+#' @section Local Source:
+#' A Local Source ([og_local()]) answers from the `analyses.tsv` of each Store Release it holds,
+#' and names Analyses the same way. It has no catalogue of Legacy OpenGWAS identifiers: an
+#' identifier that isn't `<store_id>:<analysis_id>` and is no `analysis_id` it holds, in any of its
+#' Store Releases, raises `opengwasr_legacy_id_local` (with the identifiers in `ids`); translate it
+#' once with `og_analyses(og_api(), ids)` and use the `id` that returns.
+#'
+#' Its rows have every column of the API Source's, in the same order and of the same types, from
+#' the Store Release's `analyses.tsv`; `outcome_type` is derived as the catalogue derives it.
+#' Columns the catalogue adds are NA locally (`status`, `listed`, `trait_class`,
+#' `ancestry_category`, `label_from_source`), as is any column the Store Release has no value for.
+#' The other columns of `analyses.tsv` follow, of the types opengwasdb gives them: the counts
+#' (`n_hits_5e8`, `n_hits_5e6`, `n_hits_5e4`, `completion_n_imputed_total`,
+#' `completion_n_missing_total`, `n_missing_se_out_of_range`, `eaf_orientation_n`, `n_loci_5e8`,
+#' `n_unclumped_5e8`) integer; `completion_median_pearson_r`, `eaf_orientation_r` and
+#' `original_sd_dispersion` double, as is each `ancestry_prop_<population>` (a proportion, from 0
+#' to 1); `eaf_scope`, `completed_against` and `eaf_orientation` text. A
+#' blank is NA of its column's type, and a column opengwasr doesn't know is text. A value of
+#' `analyses.tsv` the catalogue would refuse (a sample size that isn't a whole number, say), or
+#' that isn't of its column's type (a count of `1.5`), raises `opengwasr_invalid_analyses`, naming
+#' the Store Release, the column (`column`) and the values (`values`).
+#'
+#' @param src A Source, from [og_api()] or [og_local()].
 #' @param ids Analysis identifiers, or `NULL` for the whole catalogue.
 #' @param releases Store Releases to use. `NULL` uses the one Store Release each GWAS Store serves,
 #'   as does a GWAS Store id such as `"OGS-00011"`. The API doesn't say which Store Release of a GWAS
 #'   Store is latest, so if a GWAS Store serves several, opengwasr stops with
 #'   `opengwasr_release_selection_required` and lists them: pin one as `"<store_id>/<release_id>"`.
+#'   A Local Source holds one Store Release of each GWAS Store, so never asks. A Store Release the
+#'   Source doesn't serve or hold raises `opengwasr_release_not_found`.
 #' @return A data frame: `requested_id`, `id`, then the API's metadata columns (`store_id`,
 #'   `analysis_id`, `analysis_label`, `assigned_ancestry`, `sample_size`, `release_id`, ...).
 #' @examples
@@ -42,14 +66,23 @@ og_analyses <- function(src, ids = NULL, releases = NULL) UseMethod("og_analyses
 
 #' @export
 og_analyses.og_api_source <- function(src, ids = NULL, releases = NULL) {
-  # Kept: an R argument's type, checked before any request.
-  if (!is.null(ids) && (!is.character(ids) || anyNA(ids) || any(!nzchar(ids)))) {
-    og_abort("`ids` must be a character vector of Analysis identifiers, with no missing values.",
-             class = "opengwasr_argument")
-  }
+  check_analysis_ids(ids)
   releases <- resolve_releases(src, releases)
   if (is.null(ids)) return(analyses_catalogue(src, releases))
   analyses_lookup(src, ids, releases)
+}
+
+# One route for both Sources, like every other verb: analyses_lookup() and analyses_catalogue()
+# read a Local Source's Store Releases themselves.
+#' @export
+og_analyses.og_local_source <- og_analyses.og_api_source
+
+# Kept: an R argument's type, checked before any request.
+check_analysis_ids <- function(ids, call = rlang::caller_env()) {
+  if (!is.null(ids) && (!is.character(ids) || anyNA(ids) || any(!nzchar(ids)))) {
+    og_abort("`ids` must be a character vector of Analysis identifiers, with no missing values.",
+             class = "opengwasr_argument", call = call)
+  }
 }
 
 # The API's limit on ids in one lookup, and on analyses in one catalogue page.
@@ -57,6 +90,8 @@ lookup_limit <- 1000L
 
 analyses_lookup <- function(src, ids, releases, call = rlang::caller_env()) {
   if (length(ids) == 0) return(finish_analyses(analyses_frame(NULL), character()))
+  # The engine's lookup (association-query.R), for either Source.
+  if (inherits(src, "og_local_source")) return(local_analyses_lookup(src, ids, releases, call))
   chunks <- lapply(dim_chunks(split_dim(length(ids), lookup_limit)), function(at) ids[at])
   resolved <- lapply(chunks, function(chunk) {
     body <- c(list(id = as.list(unique(chunk))), if (!is.null(releases)) list(releases = releases))
@@ -168,6 +203,8 @@ raise_analysis_problems <- function(resolved, call) {
 # no cursor is followed by `offset`. Rows fewer than `total` at the end are an error, never a
 # shorter catalogue.
 analyses_catalogue <- function(src, releases, call = rlang::caller_env()) {
+  # The engine's catalogue (association-query.R), for either Source.
+  if (inherits(src, "og_local_source")) return(local_analyses_catalogue(src, releases, call))
   pages <- list()
   collected <- 0L
   after <- NULL
@@ -222,12 +259,31 @@ analyses_frame <- function(analyses) {
 }
 
 # Add the canonical `id` (assembled here: rows carry the bare `analysis_id` beside `store_id`) and
-# `requested_id`, leading the columns.
+# `requested_id`, leading the columns. Both Sources' rows end here, so each column of
+# analysis_columns and release_analysis_columns is typed here, by type_analyses().
 finish_analyses <- function(analyses, requested) {
+  analyses <- type_analyses(analyses)
   analyses$id <- canonical_ids(analyses)
   analyses$requested_id <- as.character(requested)
   analyses <- analyses[, c("requested_id", "id", setdiff(names(analyses), c("requested_id", "id"))), drop = FALSE]
   rownames(analyses) <- NULL
+  analyses
+}
+
+# Each column of analysis_columns as the catalogue's type, and each of release_analysis_columns (or
+# release_analysis_prefixes) as opengwasdb's, whatever the rows hold: the one typing of both Sources' Analysis columns, so a
+# column's type never depends on which Analyses were asked for. The API's JSON makes a column null
+# in every row logical, and one of whole numbers integer; a Local Source's rows hold
+# catalogue_value()'s text and numbers, and NA (logical) where bind_frames() filled a column one
+# Store Release lacks. A column in neither table is left as it is: text, from a Local Source.
+type_analyses <- function(analyses) {
+  as_type <- list(text = as.character, integer = as.integer, count = as.integer, real = as.double,
+                  proportion = as.double)
+  types <- c(analysis_columns, release_analysis_columns)
+  for (name in names(analyses)) {
+    type <- if (name %in% names(types)) types[[name]] else release_column_type(name)
+    if (!is.na(type)) analyses[[name]] <- as_type[[type]](analyses[[name]])
+  }
   analyses
 }
 
@@ -244,4 +300,195 @@ bind_frames <- function(frames) {
     f[columns]
   })
   do.call(rbind, frames)
+}
+
+# The Local Source's Analyses ---------------------------------------------------------------------
+# A Local Source reads each Store Release's analyses.tsv (ogquery's `analyses_table()`), and names
+# and resolves Analyses as the API does. It has no catalogue, so no Legacy OpenGWAS ids, no retired
+# Analyses and no successors.
+
+# The Analyses of `releases` (Store Releases as the API takes them), in that order and each
+# release's file order, as the API Source's rows (local_analysis_rows()).
+local_analyses <- function(src, releases, call = rlang::caller_env()) {
+  releases <- local_releases_held(src, releases, call)
+  frames <- lapply(releases, function(r) {
+    local_analysis_rows(local_read_analyses(local_facade(src, r$store_id, call)), r$store_id, r$release_id, call)
+  })
+  if (length(frames) == 0) return(local_analysis_rows(data.frame(analysis_id = character()), character(), character()))
+  bind_frames(frames)
+}
+
+local_analyses_catalogue <- function(src, releases, call = rlang::caller_env()) {
+  analyses <- local_analyses(src, releases, call)
+  finish_analyses(analyses, canonical_ids(analyses))
+}
+
+# Each of `ids` resolved as resolve_analysis_ids() resolves it on the API, in `releases`: a
+# canonical id names the Analysis it spells, a bare analysis_id the one Analysis it names. One that
+# names none there is unknown, unless it is a bare id that names nothing in any Store Release the
+# Source holds: that is taken for a Legacy OpenGWAS id, which a Local Source can't translate
+# (owner's decision, 25 November 2026), and refused, pointing to the API.
+local_analyses_lookup <- function(src, ids, releases, call = rlang::caller_env()) {
+  releases <- local_releases_held(src, releases, call)
+  held <- local_analyses(src, source_releases(src, call), call)
+  analyses <- held[release_names(held$store_id, held$release_id) %in%
+                     release_names(releases), ,
+                   drop = FALSE]
+  canonical <- canonical_ids(analyses)
+  index <- rep(NA_integer_, length(ids))
+  unknown <- legacy <- character()
+  ambiguous <- list()
+  for (i in seq_along(ids)) {
+    id <- ids[[i]]
+    qualified <- grepl(":", id, fixed = TRUE)
+    candidates <- if (qualified) intersect(id, canonical) else canonical[analyses$analysis_id == id]
+    if (length(candidates) == 1) {
+      index[[i]] <- match(candidates, canonical)
+    } else if (length(candidates) > 1) {
+      ambiguous[[id]] <- candidates
+    } else if (qualified || id %in% held$analysis_id) {
+      unknown <- c(unknown, id)
+    } else {
+      legacy <- c(legacy, id)
+    }
+  }
+  legacy <- unique(legacy)
+  if (length(legacy) > 0) {
+    translate <- paste0("og_analyses(og_api(), ", paste(deparse(legacy, width.cutoff = 500L), collapse = ""), ")")
+    og_abort(c(paste0(some_ids(legacy, 5, quote = "`"), if (length(legacy) == 1) " names" else " name",
+                      " no Analysis here, and a Local Source holds only canonical ids (`<store_id>:<analysis_id>`)",
+                      ": it can't translate a Legacy OpenGWAS id."),
+               i = paste0("Translate with the API Source, `", translate, "`, then use the `id` it returns.")),
+             class = "opengwasr_legacy_id_local", refusal = TRUE, ids = legacy, call = call)
+  }
+  raise_analysis_problems(list(list(ambiguous = ambiguous, unknown = unique(unknown), api_reasons = character(),
+                                    superseded_by = list())), call)
+  finish_analyses(analyses[index, , drop = FALSE], ids)
+}
+
+# The API Source's Analysis columns after `store_id` and `analysis_id`, in its order
+# (fixtures/shapes.json `analysis_row`), and their types: the catalogue's (opengwasdb-stores
+# src/analysis_catalog/columns.py ANALYSIS_COLUMNS, at 8928f40d). `release_id` follows them.
+analysis_columns <- c(
+  status = "text", listed = "integer",
+  analysis_label = "text", source_label = "text", source_analysis_id = "text", trait_ontology_id = "text",
+  trait_ontology_label = "text", trait_ontology_mapping_method = "text", tissue = "text", context = "text",
+  trait_chr = "text", trait_bp = "integer", assigned_ancestry = "text", ancestry_assignment_method = "text",
+  source_ancestry_label = "text", sample_size_kind = "text", sample_size_scope = "text", sample_size = "integer",
+  n_cases = "integer", n_controls = "integer", stored_effect_scale = "text", original_effect_scale = "text",
+  original_sd = "real", original_sd_method = "text", maf_threshold = "real", info_score_threshold = "real",
+  license = "text", publication_doi = "text", publication_pmid = "text", consortium = "text",
+  first_author = "text",
+  outcome_type = "text", trait_class = "text", ancestry_category = "text", label_from_source = "integer"
+)
+
+# The columns of analyses.tsv the API Source doesn't return (the catalogue carries none of them:
+# opengwasdb-stores src/analysis_catalog/columns.py MANIFEST_COLUMNS, at 8928f40d), and their types:
+# opengwasdb's analyses model (opengwasdb/model/analyses.py, at f498e430: the `Analysis` fields
+# beyond the catalogue's, STORE_ONLY_COLUMNS with TOP_HIT_COUNT_COLUMNS, EAF_ORIENTATION_COLUMNS
+# and CLUMP_COUNT_COLUMNS) and the store-format spec, §7a. Its JSON schema types every column as a
+# string, because a TSV cell is text, so the types are the columns' meaning there: a count is a
+# non-negative whole number (N_MISSING_SE_OUT_OF_RANGE's NON_NEGATIVE_INTEGER_OR_BLANK); a
+# correlation, a median r and a dispersion are numbers; a vocabulary (`eaf_scope`,
+# `eaf_orientation`'s EafOrientationOutcome) or a reference name (`completed_against`) is text.
+# Blank is none (NA), never 0 (§7a). Any other column is text.
+release_analysis_columns <- c(
+  eaf_scope = "text", original_sd_dispersion = "real", completed_against = "text",
+  completion_median_pearson_r = "real", completion_n_imputed_total = "count",
+  completion_n_missing_total = "count", n_missing_se_out_of_range = "count",
+  eaf_orientation = "text", eaf_orientation_r = "real", eaf_orientation_n = "count",
+  n_hits_5e8 = "count", n_hits_5e6 = "count", n_hits_5e4 = "count",
+  n_loci_5e8 = "count", n_unclumped_5e8 = "count"
+)
+
+# The release-only columns named by a prefix, and their type: `ancestry_prop_<population>`, one per
+# reference population (analyses.py ANCESTRY_PROP_PREFIX; `Analysis.ancestry_prop`, "{population:
+# proportion}"; spec §7a), each a proportion, a number in [0, 1].
+release_analysis_prefixes <- c(ancestry_prop_ = "proportion")
+
+# A release-only column's type: release_analysis_columns', or its prefix's; NA for a column
+# opengwasr doesn't know, which stays text.
+release_column_type <- function(name) {
+  if (name %in% names(release_analysis_columns)) return(release_analysis_columns[[name]])
+  hit <- startsWith(name, names(release_analysis_prefixes))
+  if (any(hit)) release_analysis_prefixes[[which(hit)[[1]]]] else NA_character_
+}
+
+# The columns the catalogue makes rather than reads from analyses.tsv: NA locally, except
+# `outcome_type`, derived as the catalogue derives it (analysis_outcome_type()).
+catalogue_made <- c("status", "listed", "outcome_type", "trait_class", "ancestry_category", "label_from_source")
+
+# One Store Release's analyses.tsv (all text, "" for none) as the API Source's rows: `store_id`,
+# `analysis_id`, every column of analysis_columns, typed as the catalogue types it (empty is NA,
+# never 0 or ""), and `release_id`; then the file's other columns (empty as NA), each of
+# release_analysis_columns or release_analysis_prefixes parsed as its type, any other as text, so two Store Releases' rows always
+# bind. ogquery's `analysis_index` is the file's row number, not metadata.
+local_analysis_rows <- function(table, store_id, release_id, call = rlang::caller_env()) {
+  n <- nrow(table)
+  rows <- data.frame(store_id = rep(store_id, n), analysis_id = as.character(table$analysis_id),
+                     stringsAsFactors = FALSE)
+  for (name in names(analysis_columns)) {
+    type <- analysis_columns[[name]]
+    cell <- if (name %in% names(table) && !name %in% catalogue_made) trimws(table[[name]]) else rep("", n)
+    rows[[name]] <- catalogue_value(cell, name, type, store_id, release_id, call)
+  }
+  rows$outcome_type <- analysis_outcome_type(rows$stored_effect_scale, rows$sample_size_kind)
+  rows$release_id <- rep(release_id, n)
+  for (name in setdiff(names(table), c("analysis_index", names(rows)))) {
+    type <- release_column_type(name)
+    if (!is.na(type)) {
+      rows[[name]] <- catalogue_value(trimws(table[[name]]), name, type, store_id, release_id, call)
+      next
+    }
+    cell <- as.character(table[[name]])
+    cell[!nzchar(trimws(cell))] <- NA
+    rows[[name]] <- cell
+  }
+  rows
+}
+
+# A column's cells parsed as the catalogue parses them (policy.py `_typed()`): empty is NA;
+# `maf_threshold` and `info_score_threshold` read "NaN" as none (NAN_IS_ABSENT); a number column's
+# cells are numbers. A value the catalogue refuses (a number that isn't finite, an integer that
+# isn't a whole number, or one R can't hold) is refused too: the catalogue would never serve it,
+# and opengwasr never rounds one. A release-only column (release_analysis_columns) is parsed the
+# same way, by opengwasdb's type, a count being a whole number that isn't negative and a proportion
+# a number in [0, 1]; opengwasdb
+# writes a number that isn't finite as blank, so "NaN" there is refused. finish_analyses() types
+# them (type_analyses()).
+catalogue_value <- function(cell, name, type, store_id, release_id, call) {
+  cell[!nzchar(cell) | (name %in% c("maf_threshold", "info_score_threshold") & cell %in% "NaN")] <- NA
+  if (type == "text") return(cell)
+  number <- suppressWarnings(as.numeric(cell))
+  whole <- type %in% c("integer", "count")
+  bad <- !is.na(cell) & (is.na(number) | !is.finite(number) |
+                           (whole & (number != round(number) | abs(number) > .Machine$integer.max)) |
+                           (type == "count" & number < 0) |
+                           (type == "proportion" & (number < 0 | number > 1)))
+  if (any(bad)) {
+    catalogue <- name %in% names(analysis_columns)
+    og_abort(c(paste0("Store Release ", release_names(store_id, release_id), " has a `", name, "` in its analyses.tsv that isn't ",
+                      switch(type, integer = "a whole number", count = "a count (a whole number, 0 or more)",
+                             proportion = "a proportion (a number from 0 to 1)", "a finite number"), ": ",
+                      some_ids(unique(cell[bad]), 5, quote = "\""), "."),
+               i = paste(if (catalogue) "The catalogue refuses such a value, so the API would never serve it." else
+                           "opengwasdb's store format never writes such a value there.",
+                         "Ask the Store Release's publisher.")),
+             class = "opengwasr_invalid_analyses", store_id = store_id, release_id = release_id, column = name,
+             values = unique(cell[bad]), call = call)
+  }
+  number
+}
+
+# An Analysis's outcome type as the catalogue derives it, which the API Source returns and
+# `original_units` reads: opengwasdb-stores src/analysis_catalog/policy.py `outcome_type()` (at
+# 8928f40d). "binary" when `sample_size_kind` is "case_control" or `stored_effect_scale` is
+# "log_or"; "continuous" for "sd" with any other sample size kind (opengwasdb's SampleSizeKind,
+# opengwasdb/model/enums.py at 58661470: total, effective and variant_level); NA for every other
+# pair, a blank included.
+analysis_outcome_type <- function(stored_effect_scale, sample_size_kind) {
+  if (length(stored_effect_scale) == 0) return(character())
+  ifelse(sample_size_kind %in% "case_control" | stored_effect_scale %in% "log_or", "binary",
+         ifelse(stored_effect_scale %in% "sd" & sample_size_kind %in% c("total", "effective", "variant_level"),
+                "continuous", NA_character_))
 }

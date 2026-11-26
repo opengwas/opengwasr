@@ -4,15 +4,12 @@
 \alias{og_ld_proxies}
 \title{LD proxies}
 \usage{
-og_ld_proxies(src, variants, ld = NULL, r2 = 0.8, kb = 10000)
+og_ld_proxies(src, variants, r2 = 0.8, kb = 10000)
 }
 \arguments{
 \item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
-
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match the Assigned
-Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.}
 
 \item{r2}{The smallest r² of a proxy.}
 
@@ -30,16 +27,17 @@ about LD itself. It never substitutes one variant's Associations for another's (
 \code{vignette("ld")}).
 }
 \details{
-\code{variants} and \code{ld} are as for \code{\link[=og_ld_matrix]{og_ld_matrix()}}; an LD Store can only be named, not a PLINK
-Reference. Variants the LD Store doesn't hold have no proxies, and give a warning of class
+\code{variants} are as for \code{\link[=og_ld_matrix]{og_ld_matrix()}}, and the LD Store is chosen the same way: the Source's
+\code{ld_store} (\code{og_api(ld_store = )}), else matched to the Assigned Ancestry of the Associations'
+Analyses. A Local Source is refused: it reads no LD Stores. Variants the LD Store doesn't hold have no proxies, and give a warning of class
 \code{opengwasr_ld_absent_variants}. The API refuses an \code{r2} and \code{kb} the LD Store can't answer exactly
 (\code{opengwasr_ld_refusal}, with \code{reason}, \code{t_far}, \code{near_bp} and \code{far_bp}). One Job takes at most
 1,000 variants; more are split.
 }
 \examples{
 \dontrun{
-src <- og_api()
-px <- og_ld_proxies(src, "16:53767042:C:T", ld = "EUR")
+src <- og_api(ld_store = "EUR")
+px <- og_ld_proxies(src, "16:53767042:C:T")
 head(px)
 }
 }

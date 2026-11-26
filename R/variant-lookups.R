@@ -3,13 +3,14 @@
 #' `og_variants_rsid()` returns the variants the GWAS Stores' own variant tables hold for `rsids`;
 #' `og_variants_chrpos()` those at `positions`. They are how you find ALIDs (see `vignette("opengwasr")`).
 #' Each runs as Jobs on the API, split when it is over a Job's limits (1,000 values, 10 GWAS Stores),
-#' and waits for them.
+#' and waits for them. A Local Source ([og_local()]) answers from the Store Releases it holds, with
+#' the same rows.
 #'
 #' You get every match: one row per ALID per Store Release that holds it, so a multiallelic rsID, or a
 #' position with several alleles, gives several rows. A value nothing matches has no row. Rows are in
 #' the order the Jobs returned them. rsIDs are matched in lower case.
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()] or [og_local()].
 #' @param rsids rsIDs, such as `"rs1421085"`.
 #' @param positions GRCh38 positions as `"chromosome:position"`, such as `"16:53767042"` (a `chr`
 #'   prefix is allowed).
@@ -31,6 +32,9 @@ og_variants_rsid.og_api_source <- function(src, rsids, releases = NULL) {
                releases, limit = "rsids")
 }
 
+#' @export
+og_variants_rsid.og_local_source <- og_variants_rsid.og_api_source
+
 #' @rdname og_variants_rsid
 #' @export
 og_variants_chrpos <- function(src, positions, releases = NULL) UseMethod("og_variants_chrpos")
@@ -40,6 +44,9 @@ og_variants_chrpos.og_api_source <- function(src, positions, releases = NULL) {
   lookup_query(src, "api/variants/chrpos", "positions",
                check_lookup_values(positions, "positions", identity), releases, limit = "positions")
 }
+
+#' @export
+og_variants_chrpos.og_local_source <- og_variants_chrpos.og_api_source
 
 # Kept: R argument types, which the API can't see. What a value looks like is the API's to say.
 check_lookup_values <- function(x, arg, normalise, call = rlang::caller_env()) {

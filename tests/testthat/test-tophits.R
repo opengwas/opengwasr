@@ -445,7 +445,6 @@ test_that("og_tophits() is a Source generic, and checks its arguments", {
   expect_true(is.function(getS3method("og_tophits", "og_api_source")))
   expect_error(og_tophits(src, cad, clump = FALSE, r2 = 0.01), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, clump = FALSE, kb = 500), class = "opengwasr_argument")
-  expect_error(og_tophits(src, cad, clump = FALSE, ld = "EUR"), class = "opengwasr_argument")
   expect_error(og_tophits(src, 1:3, clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, character(), clump = FALSE), class = "opengwasr_argument")
   expect_error(og_tophits(src, cad, threshold = "5e-8", clump = FALSE), class = "opengwasr_argument")

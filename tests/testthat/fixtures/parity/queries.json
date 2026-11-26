@@ -1,0 +1,125 @@
+{
+ "sources": {
+  "three": ["dense", "ragged", "hyb"],
+  "completed": ["dense", "ragged", "hyb-c"]
+ },
+ "queries": [
+  {"name": "analyses-catalogue", "source": "three", "verb": "og_analyses",
+   "args": {},
+   "requests": []},
+  {"name": "analyses-lookup", "source": "three", "verb": "og_analyses",
+   "args": {"ids": ["s:bmi_irn", "a", "hyb:trait_b"]},
+   "requests": []},
+  {"name": "analyses-pinned", "source": "completed", "verb": "og_analyses",
+   "args": {"ids": ["trait_a"], "releases": ["hyb/v1-completed"]},
+   "requests": []},
+  {"name": "variants-rsid", "source": "three", "verb": "og_variants_rsid",
+   "args": {"rsids": ["rs5000", "rs1003", "rs77", "rs424242"]},
+   "requests": [
+    {"endpoint": "/api/variants/rsid", "body": {"rsids": ["rs5000", "rs1003", "rs77", "rs424242"], "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "variants-chrpos", "source": "three", "verb": "og_variants_chrpos",
+   "args": {"positions": ["1:5000", "chrX:2500", "1:1001500", "2:999"]},
+   "requests": [
+    {"endpoint": "/api/variants/chrpos", "body": {"positions": ["1:5000", "chrX:2500", "1:1001500", "2:999"], "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "associations-rsids", "source": "three", "verb": "og_associations",
+   "args": {"variants": ["1:5000:C:G", "rs1003", "rs424242"], "analyses": ["s:bmi_irn", "residual-rag:a"]},
+   "requests": [
+    {"endpoint": "/api/variants/rsid", "body": {"rsids": ["rs1003", "rs424242"], "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}]}},
+    {"endpoint": "/api/associations", "body": {"variants": ["1:5000:C:G", "1:1001500:A:G"], "analyses": ["s:bmi_irn", "residual-rag:a"], "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "associations-multiallelic", "source": "three", "verb": "og_associations",
+   "args": {"variants": ["X:2500:G:T", "rs5000"], "analyses": ["bmi_irn"]},
+   "requests": [
+    {"endpoint": "/api/variants/rsid", "body": {"rsids": ["rs5000"], "releases": [{"store_id": "s", "release_id": "r"}]}},
+    {"endpoint": "/api/associations", "body": {"variants": ["X:2500:G:T", "1:5000:A:C", "1:5000:C:G"], "analyses": ["s:bmi_irn"], "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}]}}
+   ]},
+  {"name": "associations-missing", "source": "three", "verb": "og_associations",
+   "args": {"variants": ["1:1003500:A:G", "1:1001500:A:G", "1:1000000:A:G"], "analyses": ["residual-rag:a", "residual-rag:b"]},
+   "requests": [
+    {"endpoint": "/api/associations", "body": {"variants": ["1:1003500:A:G", "1:1001500:A:G", "1:1000000:A:G"], "analyses": ["residual-rag:a", "residual-rag:b"], "observed_only": false, "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "associations-observed-only", "source": "three", "verb": "og_associations",
+   "args": {"variants": ["1:1003500:A:G", "1:1001500:A:G", "1:1000000:A:G"], "analyses": ["residual-rag:a", "residual-rag:b"], "observed_only": true},
+   "requests": [
+    {"endpoint": "/api/associations", "body": {"variants": ["1:1003500:A:G", "1:1001500:A:G", "1:1000000:A:G"], "analyses": ["residual-rag:a", "residual-rag:b"], "observed_only": true, "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "associations-store-pin", "source": "completed", "verb": "og_associations",
+   "args": {"variants": ["1:9000:A:G", "1:51000:A:G"], "analyses": ["trait_a", "trait_b", "s:bmi_irn"], "releases": ["s", "hyb/v1-completed"]},
+   "requests": [
+    {"endpoint": "/api/associations", "body": {"variants": ["1:9000:A:G", "1:51000:A:G"], "analyses": ["hyb:trait_a", "hyb:trait_b", "s:bmi_irn"], "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "hyb", "release_id": "v1-completed"}]}}
+   ]},
+  {"name": "tophits-truncated", "source": "three", "verb": "og_tophits",
+   "args": {"analyses": ["s:bmi_irn"], "limit": 5, "clump": false},
+   "requests": [
+    {"endpoint": "/api/tophits", "body": {"analyses": ["s:bmi_irn"], "threshold": 5e-08, "limit": 5, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}]}}
+   ]},
+  {"name": "tophits-two-stores", "source": "three", "verb": "og_tophits",
+   "args": {"analyses": ["hyb:trait_b", "residual-rag:b"], "clump": false},
+   "requests": [
+    {"endpoint": "/api/tophits", "body": {"analyses": ["hyb:trait_b", "residual-rag:b"], "threshold": 5e-08, "limit": 1000, "observed_only": false, "releases": [{"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "tophits-between-tiers", "source": "three", "verb": "og_tophits",
+   "args": {"analyses": ["residual-rag:a"], "threshold": 1e-05, "clump": false},
+   "requests": [
+    {"endpoint": "/api/tophits", "body": {"analyses": ["residual-rag:a"], "threshold": 1e-05, "limit": 1000, "observed_only": false, "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "tophits-observed-only-completed", "source": "completed", "verb": "og_tophits",
+   "args": {"analyses": ["hyb:trait_a", "hyb:trait_b"], "threshold": 0.0005, "observed_only": true, "clump": false},
+   "requests": [
+    {"endpoint": "/api/tophits", "body": {"analyses": ["hyb:trait_a", "hyb:trait_b"], "threshold": 0.0005, "limit": 1000, "observed_only": true, "releases": [{"store_id": "hyb", "release_id": "v1-completed"}]}}
+   ]},
+  {"name": "tophits-pinned", "source": "completed", "verb": "og_tophits",
+   "args": {"analyses": ["trait_b"], "clump": false, "releases": ["hyb/v1-completed"]},
+   "requests": [
+    {"endpoint": "/api/tophits", "body": {"analyses": ["hyb:trait_b"], "threshold": 5e-08, "limit": 1000, "observed_only": false, "releases": [{"store_id": "hyb", "release_id": "v1-completed"}]}}
+   ]},
+  {"name": "tophits-threshold-refused", "source": "three", "verb": "og_tophits",
+   "args": {"analyses": ["s:bmi_irn"], "threshold": 0.001, "clump": false},
+   "requests": [
+    {"endpoint": "/api/tophits", "body": {"analyses": ["s:bmi_irn"], "threshold": 0.001, "limit": 1000, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}]}}
+   ]},
+  {"name": "phewas", "source": "three", "verb": "og_phewas",
+   "args": {"variants": "1:9000:A:G", "threshold": 1},
+   "requests": [
+    {"endpoint": "/api/phewas", "body": {"variant": "1:9000:A:G", "threshold": 1, "limit": 1000, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "phewas-limit", "source": "three", "verb": "og_phewas",
+   "args": {"variants": "1:51000:A:G", "threshold": 0.0001, "limit": 1},
+   "requests": [
+    {"endpoint": "/api/phewas", "body": {"variant": "1:51000:A:G", "threshold": 0.0001, "limit": 1, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "phewas-threshold-one", "source": "three", "verb": "og_phewas",
+   "args": {"variants": "rs1007", "threshold": 1, "releases": ["residual-rag"]},
+   "requests": [
+    {"endpoint": "/api/variants/rsid", "body": {"rsids": ["rs1007"], "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}},
+    {"endpoint": "/api/phewas", "body": {"variant": "1:1003500:A:G", "threshold": 1, "limit": 1000, "observed_only": false, "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "phewas-limit-refused", "source": "three", "verb": "og_phewas",
+   "args": {"variants": "1:9000:A:G", "limit": 0},
+   "requests": [
+    {"endpoint": "/api/phewas", "body": {"variant": "1:9000:A:G", "threshold": 1e-08, "limit": 0, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "residual-rag", "release_id": "comp"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "range", "source": "three", "verb": "og_range",
+   "args": {"analyses": ["s:bmi_irn", "hyb:trait_a"], "chromosome": "1", "start": 4000, "end": 9000},
+   "requests": [
+    {"endpoint": "/api/associations/range", "body": {"analyses": ["s:bmi_irn", "hyb:trait_a"], "chromosome": "1", "start": 4000, "end": 9000, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}, {"store_id": "hyb", "release_id": "v1"}]}}
+   ]},
+  {"name": "range-completed", "source": "three", "verb": "og_range",
+   "args": {"analyses": ["residual-rag:a", "residual-rag:b"], "chromosome": "1", "start": 1001000, "end": 1004000},
+   "requests": [
+    {"endpoint": "/api/associations/range", "body": {"analyses": ["residual-rag:a", "residual-rag:b"], "chromosome": "1", "start": 1001000, "end": 1004000, "observed_only": false, "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "range-completed-observed-only", "source": "three", "verb": "og_range",
+   "args": {"analyses": ["residual-rag:a", "residual-rag:b"], "chromosome": "1", "start": 1001000, "end": 1004000, "observed_only": true},
+   "requests": [
+    {"endpoint": "/api/associations/range", "body": {"analyses": ["residual-rag:a", "residual-rag:b"], "chromosome": "1", "start": 1001000, "end": 1004000, "observed_only": true, "releases": [{"store_id": "residual-rag", "release_id": "comp"}]}}
+   ]},
+  {"name": "range-chromosome-refused", "source": "three", "verb": "og_range",
+   "args": {"analyses": ["s:bmi_irn"], "chromosome": "27", "start": 1, "end": 1000},
+   "requests": [
+    {"endpoint": "/api/associations/range", "body": {"analyses": ["s:bmi_irn"], "chromosome": "27", "start": 1, "end": 1000, "observed_only": false, "releases": [{"store_id": "s", "release_id": "r"}]}}
+   ]}
+ ]
+}

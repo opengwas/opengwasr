@@ -5,3 +5,11 @@ opengwasr is built outside-in. Each epic starts with a ticket that writes its vi
 Vignettes must build on CRAN and in CI without network access, so they replay real API responses recorded with httptest2, and are re-recorded when the API changes. Unit tests use a stateful fake Data API (webfakes) instead, because the job protocol's queued, running and succeeded states can't be expressed by replayed recordings.
 
 **Considered:** precomputed vignettes knitted by hand against the live API (realistic, but nothing is checked on CRAN or CI); live-only vignettes skipped without credentials (CRAN users would see empty vignettes); writing the implementation first and documenting it afterwards (the interface would follow the implementation rather than the user).
+
+**Clarification, 25 November 2026 (tutorial-driven development).** The owner names this practice tutorial-driven development. CONTRIBUTING.md, "How work proceeds", now holds its working rules:
+- each ticket names the chunks it turns on;
+- when building shows the tutorial is wrong, the tutorial changes first;
+- a chunk that evaluates shows real output;
+- `eval = FALSE` stays only where CI can't run the chunk, with the reason stated.
+
+Local Source vignettes evaluate against example Store Releases bundled in the package wherever Python and ogquery are available.

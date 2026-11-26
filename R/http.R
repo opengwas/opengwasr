@@ -64,7 +64,6 @@ round_up_15 <- function(x) {
 api_response <- function(src, path, query = NULL, body = NULL, call = rlang::caller_env(),
                          timeout = NULL, method = NULL, deadline = NULL) {
   force(call)
-  if (inherits(src, "og_no_source")) source_required(call)
   deadline <- deadline %||% call_deadline() %||% (job_now() + src$timeout)
   repeat {
     budget <- deadline - job_now()

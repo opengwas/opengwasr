@@ -117,6 +117,9 @@ fake_source <- function(fake, key = fake_key, ...) {
   )
 }
 
+# A Source like `src` with another LD resource: other LD for one call is another Source (#43).
+with_ld <- function(src, ld_store) og_api(inherit = src, ld_store = ld_store)
+
 # Switch a fake scenario on for the rest of the calling test: `paging` ("cursor", "offset" or
 # "truncating") or `malformed` ("true"). Undone when the test ends.
 fake_set <- function(fake, setting, value, default, env = parent.frame()) {

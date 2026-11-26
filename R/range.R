@@ -12,7 +12,7 @@
 #' `opengwasr_request_too_large`; it is never split to get round that. The columns are those of
 #' [og_associations()].
 #'
-#' @param src A Source, from [og_api()].
+#' @param src A Source, from [og_api()] or [og_local()].
 #' @param analyses Analysis identifiers (see [og_analyses()]).
 #' @param chromosome One chromosome, such as `"9"` or `"X"`.
 #' @param start,end The first and last position, inclusive.
@@ -48,3 +48,6 @@ og_range.og_api_source <- function(src, analyses, chromosome, start, end, observ
                     spec = list(interval = list(chromosome = chromosome, start = start, end = end,
                                                 limit = limits$range_window)))
 }
+
+#' @export
+og_range.og_local_source <- og_range.og_api_source

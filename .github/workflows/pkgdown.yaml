@@ -33,6 +33,20 @@ jobs:
           extra-packages: any::pkgdown, local::.
           needs: website
 
+      # The Local Source vignette reads the bundled example Store Releases through ogquery when
+      # RETICULATE_PYTHON names a Python that has it, so the site shows those chunks evaluated.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install ogquery and point reticulate at it
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "ogquery>=0.1.0,<1"
+          python -c "import ogquery.release, ogquery.version; print(ogquery.version.__version__)"
+          echo "RETICULATE_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+
       - name: Build site
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE, dest_dir = "docs/_site")
         shell: Rscript {0}

@@ -161,6 +161,37 @@ test_api("the vignette workflow: BMI top hits looked up in CAD, Imputed included
   }
 })
 
+test_api("an EAF the API sends as \".\" is NA, and eaf stays a number", {
+  x <- og_associations(src, c(snv, "21:1000:A:G"), bmi, releases = rel)
+  expect_equal(x$alid, c(snv, "21:1000:A:G"))
+  expect_type(x$eaf, "double")
+  expect_equal(x$eaf, c(0.38, NA))
+}, live = FALSE)
+
+test_api("eaf and n keep every digit of the API's numbers when a page also holds \".\" in them", {
+  x <- og_associations(src, c("21:3000:A:G", "21:4000:A:G"), bmi, releases = rel)
+  expect_identical(x$eaf, c(0.05000000074505806, NA))
+  # A per-Association N as sent; "." falls back to the Analysis's sample size.
+  expect_identical(x$n, c(30694.123456789012, 532396))
+}, live = FALSE)
+
+test_that("a result page spaced as json.dumps spaces it reads \".\" in eaf and n as NA, and rsid \".\" as text", {
+  page <- paste('{"eaf": 0.05000000074505806, "n": ".", "rsid": "."}', '{"eaf": ".", "n": 30694.123456789012, "rsid": "rs1"}',
+                sep = "\n")
+  rows <- ndjson_rows(page, "job", NULL)
+  expect_identical(rows$eaf, c(0.05000000074505806, NA))
+  expect_identical(rows$n, c(NA, 30694.123456789012))
+  expect_identical(rows$rsid, c(".", "rs1"))
+})
+
+test_api("an infinite SE gives beta NaN, and pval is the API's own log10_p", {
+  x <- og_associations(src, c(snv, "21:2000:A:G"), bmi, releases = rel)
+  inf <- x[x$alid == "21:2000:A:G", ]
+  expect_identical(inf$se, Inf)
+  expect_true(is.nan(inf$beta))
+  expect_equal(inf$pval, 10^-8.7)
+}, live = FALSE)
+
 test_api("original_units is passed to the shaper: per-SD Analyses are rescaled, log-odds ones are not", {
   plain <- og_associations(src, snv, c(cad, bmi), releases = rel)
   scaled <- og_associations(src, snv, c(cad, bmi), original_units = TRUE, releases = rel)

@@ -4,15 +4,12 @@
 \alias{og_ld_reflookup}
 \title{Is a variant in the LD Store?}
 \usage{
-og_ld_reflookup(src, variants, ld = NULL)
+og_ld_reflookup(src, variants)
 }
 \arguments{
 \item{src}{A Source, from \code{\link[=og_api]{og_api()}}.}
 
 \item{variants}{ALIDs and rsIDs, or a data frame of Associations.}
-
-\item{ld}{An LD Store's name, an ancestry code (its LD Store), or \code{NULL} to match the Assigned
-Ancestry of the Associations' Analyses. LD Stores only: a PLINK Reference is refused.}
 }
 \value{
 A data frame with \code{\link[=og_provenance]{og_provenance()}} attached (\code{ld}, \code{ld_choice}, \code{absent}), one row per
@@ -24,14 +21,13 @@ without an \code{rsid} column) and \code{present}.
 instruments before clumping or building an LD matrix. See \code{vignette("ld")}.
 }
 \details{
-\code{variants} and \code{ld} are as for \code{\link[=og_ld_proxies]{og_ld_proxies()}}; an LD Store can only be named, not a PLINK
-Reference. An rsID stands for every ALID it names, one row each; an rsID no GWAS Store holds has
+\code{variants} and the LD Store are as for \code{\link[=og_ld_proxies]{og_ld_proxies()}}; a Local Source is refused. An rsID stands for every ALID it names, one row each; an rsID no GWAS Store holds has
 one row with \code{alid} \code{NA} and \code{present} \code{FALSE}. A variant the LD Store doesn't hold is a row, not
 a warning. One Job takes at most 10,000 variants; more are split.
 }
 \examples{
 \dontrun{
-src <- og_api()
-og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085"), ld = "EUR")
+src <- og_api(ld_store = "EUR")
+og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085"))
 }
 }

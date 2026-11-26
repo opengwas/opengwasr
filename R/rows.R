@@ -7,6 +7,10 @@
 #   beta = z * se
 #   pval = 10^log10_p     (underflows to 0 above |z| of about 38.5; `z` stays exact)
 #
+# `beta` is NaN where `se` isn't finite, as ogquery derives it; `pval` is always the row's own
+# `log10_p`, whatever it is (opengwasr doesn't police the API's answer). `eaf` and `n` sent as "."
+# are NA.
+#
 # Sample size comes with every row: `n` is the row's own N where the API sends one (the dev API's
 # molecular Analyses, such as OGS-00027's, do; most GWAS Stores don't), otherwise the Analysis's
 # `sample_size`. `sample_size_kind`, `ncase` and `ncontrol` come from the Analysis (`n_cases`,
@@ -42,7 +46,15 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   # An Analysis of the rows with no metadata (the catalogue doesn't list it yet) can't be rescaled.
   if (original_units) check_original_units_known(unique(rows$id), analyses, call)
   if (!is.null(rows$rsid)) rows$rsid <- rsid_or_na(rows$rsid)
-  if (is.null(rows$beta)) rows$beta <- rows$z * rows$se
+  # Numbers from both Sources, with NA where ogquery wrote "." (a column of nulls only parses as logical).
+  for (name in intersect(no_value_fields, names(rows))) rows[[name]] <- as.numeric(rows[[name]])
+  # `beta` as ogquery derives it (ogquery stats.py `association_statistics()`, ADR 0104, lines
+  # 155-161): NaN where the SE isn't finite (a missing Association, or an infinite SE a release
+  # before format 0.2.3 may hold), where z * Inf would read as a value. `pval` is the row's own.
+  if (is.null(rows$beta)) {
+    rows$beta <- rows$z * rows$se
+    rows$beta[!is.finite(rows$se)] <- NaN
+  }
   if (is.null(rows$pval)) rows$pval <- 10^rows$log10_p
   rows$log10_p <- NULL
   at <- match(rows$id, analyses$id)
@@ -68,6 +80,11 @@ shape_associations <- function(rows, analyses, original_units = FALSE, call = rl
   rownames(rows) <- NULL
   rows
 }
+
+# The numbers ogquery's `resolve_rows` writes as "." when there is none (`_eaf_or_missing`,
+# `_n_or_missing`). Both Sources read "." as NA before shaping: the API Source in the page's text
+# (no_value_as_null()), a Local Source in ogquery's rows (api_association_rows()).
+no_value_fields <- c("eaf", "n")
 
 # No Associations, with the columns a result would have.
 empty_associations <- function() {
@@ -131,16 +148,21 @@ check_original_units_known <- function(ids, analyses, call = rlang::caller_env()
 # ALID. `ids` are the canonical Analysis ids as asked for.
 order_associations <- function(rows, ids) {
   if (nrow(rows) < 2) return(rows)
-  chr <- as.character(rows$chromosome)
+  o <- order(match(rows$id, ids), chromosome_rank(rows$chromosome), rows$position, rows$alid, method = "radix")
+  rows <- rows[o, , drop = FALSE]
+  rownames(rows) <- NULL
+  rows
+}
+
+# Each chromosome's place in genome order: 1-22, X, Y, MT (and M), then any other name, by name.
+chromosome_rank <- function(chromosome) {
+  chr <- as.character(chromosome)
   rank <- suppressWarnings(as.numeric(chr))
   special <- match(chr, c("X", "Y", "MT", "M"))
   rank[is.na(rank)] <- 22 + special[is.na(rank)]
   other <- is.na(rank)
   rank[other] <- 1000 + match(chr[other], sort(unique(chr[other])))
-  o <- order(match(rows$id, ids), rank, rows$position, rows$alid, method = "radix")
-  rows <- rows[o, , drop = FALSE]
-  rownames(rows) <- NULL
-  rows
+  rank
 }
 
 # Put the rows of a split query that are in a given order per Analysis (top hits, strongest first)

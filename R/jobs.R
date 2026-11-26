@@ -274,13 +274,22 @@ ndjson_rows <- function(ndjson, job_id, call) {
   lines <- strsplit(ndjson, "\n", fixed = TRUE)[[1]]
   lines <- lines[nzchar(trimws(lines))]
   if (length(lines) == 0) return(data.frame())
+  text <- no_value_as_null(paste0("[", paste(lines, collapse = ","), "]"))
   # The parser's own message quotes the text it choked on, which is the server's, so it is not kept.
-  rows <- tryCatch(
-    jsonlite::fromJSON(paste0("[", paste(lines, collapse = ","), "]"), simplifyVector = TRUE),
-    error = function(e) NULL
-  )
+  rows <- tryCatch(jsonlite::fromJSON(text, simplifyVector = TRUE), error = function(e) NULL)
   if (!is.data.frame(rows)) job_invalid("A page of its result isn't valid newline-delimited JSON.", job_id, call)
   rows
+}
+
+# The numeric members the API may send as "." (ogquery's marker for none, `no_value_fields`)
+# written as null, before the page is parsed (rsid and source_alid are text, and keep it). A member
+# holding numbers and "." would otherwise be made text by jsonlite, each number written with 15
+# significant digits, which loses the last digits of a double. A member name in quotes, then a
+# colon, can't occur inside a JSON string (its quotes would be escaped), so only members match;
+# json.dumps may put a space after the colon.
+no_value_as_null <- function(text) {
+  members <- paste0('"(', paste(no_value_fields, collapse = "|"), ')"\\s*:\\s*"\\."')
+  gsub(members, '"\\1":null', text, perl = TRUE)
 }
 
 # Say so when the API reattached a submission to a Job it already had.
@@ -314,7 +323,7 @@ collect_job <- function(src, job, deadline, call) {
 job_releases <- function(status) {
   releases <- status$result$manifest$releases
   if (length(releases) > 0) {
-    return(vapply(releases, function(r) paste0(r$store_id, "/", r$release_id), ""))
+    return(release_names(releases))
   }
   release_id <- status$release_id %||% status$result$release_id
   if (is.null(release_id)) character() else strsplit(release_id, ",", fixed = TRUE)[[1]]

@@ -14,14 +14,21 @@ A list of class \code{og_provenance}:
 \itemize{
 \item \code{query}: the call and its arguments, as text; \code{args}: the arguments as a list.
 \item \code{store_releases}: the Store Releases that answered, as \verb{<store_id>/<release_id>}.
-\item \code{job_ids}: the API's Job ids; \code{existing}: whether the API reattached you to a Job it already had.
+\item \code{job_ids}: the API's Job ids (none for what a Local Source answered); \code{existing}: whether the
+API reattached you to a Job it already had.
 \item \code{cost_estimate}: the API's cost estimate for the Jobs, summed.
 \item \code{total}, \code{truncated}: how many Associations matched (what the API counted), and whether \code{limit} cut any off; \code{returned}: the rows of \code{x}.
 \item \code{retrieved}: when the answer was read, as a \code{POSIXct}.
 \item Clumped results: \code{clump}, a data frame with one row per Analysis clumped (one row, \code{id} \code{NA},
-for \code{\link[=og_clump]{og_clump()}}'s one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
-(the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants).
-\item LD results: \code{ld}, \code{ld_choice} and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
+for \code{\link[=og_clump]{og_clump()}} of one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
+(the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants),
+and \code{clumps}: \code{"computed"} (clumped on the fly, as every clumping is today) or, once Store
+Releases carry them, \code{"stored"}. \code{ld_from} says where the LD came from: \code{"source"} (the
+Source's LD resource) or \code{"ancestry"} (each Analysis's Assigned Ancestry, on an API Source with
+none).
+\item LD results: \code{ld}, \code{ld_choice}, \code{ld_from} (as above) and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
+\code{\link[=og_clump]{og_clump()}} of Analyses matched to several LD Stores gives each in \code{ld}, and how each was
+chosen in \code{ld_choice}, one for one.
 }
 
 A data frame whose provenance was dropped (by \code{merge()}, say) raises an error of class
@@ -30,7 +37,8 @@ attribute, and gives the \code{opengwasr_provenance_stale} warning and \code{NUL
 }
 \description{
 \code{og_provenance(x)} says how \code{x} was produced: the call, the Store Releases that answered, the
-Job ids, and the API's counts, including whether \code{limit} cut any off (\code{total}, \code{truncated}).
+Job ids, and the counts, including whether \code{limit} cut any off (\code{total}, \code{truncated}). A Local
+Source runs no Jobs: its answers record no Job ids, and no cost estimate.
 }
 \details{
 It is attached to the data frame a query function returns, and describes exactly those rows. After

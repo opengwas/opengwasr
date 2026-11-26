@@ -3,13 +3,16 @@
 #
 #   Rscript inst/plink/make-reference.R      # PLINK 1.9 from genetics.binaRies, else on the PATH
 #
-# 300 individuals, 36 variants. Genotypes come from haplotypes drawn with a shared latent factor per
+# 300 individuals, 49 variants. Genotypes come from haplotypes drawn with a shared latent factor per
 # LD block, so each block's variants are in LD with each other and blocks are independent. The
 # rsIDs of the fake Data API's coronary artery disease and BMI top hits (tests/testthat/fake-server.R)
 # are among the variants, in two blocks on chromosomes 9 and 16; rs10738610 is deliberately left out,
 # so a top hit the reference lacks exists. So are the rsIDs of the bundled example Store Releases'
 # `s:bmi_irn` top hits (inst/stores), on chromosomes 1 and 2, appended last so the variants before
-# them keep their genotypes; rs1007 (on X) is left out, for the same reason. Tests never read this
+# them keep their genotypes; rs1007 (on X) is left out, for the same reason. Appended after them
+# (#45), so that two Analyses each have several variants in it: the example `hyb:trait_a` top hits'
+# rsIDs (two LD blocks and two lone variants on chromosome 1), and a few of the real CAD and BMI
+# index variants the LD vignette clumps (each alone). Tests never read this
 # script's numbers: they decode the `.bed` themselves (helper-plink.R) and compute r and the clumps
 # in plain R.
 plink <- if (requireNamespace("genetics.binaRies", quietly = TRUE)) {
@@ -48,9 +51,25 @@ v <- rbind(
   variant("rs5000", 1, 5000, "C", "G", "E", 0.90, 0.42),
   variant("rs1004", 1, 9000, "A", "G", "F", 0.00, 0.35),
   variant("rs1005", 2, 300, "C", "T", "G", 0.85, 0.38),
-  variant("rs1006", 2, 7000, "A", "C", "G", 0.85, 0.36)
+  variant("rs1006", 2, 7000, "A", "C", "G", 0.85, 0.36),
+  # the example Store Releases' hyb:trait_a top hits (its 1:1000:A:G has no rsID)
+  variant("rs1050", 1, 51000, "A", "G", "H", 0.90, 0.40),
+  variant("rs1100", 1, 101000, "C", "T", "H", 0.90, 0.38),
+  variant("rs1150", 1, 151000, "A", "C", "H", 0.80, 0.42),
+  variant("rs1200", 1, 300000, "G", "T", "I", 0.85, 0.35),
+  variant("rs1250", 1, 350000, "A", "G", "I", 0.85, 0.37),
+  variant("rs1300", 1, 400000, "C", "G", "J", 0.00, 0.33),
+  variant("rs1350", 1, 450000, "A", "T", "K", 0.00, 0.36),
+  # real CAD index variants (vignette("ld")), each alone
+  variant("rs55730499", 6, 160584578, "C", "T", "L", 0, 0.30),
+  variant("rs7528419", 1, 109274570, "A", "G", "M", 0, 0.30),
+  variant("rs4711863", 6, 12915185, "C", "G", "N", 0, 0.30),
+  # real BMI index variants (vignette("ld")), each alone
+  variant("rs56094641", 16, 53772541, "A", "G", "O", 0, 0.40),
+  variant("rs6567160", 18, 60161902, "C", "T", "P", 0, 0.30),
+  variant("rs539515", 1, 177919890, "A", "C", "Q", 0, 0.30)
 )
-stopifnot(nrow(v) == 36, !anyDuplicated(v$rsid))
+stopifnot(nrow(v) == 49, !anyDuplicated(v$rsid))
 
 latent <- list()
 haplotype <- function(v) {

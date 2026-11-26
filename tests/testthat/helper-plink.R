@@ -1,6 +1,6 @@
 # PLINK References in tests: the committed fileset, and expectations worked out without PLINK.
 #
-# `inst/plink/ref.{bed,bim,fam}` is synthetic (make-reference.R there: 300 people, 36 variants), and
+# `inst/plink/ref.{bed,bim,fam}` is synthetic (make-reference.R there: 300 people, 49 variants), and
 # comes with the package, so the Local Source vignette reads it too. Every expected number comes from
 # decoding the `.bed` here, in plain R, never from the code under test or from PLINK's own output.
 

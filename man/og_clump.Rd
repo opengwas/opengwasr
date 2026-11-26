@@ -53,7 +53,7 @@ any Job runs; so is \code{data} with no \code{id} (one set, with no ancestry to 
 Source, such as \code{og_api(inherit = src, ld_store = "EUR")}.
 
 On a Local Source, PLINK clumps on your machine with its PLINK Reference (\code{og_local(bfile = )}),
-one run per Analysis: \code{r2} and \code{kb} are required (there are no defaults to take, so without them
+one run per Analysis. Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class \code{opengwasr_plink_unadjusted} (see \code{\link[=og_local]{og_local()}}). \code{r2} and \code{kb} are required (there are no defaults to take, so without them
 it stops, with class \code{opengwasr_plink_settings_required}). Variants are matched by rsID, from
 \code{data}'s \code{rsid} column if it has one, else the Source's Store Releases' variant table; those with
 no rsID match are left out, with a message (class \code{opengwasr_plink_unmatched}, \code{count}). An

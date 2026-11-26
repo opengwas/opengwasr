@@ -192,6 +192,41 @@ test_that("og_clump() with PLINK clumps each Analysis on its own, one PLINK run 
   expect_equal(og_clump(ld_src, data[-1], r2 = 0.2, kb = 100), joint[-1], ignore_attr = TRUE)
 })
 
+test_that("LD from a PLINK Reference warns that it isn't adjusted for principal components, once per reference in a session", {
+  ld_src <- local_plink_source()
+  ref <- og_ld_resource(ld_src)
+  data <- data.frame(id = c("a", "b"), alid = c("9:22098620:A:G", "9:22098575:A:G"),
+                     rsid = c("rs2891168", "rs4977574"), z = c(5, 4), stringsAsFactors = FALSE)
+  # Clumping and LD matrices both warn, from where PLINK runs; the second call, and every call
+  # after, says nothing.
+  calls <- list(function() og_clump(ld_src, data, r2 = 0.2, kb = 100, by_analysis = FALSE),
+                function() og_ld_matrix(ld_src, c("rs4977574", "rs2891168")))
+  for (call in calls) {
+    reset_plink_unadjusted(ref$path)
+    w <- expect_warning(call(), class = "opengwasr_plink_unadjusted")
+    expect_equal(w$path, ref$path)
+    expect_match(conditionMessage(w), "without adjusting for population structure (principal components)", fixed = TRUE)
+    expect_no_warning(call())
+    expect_no_warning(og_clump(ld_src, data, r2 = 0.2, kb = 100))  # two PLINK runs, no warning
+  }
+  # Another PLINK Reference is another warning, once.
+  dir <- withr::local_tempdir()
+  file.copy(paste0(plink_fixture(), c(".bed", ".bim", ".fam")), dir)
+  other <- og_local(bfile = file.path(dir, "ref"))
+  w <- expect_warning(og_ld_matrix(other, c("rs4977574", "rs2891168")), class = "opengwasr_plink_unadjusted")
+  expect_equal(w$path, og_ld_resource(other)$path)
+  expect_no_warning(og_ld_matrix(other, c("rs4977574", "rs2891168")))
+  # Nothing to compute, nothing to warn of: an rsID the reference lacks runs no PLINK.
+  reset_plink_unadjusted(ref$path)
+  expect_no_warning(suppressMessages(og_ld_matrix(ld_src, "rs1")))
+  # og_tophits() clumping with a Local Source's PLINK Reference, too.
+  skip_if_no_local()
+  reset_plink_unadjusted(ref$path)
+  expect_warning(suppressMessages(og_tophits(local_source_of("dense", bfile = plink_fixture()), "s:bmi_irn",
+                                             r2 = 0.001, kb = 10000)),
+                 class = "opengwasr_plink_unadjusted")
+})
+
 # The "API | PLINK" row of vignette("ld")'s table: top hits from the API Source, unclumped, clumped
 # by an LD-only Local Source's PLINK Reference.
 test_that("og_clump(og_local(bfile = ), og_tophits(og_api(), ids, clump = FALSE)) clumps the API's top hits with PLINK", {
@@ -238,7 +273,9 @@ test_that("PLINK's temporary files are removed, on success and on failure", {
   expect_equal(left(), character())
   broken <- ref
   broken$path <- file.path(tempdir(), "missing-fileset")
-  expect_error(plink_run(broken, list(), function(file) character(), identity), class = "opengwasr_plink_failed")
+  reset_plink_unadjusted(broken$path)  # another reference: warned of once, as it is about to run
+  expect_warning(expect_error(plink_run(broken, list(), function(file) character(), identity), class = "opengwasr_plink_failed"),
+                 class = "opengwasr_plink_unadjusted")
   expect_equal(left(), character())
 })
 

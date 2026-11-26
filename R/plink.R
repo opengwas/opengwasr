@@ -220,8 +220,11 @@ plink_bim <- function(ref) {
 
 # The one runner: writes `files` (named character vectors, one line each) into a temporary
 # directory, runs PLINK on the reference with `flags(file)` (`file(name)` is a written file's path),
-# gives `read(out)` the output prefix, and removes the directory whatever happens.
+# gives `read(out)` the output prefix, and removes the directory whatever happens. Every LD PLINK
+# computes (clumping, matrices) comes through here, so this is where the user is told it isn't
+# adjusted for population structure.
 plink_run <- function(ref, files, flags, read, call = rlang::caller_env()) {
+  warn_plink_unadjusted(ref, call)
   dir <- tempfile("opengwasr-plink-")
   dir.create(dir)
   on.exit(unlink(dir, recursive = TRUE), add = TRUE)
@@ -294,6 +297,18 @@ plink_clump <- function(ref, rsid, z, r2, kb, call = rlang::caller_env()) {
   ids <- clumped[[dialect$id]]
   # TOTAL counts the others in the clump.
   list(leads = rsids[rsids %in% ids], size = clumped$TOTAL[match(rsid, ids)] + 1L)
+}
+
+# LD from a PLINK Reference is the raw genotypes' (ADR 0006): unlike the LD Stores and Genotype
+# Stores, it isn't adjusted for principal components. Said once per session for each reference
+# (rlang's frequency, keyed by its path), so a loop of calls doesn't repeat it.
+warn_plink_unadjusted <- function(ref, call = rlang::caller_env()) {
+  og_warn(c(paste0("LD from a PLINK Reference is computed from its genotypes without adjusting for population ",
+                   "structure (principal components), unlike OpenGWAS LD Stores and Genotype Stores, so it may be ",
+                   "less accurate."),
+            i = paste0("PLINK Reference: ", ref$path, ".")),
+          class = "opengwasr_plink_unadjusted", path = ref$path,
+          .frequency = "once", .frequency_id = ref$path, call = call)
 }
 
 # `r2` and `kb` are the user's with a PLINK Reference: it records no defaults to take instead.

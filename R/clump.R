@@ -38,7 +38,7 @@
 #' Source, such as `og_api(inherit = src, ld_store = "EUR")`.
 #'
 #' On a Local Source, PLINK clumps on your machine with its PLINK Reference (`og_local(bfile = )`),
-#' one run per Analysis: `r2` and `kb` are required (there are no defaults to take, so without them
+#' one run per Analysis. Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class `opengwasr_plink_unadjusted` (see [og_local()]). `r2` and `kb` are required (there are no defaults to take, so without them
 #' it stops, with class `opengwasr_plink_settings_required`). Variants are matched by rsID, from
 #' `data`'s `rsid` column if it has one, else the Source's Store Releases' variant table; those with
 #' no rsID match are left out, with a message (class `opengwasr_plink_unmatched`, `count`). An

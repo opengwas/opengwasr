@@ -222,7 +222,8 @@ test_that("og_local(inherit = local, bfile = ref) keeps the Store Releases and r
   expect_equal(other$path, file.path(normalise_path(dir), "ref"))
   expect_identical(other_src$releases, src$releases)
   expect_identical(other_src$handles, src$handles)  # the releases as opened, not opened again
-  m <- og_ld_matrix(other_src, c("rs5000", "rs1000"))
+  reset_plink_unadjusted(other$path)
+  expect_warning(m <- og_ld_matrix(other_src, c("rs5000", "rs1000")), class = "opengwasr_plink_unadjusted")  # another reference
   expect_equal(og_provenance(m)$ld, other$path)
   expect_equal(og_provenance(m)$ld_from, "source")
   expect_equal(og_provenance(og_ld_matrix(src, c("rs5000", "rs1000")))$ld, ref$path)

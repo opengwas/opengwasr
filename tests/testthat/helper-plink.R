@@ -9,6 +9,13 @@ plink_fixture <- function() {
   file.path(normalise_path(dir), "ref")  # as og_local(bfile = ) normalises it
 }
 
+# LD from a PLINK Reference warns once per session for each reference (`opengwasr_plink_unadjusted`,
+# #46, keyed by its path). The fixture's is taken as said already, so the tests that don't ask
+# about it stay quiet whichever runs first; a test that asserts the warning calls
+# reset_plink_unadjusted() first (rlang::reset_warning_verbosity()).
+reset_plink_unadjusted <- function(path = plink_fixture()) rlang::reset_warning_verbosity(path)
+suppressWarnings(rlang::warn("", .frequency = "once", .frequency_id = plink_fixture()))
+
 # An LD-only Local Source over the fixture (`og_local(bfile = )`, which needs no Python), or skip the
 # test: nothing here runs without a PLINK binary.
 local_plink_source <- function() {

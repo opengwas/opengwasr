@@ -24,7 +24,7 @@
 #' such as `og_api(inherit = src, ld_store = "EUR")`.
 #'
 #' On a Local Source, PLINK computes the matrix on your machine from its PLINK Reference
-#' (`og_local(bfile = )`). Variants are matched to the reference by rsID (an ALID by its `rsid`
+#' (`og_local(bfile = )`). Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class `opengwasr_plink_unadjusted` (see [og_local()]). Variants are matched to the reference by rsID (an ALID by its `rsid`
 #' column, if `variants` is a data frame that has one, else by the Source's Store Releases' variant
 #' table); those with no rsID, or not in the reference, are left out, with a message (class
 #' `opengwasr_plink_unmatched`, `count`). An LD-only Local Source (`og_local(bfile = )` with no

@@ -141,7 +141,10 @@
 #'   `opengwasr_plink_not_found`, with `skipped`: `plink_bin` and `version` of each one skipped) and
 #'   says how to install it.
 #' @param bfile A PLINK binary fileset's prefix (without `.bed`, `.bim` or `.fam`): the Source's LD
-#'   resource, a PLINK Reference.
+#'   resource, a PLINK Reference. LD from a PLINK Reference is computed from its genotypes without
+#'   adjusting for population structure (principal components), unlike OpenGWAS LD Stores and
+#'   Genotype Stores, so it may be less accurate. opengwasr warns of this once per PLINK Reference in
+#'   a session (class `opengwasr_plink_unadjusted`).
 #' @param ld_store A downloaded LD Store. Not available yet.
 #' @param geno_store A downloaded Genotype Store. Not available yet.
 #' @param inherit A Local Source to build this one like, as described under "Inheriting".

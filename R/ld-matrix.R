@@ -24,7 +24,7 @@
 #' such as `og_api(inherit = src, ld_store = "EUR")`.
 #'
 #' On a Local Source, PLINK computes the matrix on your machine from its PLINK Reference
-#' (`og_local(bfile = )`). Variants are matched to the reference by rsID (an ALID by its `rsid`
+#' (`og_local(bfile = )`). Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class `opengwasr_plink_unadjusted` (see [og_local()]). Variants are matched to the reference by rsID (an ALID by its `rsid`
 #' column, if `variants` is a data frame that has one, else by the Source's Store Releases' variant
 #' table); those with no rsID, or not in the reference, are left out, with a message (class
 #' `opengwasr_plink_unmatched`, `count`). An LD-only Local Source (`og_local(bfile = )` with no
@@ -65,7 +65,7 @@ og_ld_matrix.og_api_source <- function(src, variants, fill_below_t_far = FALSE) 
     assemble = function(results, ctx) ld_matrix_assemble(results, ctx, fill_below_t_far),
     # A PLINK Reference holds every pair, so `fill_below_t_far` has nothing to fill.
     local = function(ctx) {
-      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid))
+      m <- plink_ld_matrix(ctx$plink, unique(ctx$matched$rsid), ctx$call)
       list(value = structure(m, class = c("og_ld_matrix", "matrix", "array")), provenance = NULL)
     }))
 }
@@ -93,7 +93,7 @@ ld_matrix_assemble <- function(results, ctx, fill_below_t_far) {
   }
   present <- !alids %in% ctx$absent
   m <- m[present, present, drop = FALSE]
-  if (fill_below_t_far) m <- ld_fill_below_t_far(m, ctx$store$far_bp)
+  if (fill_below_t_far) m <- ld_fill_below_t_far(m, ctx$sets[[1]]$store$far_bp)  # one set: one LD Store
   structure(m, class = c("og_ld_matrix", "matrix", "array"))
 }
 

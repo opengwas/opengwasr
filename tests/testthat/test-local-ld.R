@@ -153,6 +153,27 @@ test_that("the Local | PLINK and API | PLINK rows clump alike: og_tophits() on t
   expect_true(og_provenance(one)$truncated)
 })
 
+test_that("on a Local Source with PLINK, og_tophits(clump = TRUE) and og_clump() of the unclumped top hits give each Analysis the same index variants", {
+  skip_if_no_local()
+  ref <- local_plink_reference()
+  src <- local_source_of(c("dense", "hyb"), bfile = plink_fixture())
+  ids <- c(bmi, "hyb:trait_a")  # each with several top hits in the PLINK Reference
+  by_tophits <- suppressMessages(og_tophits(src, ids, r2 = 0.001, kb = 10000))
+  hits <- og_tophits(src, ids, clump = FALSE, limit = 10000)
+  by_clump <- suppressMessages(og_clump(src, hits, r2 = 0.001, kb = 10000))
+  expect_equal(by_clump$id, c(rep(bmi, 4), "hyb:trait_a", "hyb:trait_a"))
+  expect_equal(by_clump$rsid, c("rs5000", "rs5000", "rs1005", "rs1004", "rs1050", "rs1200"))
+  # hyb:trait_a's, by PLINK's rule worked out in R: its 7 top hits with rsIDs, all |z| 8 (ties in
+  # order), in two LD blocks and two lone variants, all within 10,000 kb.
+  trait_a <- hits[hits$id == "hyb:trait_a" & !is.na(hits$rsid), ]
+  want <- expected_clump(trait_a$rsid, abs(trait_a$z), 0.001, 10000)
+  expect_equal(want$lead, c("rs1050", "rs1200"))
+  expect_equal(by_clump[c("id", "alid", clump_cols)], by_tophits[c("id", "alid", clump_cols)])
+  expect_equal(og_provenance(by_clump)$clump, og_provenance(by_tophits)$clump)
+  expect_equal(og_provenance(by_clump)$clump[c("id", "hits", "absent", "leads")],
+               data.frame(id = ids, hits = c(8, 8), absent = c(2, 1), leads = c(3, 2)))
+})
+
 test_that("og_clump() and og_ld_matrix() on a Local Source read its PLINK Reference, looking rsIDs up in its own Store Releases", {
   skip_if_no_local()
   ref <- local_plink_reference()
@@ -206,7 +227,8 @@ test_that("og_local(inherit = local, bfile = ref) keeps the Store Releases and r
   expect_equal(other$path, file.path(normalise_path(dir), "ref"))
   expect_identical(other_src$releases, src$releases)
   expect_identical(other_src$handles, src$handles)  # the releases as opened, not opened again
-  m <- og_ld_matrix(other_src, c("rs5000", "rs1000"))
+  reset_plink_unadjusted(other$path)
+  expect_warning(m <- og_ld_matrix(other_src, c("rs5000", "rs1000")), class = "opengwasr_plink_unadjusted")  # another reference
   expect_equal(og_provenance(m)$ld, other$path)
   expect_equal(og_provenance(m)$ld_from, "source")
   expect_equal(og_provenance(og_ld_matrix(src, c("rs5000", "rs1000")))$ld, ref$path)

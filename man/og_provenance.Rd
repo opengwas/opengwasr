@@ -20,13 +20,15 @@ API reattached you to a Job it already had.
 \item \code{total}, \code{truncated}: how many Associations matched (what the API counted), and whether \code{limit} cut any off; \code{returned}: the rows of \code{x}.
 \item \code{retrieved}: when the answer was read, as a \code{POSIXct}.
 \item Clumped results: \code{clump}, a data frame with one row per Analysis clumped (one row, \code{id} \code{NA},
-for \code{\link[=og_clump]{og_clump()}}'s one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
+for \code{\link[=og_clump]{og_clump()}} of one set): \code{id}, \code{ld}, \code{ld_choice}, \code{r2}, \code{kb}, and the API's counts \code{hits}
 (the variants clumped), \code{absent} (those not in the LD Store) and \code{leads} (index variants),
 and \code{clumps}: \code{"computed"} (clumped on the fly, as every clumping is today) or, once Store
 Releases carry them, \code{"stored"}. \code{ld_from} says where the LD came from: \code{"source"} (the
 Source's LD resource) or \code{"ancestry"} (each Analysis's Assigned Ancestry, on an API Source with
 none).
 \item LD results: \code{ld}, \code{ld_choice}, \code{ld_from} (as above) and \code{absent} (see \code{\link[=og_ld_matrix]{og_ld_matrix()}}).
+\code{\link[=og_clump]{og_clump()}} of Analyses matched to several LD Stores gives each in \code{ld}, and how each was
+chosen in \code{ld_choice}, one for one.
 }
 
 A data frame whose provenance was dropped (by \code{merge()}, say) raises an error of class

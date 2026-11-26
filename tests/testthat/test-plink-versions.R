@@ -189,7 +189,7 @@ test_that("PLINK 1.9 and PLINK 2 each give PLINK's clumps, and the same LD matri
   # the fileset's r² and windows (0.045 and 0.046 kb straddle rs4977574 and rs2891168, 45 bp apart).
   orders <- list(seq_along(rsids), rev(seq_along(rsids)), c(14, 31, 3, 25, 9, 36, 20, 1, 17, 28, 6, 33, 11, 23, 2,
                                                             35, 15, 7, 30, 19, 26, 4, 12, 34, 22, 8, 29, 16, 5,
-                                                            24, 32, 10, 27, 18, 13, 21))
+                                                            24, 32, 10, 27, 18, 13, 21, 37:length(rsids)))
   alids <- paste(bim$chr, bim$bp, pmin(bim$a1, bim$a2), pmax(bim$a1, bim$a2), sep = ":")
   for (strength in orders) {
     data <- data.frame(alid = alids, rsid = rsids, z = strength, id = "x", stringsAsFactors = FALSE)

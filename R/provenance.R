@@ -28,13 +28,15 @@
 #'   * `total`, `truncated`: how many Associations matched (what the API counted), and whether `limit` cut any off; `returned`: the rows of `x`.
 #'   * `retrieved`: when the answer was read, as a `POSIXct`.
 #'   * Clumped results: `clump`, a data frame with one row per Analysis clumped (one row, `id` `NA`,
-#'     for [og_clump()]'s one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
+#'     for [og_clump()] of one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts `hits`
 #'     (the variants clumped), `absent` (those not in the LD Store) and `leads` (index variants),
 #'     and `clumps`: `"computed"` (clumped on the fly, as every clumping is today) or, once Store
 #'     Releases carry them, `"stored"`. `ld_from` says where the LD came from: `"source"` (the
 #'     Source's LD resource) or `"ancestry"` (each Analysis's Assigned Ancestry, on an API Source with
 #'     none).
 #'   * LD results: `ld`, `ld_choice`, `ld_from` (as above) and `absent` (see [og_ld_matrix()]).
+#'     [og_clump()] of Analyses matched to several LD Stores gives each in `ld`, and how each was
+#'     chosen in `ld_choice`, one for one.
 #'
 #'   A data frame whose provenance was dropped (by `merge()`, say) raises an error of class
 #'   `opengwasr_no_provenance`; one whose rows changed after `rbind()` or subsetting keeps a stale
@@ -127,7 +129,8 @@ format.og_provenance <- function(x, ...) {
     paste0("\u2500\u2500 opengwasr provenance ", strrep("\u2500", 17)),
     paste0("\u2022 Query: ", x$query),
     paste0("\u2022 Store Releases: ", paste(x$store_releases, collapse = ", ")),
-    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", x$ld, " (", x$ld_choice, "); ",
+    # og_clump() of Analyses matched to several LD Stores names each.
+    if (!is.null(x$ld)) paste0("\u2022 LD Store: ", paste0(x$ld, " (", x$ld_choice, ")", collapse = ", "), "; ",
                                length(x$absent), " variant(s) absent"),
     if (!is.null(x$clump)) format_clump(x$clump),
     paste0("\u2022 Jobs: ", if (length(x$job_ids)) paste(x$job_ids, collapse = ", ") else "none"),

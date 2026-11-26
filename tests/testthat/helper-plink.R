@@ -1,6 +1,6 @@
 # PLINK References in tests: the committed fileset, and expectations worked out without PLINK.
 #
-# `inst/plink/ref.{bed,bim,fam}` is synthetic (make-reference.R there: 300 people, 36 variants), and
+# `inst/plink/ref.{bed,bim,fam}` is synthetic (make-reference.R there: 300 people, 49 variants), and
 # comes with the package, so the Local Source vignette reads it too. Every expected number comes from
 # decoding the `.bed` here, in plain R, never from the code under test or from PLINK's own output.
 
@@ -8,6 +8,13 @@ plink_fixture <- function() {
   dir <- system.file("plink", package = "opengwasr", mustWork = TRUE)
   file.path(normalise_path(dir), "ref")  # as og_local(bfile = ) normalises it
 }
+
+# LD from a PLINK Reference warns once per session for each reference (`opengwasr_plink_unadjusted`,
+# #46, keyed by its path). The fixture's is taken as said already, so the tests that don't ask
+# about it stay quiet whichever runs first; a test that asserts the warning calls
+# reset_plink_unadjusted() first (rlang::reset_warning_verbosity()).
+reset_plink_unadjusted <- function(path = plink_fixture()) rlang::reset_warning_verbosity(path)
+suppressWarnings(rlang::warn("", .frequency = "once", .frequency_id = plink_fixture()))
 
 # An LD-only Local Source over the fixture (`og_local(bfile = )`, which needs no Python), or skip the
 # test: nothing here runs without a PLINK binary.

@@ -76,7 +76,9 @@ with no \code{gwas}) holds no Associations, so it is refused (\code{opengwasr_gw
 With a PLINK Reference as a Local Source's LD resource (\code{og_local(gwas = , bfile = )}) the
 clumping is local: each Analysis's
 top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
-(those not in it are left out, with a message) and clumped by PLINK, and \code{limit} is then applied
+(those not in it are left out, with a message) and clumped by PLINK (whose LD isn't adjusted for
+principal components: a warning of class \code{opengwasr_plink_unadjusted} says so, once per PLINK
+Reference in a session), and \code{limit} is then applied
 to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an
 \code{opengwasr_truncated} warning that clumping saw only the strongest; clumping on the server (an
 API Source's LD Store) has no such cap. \code{og_provenance(x)$clump} names the reference's path and the \code{r2}

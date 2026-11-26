@@ -43,7 +43,7 @@ or mixed ancestries, and for variants given without Analyses). For other LD, pas
 such as \code{og_api(inherit = src, ld_store = "EUR")}.
 
 On a Local Source, PLINK computes the matrix on your machine from its PLINK Reference
-(\code{og_local(bfile = )}). Variants are matched to the reference by rsID (an ALID by its \code{rsid}
+(\code{og_local(bfile = )}). Its LD isn't adjusted for principal components, so the first call in a session to read each PLINK Reference warns, with class \code{opengwasr_plink_unadjusted} (see \code{\link[=og_local]{og_local()}}). Variants are matched to the reference by rsID (an ALID by its \code{rsid}
 column, if \code{variants} is a data frame that has one, else by the Source's Store Releases' variant
 table); those with no rsID, or not in the reference, are left out, with a message (class
 \code{opengwasr_plink_unmatched}, \code{count}). An LD-only Local Source (\code{og_local(bfile = )} with no

@@ -150,6 +150,108 @@ test_that("og_clump() ranks a variant listed in several Analyses by its largest 
   expect_equal(out$rsid, c("rs4977574", "rs4977574"))
 })
 
+test_that("og_clump() with PLINK clumps each Analysis on its own, one PLINK run each; by_analysis = FALSE clumps them as one set", {
+  ld_src <- local_plink_source()
+  # rs2891168 and rs4977574 are in LD (r^2 above 0.4, 45 bp apart). Analysis "a" has both, "b"
+  # rs4977574, its strongest, and rs1333049; rows interleaved, so the order kept is data's.
+  data <- data.frame(id = c("a", "b", "a", "b"),
+                     alid = c("9:22098620:A:G", "9:22098575:A:G", "9:22098575:A:G", "9:22125503:C:G"),
+                     rsid = c("rs2891168", "rs4977574", "rs4977574", "rs1333049"), z = c(5, -9, 4, 3),
+                     stringsAsFactors = FALSE)
+  d <- fixture_dosage()
+  expect_gt(stats::cor(d[, "rs2891168"], d[, "rs4977574"])^2, 0.4)
+  runs <- 0
+  real_run <- plink_run
+  local_mocked_bindings(plink_run = function(...) { runs <<- runs + 1; real_run(...) })
+  each <- og_clump(ld_src, data, r2 = 0.2, kb = 100)
+  expect_equal(runs, 2)
+  # Each Analysis keeps its own strongest: rs2891168 leads "a" (absorbing its rs4977574), and
+  # rs4977574 leads "b", where nothing it is in LD with competes.
+  for (id in c("a", "b")) {
+    mine <- data[data$id == id, ]
+    want <- expected_clump(mine$rsid, abs(mine$z), 0.2, 100)
+    expect_equal(each$rsid[each$id == id], mine$rsid[mine$rsid %in% want$lead])
+  }
+  expect_equal(each$id, c("a", "b", "b"))
+  expect_equal(each$rsid, c("rs2891168", "rs4977574", "rs1333049"))
+  expect_equal(each$clump_size, c(2L, 1L, 1L))
+  clump <- og_provenance(each)$clump
+  expect_equal(clump[c("id", "hits", "absent", "leads")], data.frame(id = c("a", "b"), hits = c(2, 2), absent = c(0, 0), leads = c(1, 2)))
+  expect_equal(og_provenance(each)$query, "og_clump(r2 = 0.2, kb = 100, by_analysis = TRUE)")
+  # As one set, rs4977574 (|z| 9, in "b") leads, absorbs rs2891168, and keeps both its Associations.
+  runs <- 0
+  joint <- og_clump(ld_src, data, r2 = 0.2, kb = 100, by_analysis = FALSE)
+  expect_equal(runs, 1)
+  want <- expected_clump(unique(data$rsid), c(5, 9, 3), 0.2, 100)
+  expect_equal(unique(joint$rsid), want$lead)
+  expect_equal(joint$id, c("b", "a", "b"))
+  expect_equal(joint$rsid, c("rs4977574", "rs4977574", "rs1333049"))
+  expect_equal(joint$clump_size, c(2L, 2L, 1L))
+  expect_true(is.na(og_provenance(joint)$clump$id))
+  # With no `id` column, one set either way.
+  expect_equal(og_clump(ld_src, data[-1], r2 = 0.2, kb = 100), joint[-1], ignore_attr = TRUE)
+})
+
+test_that("LD from a PLINK Reference warns that it isn't adjusted for principal components, once per reference in a session", {
+  ld_src <- local_plink_source()
+  ref <- og_ld_resource(ld_src)
+  data <- data.frame(id = c("a", "b"), alid = c("9:22098620:A:G", "9:22098575:A:G"),
+                     rsid = c("rs2891168", "rs4977574"), z = c(5, 4), stringsAsFactors = FALSE)
+  # Clumping and LD matrices both warn, from where PLINK runs; the second call, and every call
+  # after, says nothing.
+  calls <- list(function() og_clump(ld_src, data, r2 = 0.2, kb = 100, by_analysis = FALSE),
+                function() og_ld_matrix(ld_src, c("rs4977574", "rs2891168")))
+  for (call in calls) {
+    reset_plink_unadjusted(ref$path)
+    w <- expect_warning(call(), class = "opengwasr_plink_unadjusted")
+    expect_equal(w$path, ref$path)
+    expect_match(conditionMessage(w), "without adjusting for population structure (principal components)", fixed = TRUE)
+    expect_no_warning(call())
+    expect_no_warning(og_clump(ld_src, data, r2 = 0.2, kb = 100))  # two PLINK runs, no warning
+  }
+  # Another PLINK Reference is another warning, once.
+  dir <- withr::local_tempdir()
+  file.copy(paste0(plink_fixture(), c(".bed", ".bim", ".fam")), dir)
+  other <- og_local(bfile = file.path(dir, "ref"))
+  w <- expect_warning(og_ld_matrix(other, c("rs4977574", "rs2891168")), class = "opengwasr_plink_unadjusted")
+  expect_equal(w$path, og_ld_resource(other)$path)
+  expect_no_warning(og_ld_matrix(other, c("rs4977574", "rs2891168")))
+  # Nothing to compute, nothing to warn of: an rsID the reference lacks runs no PLINK.
+  reset_plink_unadjusted(ref$path)
+  expect_no_warning(suppressMessages(og_ld_matrix(ld_src, "rs1")))
+  # og_tophits() clumping with a Local Source's PLINK Reference, too.
+  skip_if_no_local()
+  reset_plink_unadjusted(ref$path)
+  expect_warning(suppressMessages(og_tophits(local_source_of("dense", bfile = plink_fixture()), "s:bmi_irn",
+                                             r2 = 0.001, kb = 10000)),
+                 class = "opengwasr_plink_unadjusted")
+})
+
+test_that("PLINK matches each row by its own rsID: rows sharing an ALID with different rsIDs, or none, are matched apart", {
+  ld_src <- local_plink_source()
+  x <- "9:22098620:A:G"
+  y <- "9:22125503:C:G"
+  data <- data.frame(id = c("a", "a", "b", "c"), alid = c(x, y, x, x),
+                     rsid = c("rs2891168", "rs1333049", "rs4977574", NA), z = c(5, 3, 9, 7), stringsAsFactors = FALSE)
+  # Four (ALID, rsID) pairs, one with no rsID: the message and `absent` count rows' pairs.
+  m <- expect_message(each <- og_clump(ld_src, data, r2 = 0.2, kb = 100), class = "opengwasr_plink_unmatched")
+  expect_equal(c(m$count, m$total), c(1, 4))
+  expect_equal(each$id, c("a", "a", "b"))
+  expect_equal(each$rsid, c("rs2891168", "rs1333049", "rs4977574"))
+  expect_equal(og_provenance(each)$absent, x)
+  expect_equal(og_provenance(each)$clump[c("id", "hits", "absent", "leads")],
+               data.frame(id = c("a", "b", "c"), hits = c(2, 1, 1), absent = c(0, 0, 1), leads = c(2, 1, 0)))
+  # As one set: rs4977574 (|z| 9) leads and absorbs rs2891168; each row keeps its own rsID, so only
+  # the row naming rs4977574 is its index variant's, not every row of its ALID.
+  joint <- suppressMessages(og_clump(ld_src, data, r2 = 0.2, kb = 100, by_analysis = FALSE))
+  expect_equal(joint$id, c("a", "b"))
+  expect_equal(joint$rsid, c("rs1333049", "rs4977574"))
+  expect_equal(joint$clump_size, c(1L, 2L))
+  # An LD matrix of the same rows: each distinct rsID the reference holds, once.
+  mat <- suppressMessages(og_ld_matrix(ld_src, data))
+  expect_setequal(sub("_.*", "", rownames(mat)), c("rs2891168", "rs1333049", "rs4977574"))
+})
+
 # The "API | PLINK" row of vignette("ld")'s table: top hits from the API Source, unclumped, clumped
 # by an LD-only Local Source's PLINK Reference.
 test_that("og_clump(og_local(bfile = ), og_tophits(og_api(), ids, clump = FALSE)) clumps the API's top hits with PLINK", {
@@ -196,7 +298,9 @@ test_that("PLINK's temporary files are removed, on success and on failure", {
   expect_equal(left(), character())
   broken <- ref
   broken$path <- file.path(tempdir(), "missing-fileset")
-  expect_error(plink_run(broken, list(), function(file) character(), identity), class = "opengwasr_plink_failed")
+  reset_plink_unadjusted(broken$path)  # another reference: warned of once, as it is about to run
+  expect_warning(expect_error(plink_run(broken, list(), function(file) character(), identity), class = "opengwasr_plink_failed"),
+                 class = "opengwasr_plink_unadjusted")
   expect_equal(left(), character())
 })
 

@@ -27,7 +27,10 @@ first supported PLINK of the genetics.binaRies package, if it is installed, then
 says how to install it.}
 
 \item{bfile}{A PLINK binary fileset's prefix (without \code{.bed}, \code{.bim} or \code{.fam}): the Source's LD
-resource, a PLINK Reference.}
+resource, a PLINK Reference. LD from a PLINK Reference is computed from its genotypes without
+adjusting for population structure (principal components), unlike OpenGWAS LD Stores and
+Genotype Stores, so it may be less accurate. opengwasr warns of this once per PLINK Reference in
+a session (class \code{opengwasr_plink_unadjusted}).}
 
 \item{ld_store}{A downloaded LD Store. Not available yet.}
 

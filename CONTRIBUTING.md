@@ -16,20 +16,45 @@
   scientific answer from the one asked for. An option is either honoured
   or refused with a clear error.
 
-## How work proceeds
+## How work proceeds: tutorial-driven development
 
-opengwasr is built outside-in (ADR 0005):
+opengwasr is built tutorial-first (ADR 0005). The vignettes say how the
+package is used. The code is built to make them true, never the other
+way round.
 
-1.  Each epic starts by writing its vignettes, one per user journey,
-    with chunks set to `eval = FALSE`. These are reviewed before
-    implementation begins.
-2.  Each implementation ticket names the vignette section it satisfies.
-    It turns those chunks on and adds testthat tests at the Source seam
-    that make the same calls and assert on the results.
-3.  Vignettes run offline from httptest2 recordings of the real API.
-    Unit tests run against the fake Data API in `tests/testthat`.
-    Neither touches the network on CRAN or in CI.
-4.  Errors are classed conditions, and tests assert on the class, not on
+1.  **The tutorial comes first.** Each epic starts by writing its
+    vignettes, one per user journey, with every chunk `eval = FALSE`.
+    They fix the interface users will rely on: function names,
+    arguments, columns, messages and refusals. They are reviewed before
+    any implementation begins.
+2.  **Each ticket names the chunks it makes true**, by chunk label. It
+    builds what those chunks need, turns them on (`eval = FALSE` →
+    evaluated), and adds testthat tests at the Source seam that make the
+    same calls and assert on the answers. A chunk that runs proves the
+    code runs as the tutorial says. A test proves the answer is right. A
+    ticket is done when its chunks evaluate in CI and its tests pass.
+3.  **When the code and the tutorial disagree, change the tutorial
+    first.** If building a chunk shows that the interface it describes
+    is wrong, change the vignette in its own commit, say why in the pull
+    request, and have it reviewed. Then build to the new chunk. Never
+    change the code’s interface and leave the vignette describing the
+    old one.
+4.  **Real output, not illustration.** A chunk that evaluates shows the
+    output it produced. Remove any hand-written output for it.
+    `eval = FALSE` stays only on a chunk that can’t run in CI, and the
+    vignette’s Status block or the chunk’s text says why: shell setup, a
+    resource CI lacks (a PLINK binary, a genotype fileset), or behaviour
+    a named later ticket builds. Hand-written output under such a chunk
+    is marked `# illustrative`, and is shaped exactly like what
+    opengwasr returns.
+5.  **Offline everywhere.** API vignettes replay httptest2 recordings of
+    the real API. Local Source vignettes read the example Store Releases
+    bundled in the package, and evaluate wherever Python and ogquery are
+    available (in CI, with `RETICULATE_PYTHON`). On CRAN they show the
+    code unevaluated. Unit tests run against the fake Data API in
+    `tests/testthat`. None of these touches the network on CRAN or in
+    CI.
+6.  Errors are classed conditions, and tests assert on the class, not on
     the message text. Comparing a condition’s message with the API’s own
     message (from `fixtures/errors.json` or the raw API) is allowed: it
     tests that the message was passed on, not how it is worded. An API
@@ -86,6 +111,52 @@ If an assertion can’t pass in-process, it is a transport test: move it
 to socket mode, don’t weaken it. Live tests and the vignettes’ httptest2
 replays are unaffected.
 
+### Parity with the real Data API
+
+`test-parity.R` checks that the API Source and a Local Source return the
+same data frame for each query of a golden set, and that each returns
+what the real Data API would return. Three files in
+`tests/testthat/fixtures/parity/` hold it:
+
+- **`queries.json`, the golden set.** Each query is an opengwasr call
+  (`verb`, `args`) over a source set of the example Store Releases in
+  `inst/stores` (`source`). It also lists the Data API requests the API
+  Source makes for that call (`requests`): their endpoints and bodies,
+  recorded once from opengwasr’s own requests and checked by hand.
+- **`generate.py`, the generator.** It answers every request as the real
+  Data API would. It follows ogdb-api’s own code, citing its lines, and
+  reads the releases through ogquery’s public API. It never calls
+  opengwasr.
+- **`answers.json`, its output.** The header names the ogquery version,
+  the ogdb-api commit and the bundle the answers came from.
+
+`local_fake_api(parity = "<source set>")` serves those answers. A
+request without a generated answer gets a 500 that names it.
+
+Regenerate the answers from the package root, with a Python that has
+ogquery:
+
+``` sh
+python -I tests/testthat/fixtures/parity/generate.py
+```
+
+Regenerate them, and review the diff, whenever any of these change:
+
+- the golden set;
+- the example Store Releases;
+- the ogquery version;
+- the ogdb-api commit the generator follows. Update `OGDB_API_COMMIT`
+  and the cited lines first.
+
+When opengwasr’s requests for a golden query change, the parity tests
+fail with the fake’s 500. Record the new request in `queries.json`,
+check that its body is what the call means, and regenerate.
+
+A parity failure is a defect in one of the two Sources, or a change in
+the real API. It is never something to adjust in the fake. When
+something is known to differ, `test-parity.R` lists it under “Known
+differences”, with the issue that resolves it.
+
 ## Adding a query
 
 A query that returns Associations is a thin spec over one engine,
@@ -104,14 +175,14 @@ is the model:
 ``` r
 
 og_tophits.og_api_source <- function(src, analyses, threshold = 5e-8, limit = 1000,
-                                     observed_only = FALSE, clump = TRUE, ld = NULL, r2 = NULL,
-                                     kb = NULL, original_units = FALSE, releases = NULL) {
-  check_tophits_arguments(threshold, limit, clump, ld, r2, kb)
+                                     observed_only = FALSE, clump = TRUE, r2 = NULL, kb = NULL,
+                                     original_units = FALSE, releases = NULL) {
+  check_tophits_arguments(src, threshold, limit, clump, r2, kb)
   association_query(src, "api/tophits", analyses, observed_only, original_units, releases,
                     body = list(threshold = threshold, limit = as.integer(limit)),
                     analyses_per_job = tophits_analyses_per_job(limit), order = "api",
                     truncated = function(ids) truncated_message(analyses_who(ids), limit, "top hits", threshold),
-                    spec = list(clump = if (clump) list(ld = ld, r2 = r2, kb = kb, limit = limit, threshold = threshold)))
+                    spec = list(clump = if (clump) list(r2 = r2, kb = kb, limit = limit, threshold = threshold)))
 }
 ```
 
@@ -145,9 +216,11 @@ What the method can say:
   up, against the pinned Store Releases; an error there is the API’s).
   `one_variant = TRUE` sends one ALID per Job as `variant`.
   `interval = list(chromosome, start, end, limit)` cuts a range into
-  windows. `clump = list(ld, r2, kb, limit, threshold)` clumps each
-  Analysis’s top hits, on the server in its LD Store or, with a PLINK
-  Reference, on this machine.
+  windows. `clump = list(r2, kb, limit, threshold)` clumps each
+  Analysis’s top hits with the Source’s LD resource (no verb takes an LD
+  argument: ADR 0006, clarification of 25 November 2026), on the server
+  in its LD Store or, with a Local Source’s PLINK Reference, on this
+  machine.
   [`og_phewas()`](https://opengwas.github.io/opengwasr/reference/og_phewas.md)
   (`all_analyses`, `one_variant`),
   [`og_range()`](https://opengwas.github.io/opengwasr/reference/og_range.md)
@@ -187,30 +260,45 @@ An LD operation
 [`og_ld_proxies()`](https://opengwas.github.io/opengwasr/reference/og_ld_proxies.md),
 [`og_ld_reflookup()`](https://opengwas.github.io/opengwasr/reference/og_ld_reflookup.md),
 [`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md))
-is a thin spec over the LD engine,
-`ld_query(src, path, variants, ld, spec)` in `R/ld-query.R`. Its `spec`:
+is a thin spec over the LD engine, `ld_query(src, path, variants, spec)`
+in `R/ld-query.R`. The LD is the Source’s (`ld_resource()`). Its `spec`:
 
 - `pieces(n)`: how `n` ALIDs split into Jobs, a list of index vectors,
   each one Job;
-- `body`: its fields, the same in every Job, or `function(alids, store)`
-  of a piece’s ALIDs and the LD Store’s row of
+- `body`: its fields, the same in every Job, or
+  `function(alids, store, rows)` of a piece’s ALIDs, its LD Store’s row
+  of
   [`og_ld_stores()`](https://opengwas.github.io/opengwasr/reference/og_ld_stores.md)
-  (clumping’s scores and default `r2`);
+  and the rows of `variants` in its set (clumping’s scores and default
+  `r2`);
+- optionally `sets`, a vector over the rows of a data frame `variants`:
+  the rows of each value are answered on their own, each set in the LD
+  Store of its own Assigned Ancestry
+  ([`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md)’s
+  `id`, unless `by_analysis = FALSE`). Without it, every variant is one
+  set, in one LD Store;
 - `assemble(results, ctx)`: its value from the Jobs’ `list(rows, job)`,
-  in piece order;
+  in piece order (pieces in set order), whatever order they were
+  submitted in: Jobs are submitted grouped by LD Store, through the
+  association engine’s `submit_order()`;
 - optionally `provenance(results, ctx)` (further provenance fields:
   clumping’s `clump`), `absence_is_answer = TRUE` (the answer is which
   variants the LD Store holds, so absent variants are rows, not a
-  warning) and `local(ctx)`, how it reads a PLINK Reference, returning
-  `list(value, provenance)`; a query without `local` refuses a PLINK
-  Reference.
+  warning) and `local(ctx)`, how it reads a Local Source’s PLINK
+  Reference, returning `list(value, provenance)`; a query without
+  `local` has a Local Source method that refuses.
 
-`ctx` has `alids`, `absent`, `store`, `choice`, `variants` (what the
-user passed), `rsid_map` (`rsid` and `alid` of each rsID resolved) and
-`unresolved`; `local` gets `matched` (`alid` and `rsid` of each variant
-the reference holds) and `plink` instead of the Jobs’ parts. The LD
-engine chooses the LD Store (`choose_ld_store()`), resolves rsIDs and
-warns about absent variants.
+`ctx` has `alids`, `absent`, `variants` (what the user passed),
+`rsid_map` (`rsid` and `alid` of each rsID resolved), `unresolved` and
+`sets` (each `id`, `rows`, `alids`, its LD Store’s row `store` and how
+it was chosen, `choice`, and its Jobs’ `results`, in piece order, and
+`absent`; a query without `sets` has one, whose `store` is the LD
+Store); `local` gets `matched` (`alid` and `rsid` of each variant the
+reference holds), `row_rsid` (each row of a data frame’s rsID in the
+reference, `NA` if none: every row is matched by its own `rsid`, else
+its ALID’s), `plink` and `call` (the method’s, for its conditions)
+instead of the Jobs’ parts. The LD engine chooses the LD Store
+(`choose_ld_store()`), resolves rsIDs and warns about absent variants.
 
 Both engines, and the variant lookups (`lookup_query()`), sit on one
 scaffold, `engine_query()` in `R/query-plan.R`: the method’s arguments,

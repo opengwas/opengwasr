@@ -15,7 +15,6 @@ og_tophits(
   limit = 1000,
   observed_only = FALSE,
   clump = TRUE,
-  ld = NULL,
   r2 = NULL,
   kb = NULL,
   original_units = FALSE,
@@ -28,7 +27,9 @@ og_tophits(
 - src:
 
   A Source, from
-  [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md).
+  [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md)
+  or
+  [`og_local()`](https://opengwas.github.io/opengwasr/reference/og_local.md).
 
 - analyses:
 
@@ -52,14 +53,6 @@ og_tophits(
 - clump:
 
   Clump the top hits to one per independent signal.
-
-- ld:
-
-  An LD Store's name, an ancestry code (its LD Store), a PLINK Reference
-  from
-  [`og_plink_reference()`](https://opengwas.github.io/opengwasr/reference/og_plink_reference.md),
-  or `NULL` to match each Analysis's Assigned Ancestry. Only with
-  `clump = TRUE`.
 
 - r2, kb:
 
@@ -93,32 +86,44 @@ By default (`clump = TRUE`) the top hits are clumped on the API, one
 index variant per independent signal (see
 [`vignette("ld")`](https://opengwas.github.io/opengwasr/articles/ld.md)):
 every top hit at `threshold` is clumped, and `limit` then caps the index
-variants. Each Analysis is clumped in the LD Store matching its Assigned
-Ancestry, or in the one `ld` names; an Unassigned Analysis is refused
-(`opengwasr_ld_unmatched`) unless `ld` is given, before any Job runs.
-The Jobs, one per Analysis, are submitted grouped by LD Store; with
-progress on (option `opengwasr.progress`), a message of class
-`opengwasr_clumping` says which LD Store each Analysis is clumped in.
-`r2` and `kb` default to the LD Store's Far Threshold (`t_far`) and its
-far window (`far_bp`, 10,000 kb), and are always sent. A pair the LD
-Store can't answer exactly is refused by the API
-(`opengwasr_ld_refusal`). Top hits the LD Store doesn't hold can't be
-clumped: they are left out, with a warning of class
-`opengwasr_clump_absent` (`count`). Clumped rows add `clump_ld`,
+variants. Each Analysis is clumped in the Source's LD Store
+(`og_api(ld_store = )`), or, if it has none, in the LD Store matching
+its Assigned Ancestry; an Unassigned Analysis is then refused
+(`opengwasr_ld_unmatched`), before any Job runs. The Jobs, one per
+Analysis, are submitted grouped by LD Store; with progress on (option
+`opengwasr.progress`), a message of class `opengwasr_clumping` says
+which LD Store each Analysis is clumped in. `r2` and `kb` default to the
+LD Store's Far Threshold (`t_far`) and its far window (`far_bp`, 10,000
+kb), and are always sent. A pair the LD Store can't answer exactly is
+refused by the API (`opengwasr_ld_refusal`). Top hits the LD Store
+doesn't hold can't be clumped: they are left out, with a warning of
+class `opengwasr_clump_absent` (`count`). Clumped rows add `clump_ld`,
 `clump_ld_choice`, `clump_r2`, `clump_kb` and `clump_size`, and
 `og_provenance(x)$clump` has each Analysis's `hits`, `absent` and
 `leads`. Pass `clump = FALSE` for every top hit.
 
-With a PLINK Reference in `ld` (see
-[`og_plink_reference()`](https://opengwas.github.io/opengwasr/reference/og_plink_reference.md))
-the clumping is local: each Analysis's top hits are fetched unclumped
-(up to the API's most, 10,000), matched to the reference by rsID (those
-not in it are left out, with a message) and clumped by PLINK, and
-`limit` is then applied to its index variants. If the API cut an
-Analysis's top hits off at 10,000, you get an `opengwasr_truncated`
-warning that clumping saw only the strongest; clumping on the server (an
-LD Store in `ld`) has no such cap. `og_provenance(x)$clump` names the
-reference's path and the `r2` and `kb`.
+The LD is the Source's LD resource (`og_api(ld_store = )`,
+`og_local(bfile = )`), and nothing else: for other LD, pass another
+Source, such as `og_api(inherit = src, ld_store = "EUR")`. A Local
+Source with none is refused (`opengwasr_ld_resource_required`), naming
+the LD resources and `clump = FALSE`: Store Releases have no stored
+Clumps yet, so clumping is computed on the fly, and
+`og_provenance(x)$clump$clumps` is `"computed"`. An LD-only Local Source
+(`og_local(bfile = )` with no `gwas`) holds no Associations, so it is
+refused (`opengwasr_gwas_store_required`).
+
+With a PLINK Reference as a Local Source's LD resource
+(`og_local(gwas = , bfile = )`) the clumping is local: each Analysis's
+top hits are fetched unclumped (up to the API's most, 10,000), matched
+to the reference by rsID (those not in it are left out, with a message)
+and clumped by PLINK (whose LD isn't adjusted for principal components:
+a warning of class `opengwasr_plink_unadjusted` says so, once per PLINK
+Reference in a session), and `limit` is then applied to its index
+variants. If the API cut an Analysis's top hits off at 10,000, you get
+an `opengwasr_truncated` warning that clumping saw only the strongest;
+clumping on the server (an API Source's LD Store) has no such cap.
+`og_provenance(x)$clump` names the reference's path and the `r2` and
+`kb`.
 
 The columns are those the vignette section "What the columns mean"
 lists: the Analysis `id`, the variant, `beta` (`z * se`), `se`, `z`,

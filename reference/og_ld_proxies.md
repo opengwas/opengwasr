@@ -9,7 +9,7 @@ never substitutes one variant's Associations for another's (see
 ## Usage
 
 ``` r
-og_ld_proxies(src, variants, ld = NULL, r2 = 0.8, kb = 10000)
+og_ld_proxies(src, variants, r2 = 0.8, kb = 10000)
 ```
 
 ## Arguments
@@ -22,12 +22,6 @@ og_ld_proxies(src, variants, ld = NULL, r2 = 0.8, kb = 10000)
 - variants:
 
   ALIDs and rsIDs, or a data frame of Associations.
-
-- ld:
-
-  An LD Store's name, an ancestry code (its LD Store), or `NULL` to
-  match the Assigned Ancestry of the Associations' Analyses. LD Stores
-  only: a PLINK Reference is refused.
 
 - r2:
 
@@ -48,21 +42,23 @@ attached (`ld`, `ld_choice`, `absent`), one row per proxy: `alid`,
 
 ## Details
 
-`variants` and `ld` are as for
-[`og_ld_matrix()`](https://opengwas.github.io/opengwasr/reference/og_ld_matrix.md);
-an LD Store can only be named, not a PLINK Reference. Variants the LD
-Store doesn't hold have no proxies, and give a warning of class
-`opengwasr_ld_absent_variants`. The API refuses an `r2` and `kb` the LD
-Store can't answer exactly (`opengwasr_ld_refusal`, with `reason`,
-`t_far`, `near_bp` and `far_bp`). One Job takes at most 1,000 variants;
-more are split.
+`variants` are as for
+[`og_ld_matrix()`](https://opengwas.github.io/opengwasr/reference/og_ld_matrix.md),
+and the LD Store is chosen the same way: the Source's `ld_store`
+(`og_api(ld_store = )`), else matched to the Assigned Ancestry of the
+Associations' Analyses. A Local Source is refused: it reads no LD
+Stores. Variants the LD Store doesn't hold have no proxies, and give a
+warning of class `opengwasr_ld_absent_variants`. The API refuses an `r2`
+and `kb` the LD Store can't answer exactly (`opengwasr_ld_refusal`, with
+`reason`, `t_far`, `near_bp` and `far_bp`). One Job takes at most 1,000
+variants; more are split.
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
-src <- og_api()
-px <- og_ld_proxies(src, "16:53767042:C:T", ld = "EUR")
+src <- og_api(ld_store = "EUR")
+px <- og_ld_proxies(src, "16:53767042:C:T")
 head(px)
 } # }
 ```

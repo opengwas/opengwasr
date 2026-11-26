@@ -56,6 +56,9 @@ og_job_cancel(src, job)
 
 ## Details
 
+A Local Source answers every query at once, so it has no Jobs: these
+functions refuse it, with `opengwasr_local_unsupported`.
+
 The query function runs as usual up to submitting its Jobs: its argument
 checks and lookups of Analyses (and any Job it needs to prepare, such as
 resolving rsIDs) happen in `og_submit()`, and finish before it returns.

@@ -5,7 +5,9 @@ tables hold for `rsids`; `og_variants_chrpos()` those at `positions`.
 They are how you find ALIDs (see
 [`vignette("opengwasr")`](https://opengwas.github.io/opengwasr/articles/opengwasr.md)).
 Each runs as Jobs on the API, split when it is over a Job's limits
-(1,000 values, 10 GWAS Stores), and waits for them.
+(1,000 values, 10 GWAS Stores), and waits for them. A Local Source
+([`og_local()`](https://opengwas.github.io/opengwasr/reference/og_local.md))
+answers from the Store Releases it holds, with the same rows.
 
 ## Usage
 
@@ -20,7 +22,9 @@ og_variants_chrpos(src, positions, releases = NULL)
 - src:
 
   A Source, from
-  [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md).
+  [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md)
+  or
+  [`og_local()`](https://opengwas.github.io/opengwasr/reference/og_local.md).
 
 - rsids:
 

@@ -29,8 +29,9 @@ the same columns and og_provenance(); og_job_cancel() cancels them."></head><bod
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
-    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
+    <li><a class="dropdown-item" href="../articles/local-source.html">Querying downloaded Store Releases</a></li>
     <li><a class="dropdown-item" href="../articles/ld.html">LD operations</a></li>
+    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
     <li><a class="dropdown-item" href="../articles/migrating-from-ieugwasr.html">Migrating from ieugwasr</a></li>
   </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -100,7 +101,9 @@ with <code>job_id</code>, <code>status</code> and <code>queue_position</code>. <
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The query function runs as usual up to submitting its Jobs: its argument checks and lookups of
+    <p>A Local Source answers every query at once, so it has no Jobs: these functions refuse it, with
+<code>opengwasr_local_unsupported</code>.</p>
+<p>The query function runs as usual up to submitting its Jobs: its argument checks and lookups of
 Analyses (and any Job it needs to prepare, such as resolving rsIDs) happen in <code>og_submit()</code>, and
 finish before it returns. What the result is shaped from is fixed then, so <code>og_job_result()</code>
 returns the same answer however much later you collect it. A query that needs several Jobs gives

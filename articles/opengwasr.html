@@ -35,8 +35,9 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
-    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
+    <li><a class="dropdown-item" href="../articles/local-source.html">Querying downloaded Store Releases</a></li>
     <li><a class="dropdown-item" href="../articles/ld.html">LD operations</a></li>
+    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
     <li><a class="dropdown-item" href="../articles/migrating-from-ieugwasr.html">Migrating from ieugwasr</a></li>
   </ul>
 </li>
@@ -73,9 +74,10 @@ Associations and LD. Every query function takes a
 <strong>Source</strong> as its first argument, which says where the
 query is answered. This vignette uses the API Source,
 <code><a href="../reference/og_api.html">og_api()</a></code>, which queries the OpenGWAS API over the network.
-A later release adds a Local Source for Store Releases downloaded to
-your own machine. Code written against <code><a href="../reference/og_api.html">og_api()</a></code> will work
-with it unchanged.</p>
+A Local Source reads Store Releases downloaded to your own machine
+instead (see <a href="#sources">Sources</a>). Its verbs, arguments and
+columns are the same, but it answers LD (clumping and LD matrices) only
+when you give it an LD resource.</p>
 <p>You never handle the API’s Jobs, polling, paging or variant encodings
 yourself. Each call waits for its answer and returns a plain
 <code>data.frame</code>. When a query can’t be answered exactly as you
@@ -86,8 +88,14 @@ gives you a different answer.</p>
 recorded against the development Data API on 23 November 2026, except
 the ones marked illustrative, each with its reason: the planned
 <code>og_rho()</code> (it needs a Data API endpoint that doesn’t exist
-yet), the error you get with no key, and the error for an ambiguous
-identifier (no identifier is ambiguous in today’s catalogue).</p>
+yet), the error you get with no key, the error for an ambiguous
+identifier (no identifier is ambiguous in today’s catalogue).
+<code>sources-local</code> opens the example Store Releases that come
+with opengwasr, and runs only where Python and ogquery are set up
+(<code>local_ready</code>, as in <a href="local-source.html">Querying
+downloaded Store Releases</a>); <code>sources-local-plink</code> also
+needs a PLINK binary (<code>plink_ready</code>). Elsewhere, as on CRAN,
+their code is shown unevaluated.</p>
 <p><em>Developer note:</em> The API responses in this vignette were
 recorded against the development Data API, directly, with a developer
 key (see <code>vignettes/recordings.R</code>). Once the OpenGWAS Gateway
@@ -98,6 +106,129 @@ users will have.</p>
 mass index (BMI) affect coronary artery disease (CAD)?</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://opengwas.github.io/opengwasr/">opengwasr</a></span><span class="op">)</span></span></code></pre></div>
+<div class="section level2">
+<h2 id="sources">Sources<a class="anchor" aria-label="anchor" href="#sources"></a>
+</h2>
+<p>A <strong>Source</strong> says two things: where Associations come
+from, and which <strong>LD resource</strong> answers LD for them
+(clumping, LD matrices and LD proxies). There are two kinds of
+Source:</p>
+<ul>
+<li>
+<code><a href="../reference/og_api.html">og_api()</a></code>, the <strong>API Source</strong>, reads the
+OpenGWAS API over the network.</li>
+<li>
+<code>og_local(gwas = ...)</code>, a <strong>Local Source</strong>,
+reads Store Releases you have downloaded (see <a href="local-source.html">Querying downloaded Store Releases</a>).
+<code>og_local(bfile = ...)</code> alone is a Local Source with LD only,
+from your own PLINK Reference.</li>
+</ul>
+<p>An LD resource is one of three kinds, and each can be on the API or
+on your machine:</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>LD resource</th>
+<th>On the API</th>
+<th>On your machine</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>
+<strong>LD Store</strong>: the precomputed LD of one reference
+panel</td>
+<td>
+<code>og_api(ld_store = "EUR")</code>, an LD Store’s name or an
+ancestry code. Available now</td>
+<td>
+<code>og_local(gwas = ..., ld_store = path)</code>. Coming, when
+opengwasr can read downloaded LD Stores</td>
+</tr>
+<tr class="even">
+<td>
+<strong>Genotype Store</strong>: genotypes of one reference panel,
+from which LD is computed when asked</td>
+<td>
+<code>og_api(geno_store = ...)</code>. Coming, when the API serves
+Genotype Stores</td>
+<td>
+<code>og_local(gwas = ..., geno_store = path)</code>. Coming, when
+opengwasr can read downloaded Genotype Stores</td>
+</tr>
+<tr class="odd">
+<td>
+<strong>PLINK Reference</strong>: your own PLINK binary fileset
+(<code>.bed</code>, <code>.bim</code>, <code>.fam</code>)</td>
+<td>None: the API doesn’t read your files</td>
+<td>
+<code>og_local(gwas = ..., bfile = prefix)</code>, or
+<code>og_local(bfile = prefix)</code> alone for LD only, and
+<code>plink =</code> the PLINK 1.9 or 2 binary if opengwasr can’t find
+it. Available now</td>
+</tr>
+<tr class="even">
+<td>None given</td>
+<td>
+<code><a href="../reference/og_api.html">og_api()</a></code>: each Analysis’s Assigned Ancestry chooses its
+LD Store</td>
+<td>
+<code>og_local(gwas = ...)</code>: anything that needs LD stops and
+asks you to give an LD resource</td>
+</tr>
+</tbody>
+</table>
+<p>A form that is coming is refused with an error that says so, rather
+than quietly doing something else.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">src</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_api.html">og_api</a></span><span class="op">(</span><span class="op">)</span>                         <span class="co"># LD: each Analysis's Assigned Ancestry chooses</span></span>
+<span><span class="va">src_eur</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_api.html">og_api</a></span><span class="op">(</span>ld_store <span class="op">=</span> <span class="st">"EUR"</span><span class="op">)</span>     <span class="co"># LD: the EUR LD Store</span></span>
+<span><span class="va">src_eur</span></span></code></pre></div>
+<pre><code><span><span class="co">## &lt;og_api_source&gt;</span></span>
+<span><span class="co">## • URL: http://localhost:6433</span></span>
+<span><span class="co">## • Signed in with: OPENGWAS_DEV_KEY (as opengwasr-dev)</span></span>
+<span><span class="co">## • Timeout: 3600 s</span></span>
+<span><span class="co">## • Jobs in flight: at most 4</span></span>
+<span><span class="co">## • LD resource: LD Store "EUR"</span></span></code></pre>
+<p>With Store Releases you have downloaded, such as
+<code>og_local(gwas = "/data/opengwas/OGS-00011", bfile = "/data/ld/1kg/EUR")</code>.
+Here, the small example Store Releases and PLINK Reference that come
+with opengwasr:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">stores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"stores"</span>, package <span class="op">=</span> <span class="st">"opengwasr"</span><span class="op">)</span></span>
+<span><span class="va">local</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_local.html">og_local</a></span><span class="op">(</span>gwas <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">stores</span>, <span class="st">"dense"</span><span class="op">)</span><span class="op">)</span>   <span class="co"># LD: none, so anything needing LD asks for one</span></span>
+<span><span class="fu"><a href="../reference/og_ld_resource.html">og_ld_resource</a></span><span class="op">(</span><span class="va">local</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## NULL</span></span></code></pre>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">bfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"plink"</span>, package <span class="op">=</span> <span class="st">"opengwasr"</span><span class="op">)</span>, <span class="st">"ref"</span><span class="op">)</span></span>
+<span><span class="va">local</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_local.html">og_local</a></span><span class="op">(</span>gwas <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">stores</span>, <span class="st">"dense"</span><span class="op">)</span>, bfile <span class="op">=</span> <span class="va">bfile</span><span class="op">)</span>   <span class="co"># LD: your PLINK Reference</span></span>
+<span><span class="va">local</span></span></code></pre></div>
+<pre><code><span><span class="co">## &lt;og_local_source&gt;</span></span>
+<span><span class="co">## • Store Releases: 1</span></span>
+<span><span class="co">## • s/r: /home/runner/work/_temp/Library/opengwasr/stores/dense/r</span></span>
+<span><span class="co">## • LD resource: PLINK Reference /home/runner/work/_temp/Library/opengwasr/plink/ref</span></span>
+<span><span class="co">##   PLINK 1.90b6.21: /home/runner/work/_temp/Library/genetics.binaRies/bin/plink</span></span></code></pre>
+<p>Every verb that needs LD (<code><a href="../reference/og_tophits.html">og_tophits()</a></code> when it clumps,
+<code><a href="../reference/og_clump.html">og_clump()</a></code>, <code><a href="../reference/og_ld_matrix.html">og_ld_matrix()</a></code>,
+<code><a href="../reference/og_ld_proxies.html">og_ld_proxies()</a></code> and <code><a href="../reference/og_ld_reflookup.html">og_ld_reflookup()</a></code>) uses
+the Source’s LD resource; no verb takes an LD argument. For other LD in
+one call, make a Source like yours with other LD: <code>inherit =</code>
+keeps everything you don’t give, such as
+<code>og_ld_matrix(og_api(inherit = src_eur, ld_store = "AFR"), variants)</code>,
+or <code>og_local(inherit = local, bfile = ...)</code>.</p>
+<p>A Source’s LD lives where the Source does. To take Associations from
+one place and LD from another, fetch with one Source and clump with the
+other, such as
+<code>og_clump(og_local(bfile = ...), og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)</code>
+for top hits from the API clumped with your PLINK Reference
+(<code>limit = 10000</code> fetches them all; the default, 1,000, would
+cut them off before clumping) (<a href="ld.html#mixing">Associations
+from one place, LD from another</a>). <a href="ld.html#ld-resource">LD
+operations</a> explains choosing LD in full.</p>
+</div>
 <div class="section level2">
 <h2 id="credentials">Credentials<a class="anchor" aria-label="anchor" href="#credentials"></a>
 </h2>
@@ -136,7 +267,7 @@ committed.</p>
 <div class="section level3">
 <h3 id="og-api">Creating the API Source<a class="anchor" aria-label="anchor" href="#og-api"></a>
 </h3>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">src</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_api.html">og_api</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">src</span></span></code></pre></div>
 <pre><code><span><span class="co">## &lt;og_api_source&gt;</span></span>
@@ -152,7 +283,7 @@ Each defaults to an option (<code>opengwasr.url</code>,
 so you can set it once for a session. A fourth option,
 <code>opengwasr.progress</code>, turns the progress display off when
 <code>FALSE</code>; it is on in interactive sessions by default.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>opengwasr.timeout <span class="op">=</span> <span class="fl">600</span><span class="op">)</span></span>
 <span><span class="va">src</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_api.html">og_api</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Without a key, <code><a href="../reference/og_api.html">og_api()</a></code> stops straight away:</p>
@@ -179,14 +310,14 @@ serves <code>/api/status</code> without a key, so
 Source with <code><a href="../reference/og_api.html">og_api()</a></code> still needs a key to be set).
 <code><a href="../reference/og_status.html">og_user()</a></code> reports who you are signed in as, and your
 allowance, and is the call that checks your key.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_status.html">og_status</a></span><span class="op">(</span><span class="va">src</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## ── OpenGWAS API ──</span></span>
 <span><span class="co">## ✔ Ready</span></span>
 <span><span class="co">## • Most Associations one Job returns: 100,000</span></span>
 <span><span class="co">## • Unread Job results kept for: 1 h</span></span>
 <span><span class="co">## • Jobs one user may have queued: 100</span></span></code></pre>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_status.html">og_user</a></span><span class="op">(</span><span class="va">src</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## ── Signed in ──</span></span>
 <span><span class="co">## • User: opengwasr-dev</span></span>
@@ -210,7 +341,7 @@ collection of harmonised GWAS summary statistics with an
 <div class="section level3">
 <h3 id="analyses-by-id">By identifier<a class="anchor" aria-label="anchor" href="#analyses-by-id"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">info</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"OGS-00011:GCST90029007"</span>, <span class="st">"OGS-00011:GCST003116"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">info</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"analysis_label"</span>, <span class="st">"assigned_ancestry"</span>, <span class="st">"sample_size"</span>,</span>
 <span>         <span class="st">"outcome_type"</span>, <span class="st">"stored_effect_scale"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
@@ -235,7 +366,7 @@ The metadata includes the trait (<code>analysis_label</code>,
 service ieugwasr calls, are accepted where they name exactly one
 Analysis. The <code>requested_id</code> column shows what you asked
 for:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ukb-b-19953"</span>, <span class="st">"ebi-a-GCST003116"</span><span class="op">)</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"requested_id"</span>, <span class="st">"id"</span>, <span class="st">"analysis_label"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">##       requested_id                    id          analysis_label</span></span>
 <span><span class="co">## 1      ukb-b-19953 OGS-00009:ukb-b-19953   Body mass index (BMI)</span></span>
@@ -247,7 +378,7 @@ identifier; where the API gives a reason, as it does for a Legacy
 OpenGWAS family it doesn’t hold, the message quotes it and
 <code>e$api_reasons</code> keeps it. Some Legacy OpenGWAS identifier
 families aren’t held by any GWAS Store:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"ieu-a-2"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `og_analyses()`:</span></span></span>
 <span><span class="co">## <span style="color: #BBBB00;">!</span> Identifiers that name no Analysis:</span></span>
@@ -257,7 +388,7 @@ analysis. For example, <code>finn-b-I9_CHD</code> points to FinnGen
 release 13, <code>OGS-00017:finngen-r13-I9_CHD</code>. opengwasr answers
 with the successor, and warns you, because its numbers differ from the
 ones Legacy OpenGWAS served:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"finn-b-I9_CHD"</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"requested_id"</span>, <span class="st">"id"</span>, <span class="st">"analysis_label"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">## Warning in og_analyses(src, "finn-b-I9_CHD"): `finn-b-I9_CHD` now points to a later release of that analysis, "OGS-00017:finngen-r13-I9_CHD", whose numbers differ from the ones Legacy OpenGWAS served.</span></span>
 <span><span class="co">## <span style="color: #0000BB;">ℹ</span> Ask for "OGS-00017:finngen-r13-I9_CHD" by name to silence this warning.</span></span></code></pre>
@@ -295,7 +426,7 @@ which is latest, so opengwasr stops with
 whether you named that GWAS Store or left <code>releases</code> out), or
 <code>"&lt;store_id&gt;/&lt;release_id&gt;"</code> to pin a particular
 one:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST90029007"</span>,</span>
 <span>            releases <span class="op">=</span> <span class="st">"OGS-00011/OGS-00011-completed"</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"release_id"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">##                       id          release_id</span></span>
@@ -313,11 +444,11 @@ tens of thousands of Analyses, so this example reads one GWAS Store, the
 UK Biobank analyses of <code>OGS-00009</code>, by pinning it with
 <code>releases</code>. Leave <code>releases</code> out for
 everything:</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">catalogue</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, releases <span class="op">=</span> <span class="st">"OGS-00009"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">catalogue</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## [1] 2514</span></span></code></pre>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bmi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">catalogue</span>, <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"body mass index"</span>, <span class="va">analysis_label</span>, ignore.case <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;</span></span>
 <span>                <span class="va">assigned_ancestry</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="st">"EUR"</span> <span class="op">&amp;</span> <span class="va">outcome_type</span> <span class="op">==</span> <span class="st">"continuous"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">bmi</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"analysis_label"</span>, <span class="st">"sample_size"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">3</span><span class="op">)</span></span></code></pre></div>
@@ -376,7 +507,7 @@ GRCh38 position and two alleles, and returns it with an
 <code>alid</code> column added and the alleles oriented to match. Here
 <code>my_gwas</code> is a small made-up data frame standing in for your
 own data:</p>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">my_gwas</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  chromosome    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"16"</span>, <span class="st">"chr18"</span>, <span class="st">"5"</span>, <span class="st">"1"</span><span class="op">)</span>,</span>
 <span>  position      <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">53767042</span>, <span class="fl">60161902</span>, <span class="fl">75701728</span>, <span class="fl">827587</span><span class="op">)</span>,</span>
@@ -417,7 +548,7 @@ count. This is the same rule the GWAS Stores were built by, so an ALID
 reference, pass <code>reference</code>: <code>"other_allele"</code> or
 <code>"effect_allele"</code> when one of those columns is always the
 reference, or the name of a column holding the reference allele:</p>
-<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_alid.html">og_alid</a></span><span class="op">(</span><span class="va">my_gwas</span>, reference <span class="op">=</span> <span class="st">"other_allele"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## <span style="color: #00BBBB;">ℹ</span> Swapped the alleles of 3 variants to match their ALIDs: `beta` negated, `eaf`</span></span>
 <span><span class="co">##   replaced by 1 - `eaf`.</span></span></code></pre>
@@ -446,11 +577,11 @@ strongest first. It <strong>clumps them by default</strong>, keeping one
 variant per independent signal; the <a href="ld.html#clumping">LD
 operations</a> vignette explains how. Here, <code>clump = FALSE</code>
 shows every top hit:</p>
-<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb40"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">top</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST003116"</span>, clump <span class="op">=</span> <span class="cn">FALSE</span>, limit <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## Warning in og_tophits(src, "OGS-00011:GCST003116", clump = FALSE, limit = 5): OGS-00011:GCST003116 has more than 5 top hits at p &lt;= 5e-08; only the strongest 5 were returned.</span></span>
 <span><span class="co">## <span style="color: #0000BB;">ℹ</span> Raise `limit` (at most 10,000) for more.</span></span></code></pre>
-<div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb42"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">top</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rsid"</span>, <span class="st">"alid"</span>, <span class="st">"beta"</span>, <span class="st">"se"</span>, <span class="st">"pval"</span>, <span class="st">"association_status"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##         rsid           alid       beta          se         pval</span></span>
 <span><span class="co">## 1  rs2891168 9:22098620:A:G -0.1933591 0.009185791 2.296241e-98</span></span>
@@ -472,7 +603,7 @@ above.</li>
 Store indexes <code>5e-8</code>, <code>5e-6</code> and
 <code>5e-4</code>, and the API refuses anything looser:</li>
 </ul>
-<div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb44"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST003116"</span>, threshold <span class="op">=</span> <span class="fl">1e-3</span>, clump <span class="op">=</span> <span class="cn">FALSE</span>, limit <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `og_tophits()`:</span></span></span>
 <span><span class="co">## <span style="color: #BBBB00;">!</span> threshold must be at most 0.0005, the loosest p-value the Top-Hit Index of OGS-00011 holds</span></span></code></pre>
@@ -488,7 +619,7 @@ GWAS Store indexes, as the API listed them, in
 variants in a set of Analyses: for example, the outcome data for your
 instruments. Variants can be rsIDs or <a href="#alids">ALIDs</a>,
 mixed.</p>
-<div class="sourceCode" id="cb40"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb46"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">assoc</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_associations.html">og_associations</a></span><span class="op">(</span></span>
 <span>  <span class="va">src</span>,</span>
 <span>  variants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rs1421085"</span>, <span class="st">"16:53767042:C:T"</span>, <span class="st">"rs6567160"</span>, <span class="st">"rs34159589"</span>, <span class="st">"rs999999999"</span><span class="op">)</span>,</span>
@@ -497,7 +628,7 @@ mixed.</p>
 <pre><code><span><span class="co">## Warning in og_associations(src, variants = c("rs1421085", "16:53767042:C:T", :</span></span>
 <span><span class="co">## 1 rsID is in none of these Analyses' GWAS Stores, so it has no Associations:</span></span>
 <span><span class="co">## rs999999999.</span></span></code></pre>
-<div class="sourceCode" id="cb42"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb48"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">assoc</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"rsid"</span>, <span class="st">"alid"</span>, <span class="st">"beta"</span>, <span class="st">"se"</span>, <span class="st">"pval"</span>, <span class="st">"association_status"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">##                       id       rsid               alid         beta          se</span></span>
 <span><span class="co">## 1 OGS-00011:GCST90029007 rs34159589 5:75701728:A:AAAAT -0.025441924 0.002000809</span></span>
@@ -552,11 +683,11 @@ in. An rsID is resolved to every ALID it names, and opengwasr runs one
 PheWAS per ALID and combines them in the order you gave the variants.
 Here, the Associations of <code>rs1421085</code> at p ≤ 1e-50 in one
 GWAS Store:</p>
-<div class="sourceCode" id="cb44"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb50"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ph</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_phewas.html">og_phewas</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"rs1421085"</span>, threshold <span class="op">=</span> <span class="fl">1e-50</span>, releases <span class="op">=</span> <span class="st">"OGS-00011"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">ph</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## [1] 27</span></span></code></pre>
-<div class="sourceCode" id="cb46"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb52"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">ph</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"analysis_label"</span>, <span class="st">"beta"</span>, <span class="st">"pval"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">4</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##                       id                              analysis_label</span></span>
 <span><span class="co">## 1   OGS-00011:GCST002047 Educational attainment (college completion)</span></span>
@@ -576,7 +707,7 @@ you get a warning, as for top hits.</p>
 chromosome. Positions are on GRCh38, one-based and inclusive. A range
 over 10 Mb, or over more than 10 Analyses, is split into several Jobs
 for you:</p>
-<div class="sourceCode" id="cb48"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb54"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">locus</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_range.html">og_range</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST003116"</span>, chromosome <span class="op">=</span> <span class="st">"9"</span>,</span>
 <span>                  start <span class="op">=</span> <span class="fl">22090000</span>, end <span class="op">=</span> <span class="fl">22130000</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">locus</span><span class="op">$</span><span class="va">association_status</span><span class="op">)</span></span></code></pre></div>
@@ -587,7 +718,7 @@ for you:</p>
 translate rsIDs and GRCh38 positions into ALIDs, using the GWAS Stores’
 own variant tables. You get each ALID once for every GWAS Store that
 holds it:</p>
-<div class="sourceCode" id="cb50"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb56"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_variants_rsid.html">og_variants_rsid</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"rs34159589"</span>, releases <span class="op">=</span> <span class="st">"OGS-00011"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##                         alid chromosome effect_allele other_allele position</span></span>
 <span><span class="co">## 1         5:75701728:A:AAAAT          5             A        AAAAT 75701728</span></span>
@@ -595,7 +726,7 @@ holds it:</p>
 <span><span class="co">##            release_id       rsid  store_id</span></span>
 <span><span class="co">## 1 OGS-00011-completed rs34159589 OGS-00011</span></span>
 <span><span class="co">## 2 OGS-00011-completed rs34159589 OGS-00011</span></span></code></pre>
-<div class="sourceCode" id="cb52"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb58"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_variants_rsid.html">og_variants_chrpos</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"16:53767042"</span>, releases <span class="op">=</span> <span class="st">"OGS-00011"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##              alid chromosome effect_allele other_allele position</span></span>
 <span><span class="co">## 1 16:53767042:A:G         16             A            G 53767042</span></span>
@@ -625,7 +756,7 @@ multivariable MR or multi-trait analyses, can use it rather than
 estimate it again.</p>
 <p><code>og_rho()</code> will return the whole matrix for a GWAS Store,
 or the part for the Analyses you choose:</p>
-<div class="sourceCode" id="cb54"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb60"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rho_all</span> <span class="op">&lt;-</span> <span class="fu">og_rho</span><span class="op">(</span><span class="va">src</span>, store <span class="op">=</span> <span class="st">"OGS-00009"</span><span class="op">)</span></span>
 <span><span class="va">rho</span> <span class="op">&lt;-</span> <span class="fu">og_rho</span><span class="op">(</span><span class="va">src</span>, analyses <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"OGS-00009:ukb-b-19953"</span>, <span class="st">"OGS-00009:ukb-b-2303"</span>, <span class="st">"OGS-00009:ukb-b-11842"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <ul>
@@ -737,11 +868,11 @@ when you ask for <code>original_units = TRUE</code>
 opengwasr adds <code>beta</code> = <code>z * se</code>, and computes
 <code>pval</code> from the p-value the API sends, so it matches the API
 exactly. All of them are computed the same way everywhere.</p>
-<div class="sourceCode" id="cb55"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb61"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">top</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST90029007"</span>, clump <span class="op">=</span> <span class="cn">FALSE</span>, limit <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## Warning in og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE, limit = 3): OGS-00011:GCST90029007 has more than 3 top hits at p &lt;= 5e-08; only the strongest 3 were returned.</span></span>
 <span><span class="co">## <span style="color: #0000BB;">ℹ</span> Raise `limit` (at most 10,000) for more.</span></span></code></pre>
-<div class="sourceCode" id="cb57"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb63"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">top</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rsid"</span>, <span class="st">"z"</span>, <span class="st">"se"</span>, <span class="st">"beta"</span>, <span class="st">"pval"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">##         rsid         z          se        beta pval</span></span>
 <span><span class="co">## 1 rs56094641 -38.53421 0.001968384 -0.07585011    0</span></span>
@@ -773,7 +904,7 @@ from the trait.</p>
 <code>beta</code> and <code>se</code> by the Analysis’s recorded
 phenotype SD (<code>original_sd</code> in <code><a href="../reference/og_analyses.html">og_analyses()</a></code>),
 and <code>effect_scale</code> becomes <code>"original"</code>:</p>
-<div class="sourceCode" id="cb59"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb65"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">per_sd</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST90624700"</span>, clump <span class="op">=</span> <span class="cn">FALSE</span>, limit <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">original</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST90624700"</span>, clump <span class="op">=</span> <span class="cn">FALSE</span>, limit <span class="op">=</span> <span class="fl">5</span>,</span>
 <span>                       original_units <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -782,7 +913,7 @@ and <code>effect_scale</code> becomes <code>"original"</code>:</p>
 <span><span class="co">## 1  rs1421085  0.09583174 0.00312233           sd</span></span>
 <span><span class="co">## 2 rs55872725 -0.09583174 0.00312233           sd</span></span>
 <span><span class="co">## 3 rs11642015 -0.09581344 0.00312233           sd</span></span></code></pre>
-<div class="sourceCode" id="cb61"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb67"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">original</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rsid"</span>, <span class="st">"beta"</span>, <span class="st">"se"</span>, <span class="st">"effect_scale"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">3</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##         rsid       beta         se effect_scale</span></span>
 <span><span class="co">## 1  rs1421085  0.4667140 0.01520618     original</span></span>
@@ -797,7 +928,7 @@ with a recorded phenotype SD, opengwasr refuses rather than guess. That
 includes the binary Analyses stored per SD (the 1,846 binary
 <code>ukb-b-*</code> traits), which have no phenotype SD to rescale
 by:</p>
-<div class="sourceCode" id="cb63"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb69"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00009:ukb-b-19953"</span>, clump <span class="op">=</span> <span class="cn">FALSE</span>, original_units <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;"> in `og_tophits()`:</span></span></span>
 <span><span class="co">## <span style="color: #BBBB00;">!</span> Can't give this Analysis in original units.</span></span>
@@ -838,7 +969,7 @@ and <code>ncontrol</code> give each.</li>
 <code>"variant_level"</code>: N differs from variant to variant, as
 in many molecular-trait Analyses.</li>
 </ul>
-<div class="sourceCode" id="cb65"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb71"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"OGS-00011:GCST003116"</span>, <span class="st">"OGS-00027:ENSG00000000419"</span><span class="op">)</span>,</span>
 <span>                  clump <span class="op">=</span> <span class="cn">FALSE</span>, limit <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">out</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">6</span><span class="op">:</span><span class="fl">8</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"id"</span>, <span class="st">"n"</span>, <span class="st">"sample_size_kind"</span>, <span class="st">"ncase"</span>, <span class="st">"ncontrol"</span>, <span class="st">"effect_scale"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
@@ -860,17 +991,17 @@ its source reported (Observed), an Imputed Association for most variants
 the source didn’t report. opengwasr includes them by default, and labels
 each Association in <code>association_status</code>. Here are BMI’s
 1,000 strongest top hits looked up in CAD:</p>
-<div class="sourceCode" id="cb67"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb73"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bmi_top</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_tophits.html">og_tophits</a></span><span class="op">(</span><span class="va">src</span>, <span class="st">"OGS-00011:GCST90029007"</span>, clump <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## Warning in og_tophits(src, "OGS-00011:GCST90029007", clump = FALSE): OGS-00011:GCST90029007 has more than 1,000 top hits at p &lt;= 5e-08; only the strongest 1,000 were returned.</span></span>
 <span><span class="co">## <span style="color: #0000BB;">ℹ</span> Raise `limit` (at most 10,000) for more.</span></span></code></pre>
-<div class="sourceCode" id="cb69"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb75"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">outcome</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_associations.html">og_associations</a></span><span class="op">(</span><span class="va">src</span>, <span class="va">bmi_top</span><span class="op">$</span><span class="va">alid</span>, <span class="st">"OGS-00011:GCST003116"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">outcome</span><span class="op">$</span><span class="va">association_status</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## </span></span>
 <span><span class="co">##  imputed observed </span></span>
 <span><span class="co">##       61      938</span></span></code></pre>
-<div class="sourceCode" id="cb71"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb77"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">observed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/og_associations.html">og_associations</a></span><span class="op">(</span><span class="va">src</span>, <span class="va">bmi_top</span><span class="op">$</span><span class="va">alid</span>, <span class="st">"OGS-00011:GCST003116"</span>,</span>
 <span>                            observed_only <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">observed</span><span class="op">)</span></span></code></pre></div>
@@ -908,14 +1039,14 @@ when the rows no longer match, and stops with class
 <code>opengwasr_no_provenance</code> if the operation dropped the
 attribute altogether; keep it, or its counts, before you combine data
 frames.</p>
-<div class="sourceCode" id="cb73"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb79"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_provenance.html">og_provenance</a></span><span class="op">(</span><span class="va">top</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## ── opengwasr provenance ─────────────────</span></span>
 <span><span class="co">## • Query: og_tophits(threshold = 5e-08, limit = 3, observed_only = FALSE, clump = FALSE, original_units = FALSE)</span></span>
 <span><span class="co">## • Store Releases: OGS-00011/OGS-00011-completed</span></span>
 <span><span class="co">## • Jobs: 60057995</span></span>
 <span><span class="co">## • Rows: 3 returned of 3 matching (truncated)</span></span>
-<span><span class="co">## • Retrieved: 2026-11-24 14:04:41 UTC</span></span></code></pre>
+<span><span class="co">## • Retrieved: 2026-11-26 10:17:55 UTC</span></span></code></pre>
 <p>Record the Store Releases alongside your analysis. They identify
 exactly which data answered.</p>
 </div>
@@ -1068,7 +1199,7 @@ message), or you interrupted the wait (<a href="large-queries-and-jobs.html">Lar
 </table>
 <p>All of them also have class <code>opengwasr_error</code>. Catch one
 by its class:</p>
-<div class="sourceCode" id="cb75"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb81"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">info</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/og_analyses.html">og_analyses</a></span><span class="op">(</span><span class="va">src</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ukb-b-19953"</span>, <span class="st">"ieu-a-2"</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  opengwasr_analysis_not_found <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="op">{</span></span>

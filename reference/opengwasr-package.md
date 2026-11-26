@@ -8,9 +8,10 @@ Releases downloaded to a local machine.
 
 opengwasr reads OpenGWAS data through a *Source*. The API Source queries
 the OpenGWAS API; a Local Source, planned for a later release, will read
-Store Releases and LD Stores downloaded to your own machine. Query
-functions take the Source as their first argument, so the same call
-works against either.
+Store Releases downloaded to your own machine (see
+[`vignette("local-source")`](https://opengwas.github.io/opengwasr/articles/local-source.md)).
+Query functions take the Source as their first argument, so the same
+call works against either.
 
 The terms used throughout the package (Analysis, Association, Source,
 Store Release and others) are defined in the

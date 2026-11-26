@@ -1,8 +1,9 @@
 # Provenance of a query's result
 
 `og_provenance(x)` says how `x` was produced: the call, the Store
-Releases that answered, the Job ids, and the API's counts, including
-whether `limit` cut any off (`total`, `truncated`).
+Releases that answered, the Job ids, and the counts, including whether
+`limit` cut any off (`total`, `truncated`). A Local Source runs no Jobs:
+its answers record no Job ids, and no cost estimate.
 
 ## Usage
 
@@ -27,8 +28,8 @@ A list of class `og_provenance`:
 - `store_releases`: the Store Releases that answered, as
   `<store_id>/<release_id>`.
 
-- `job_ids`: the API's Job ids; `existing`: whether the API reattached
-  you to a Job it already had.
+- `job_ids`: the API's Job ids (none for what a Local Source answered);
+  `existing`: whether the API reattached you to a Job it already had.
 
 - `cost_estimate`: the API's cost estimate for the Jobs, summed.
 
@@ -40,13 +41,20 @@ A list of class `og_provenance`:
 
 - Clumped results: `clump`, a data frame with one row per Analysis
   clumped (one row, `id` `NA`, for
-  [`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md)'s
-  one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts
+  [`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md)
+  of one set): `id`, `ld`, `ld_choice`, `r2`, `kb`, and the API's counts
   `hits` (the variants clumped), `absent` (those not in the LD Store)
-  and `leads` (index variants).
+  and `leads` (index variants), and `clumps`: `"computed"` (clumped on
+  the fly, as every clumping is today) or, once Store Releases carry
+  them, `"stored"`. `ld_from` says where the LD came from: `"source"`
+  (the Source's LD resource) or `"ancestry"` (each Analysis's Assigned
+  Ancestry, on an API Source with none).
 
-- LD results: `ld`, `ld_choice` and `absent` (see
+- LD results: `ld`, `ld_choice`, `ld_from` (as above) and `absent` (see
   [`og_ld_matrix()`](https://opengwas.github.io/opengwasr/reference/og_ld_matrix.md)).
+  [`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md)
+  of Analyses matched to several LD Stores gives each in `ld`, and how
+  each was chosen in `ld_choice`, one for one.
 
 A data frame whose provenance was dropped (by
 [`merge()`](https://rdrr.io/r/base/merge.html), say) raises an error of

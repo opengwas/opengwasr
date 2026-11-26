@@ -4,9 +4,10 @@ pkgdown_sha: ~
 articles:
   large-queries-and-jobs: large-queries-and-jobs.html
   ld: ld.html
+  local-source: local-source.html
   migrating-from-ieugwasr: migrating-from-ieugwasr.html
   opengwasr: opengwasr.html
-last_built: 2026-11-24T14:04Z
+last_built: 2026-11-26T10:17Z
 urls:
   reference: https://opengwas.github.io/opengwasr/reference
   article: https://opengwas.github.io/opengwasr/articles

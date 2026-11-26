@@ -44,8 +44,6 @@ LD Stores, LD matrices, proxies and reflookup, and clumping.
   : Is a variant in the LD Store?
 - [`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md)
   : Clump Associations you already have
-- [`og_plink_reference()`](https://opengwas.github.io/opengwasr/reference/og_plink_reference.md)
-  : A PLINK Reference: your own genotypes for local LD
 
 ## Your own data
 
@@ -58,6 +56,12 @@ Where queries are answered, and who you are signed in as.
 
 - [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md)
   : Create the API Source
+- [`og_local()`](https://opengwas.github.io/opengwasr/reference/og_local.md)
+  : Create a Local Source
+- [`og_local_check()`](https://opengwas.github.io/opengwasr/reference/og_local_check.md)
+  : Check the setup of a Local Source
+- [`og_ld_resource()`](https://opengwas.github.io/opengwasr/reference/og_ld_resource.md)
+  : The LD resource a Source carries
 - [`og_status()`](https://opengwas.github.io/opengwasr/reference/og_status.md)
   [`og_user()`](https://opengwas.github.io/opengwasr/reference/og_status.md)
   : Check the API and your access

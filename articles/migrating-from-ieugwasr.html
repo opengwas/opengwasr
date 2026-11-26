@@ -35,8 +35,9 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
-    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
+    <li><a class="dropdown-item" href="../articles/local-source.html">Querying downloaded Store Releases</a></li>
     <li><a class="dropdown-item" href="../articles/ld.html">LD operations</a></li>
+    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
     <li><a class="dropdown-item" href="../articles/migrating-from-ieugwasr.html">Migrating from ieugwasr</a></li>
   </ul>
 </li>
@@ -191,10 +192,11 @@ how it was obtained.</td>
 <tr class="odd">
 <td><code>tophits(id, pval, clump, r2, kb, force_server)</code></td>
 <td><code>extract_instruments()</code></td>
-<td><code>og_tophits(src, analyses, threshold = 5e-8, limit = 1000, clump = TRUE, ld = NULL, r2 = NULL, kb = NULL)</code></td>
+<td><code>og_tophits(src, analyses, threshold = 5e-8, limit = 1000, clump = TRUE, r2 = NULL, kb = NULL)</code></td>
 <td>Still clumped by default, but the default thresholds come from the
 LD Store (r² about 0.03 within 10,000 kb). r² 0.001 within 10,000 kb is
-refused. The LD Store matches each Analysis’s ancestry, not always EUR.
+refused. The LD Store matches each Analysis’s ancestry, not always EUR,
+unless the Source names one (<code>og_api(ld_store = "EUR")</code>).
 <code>threshold</code> can be at most 5e-4. <code>limit</code> caps the
 top hits per Analysis (1,000 by default), with a warning when it cuts
 any off. <code>force_server</code> is gone.</td>
@@ -214,20 +216,28 @@ ALIDs. Large queries are split automatically.</td>
 <tr class="odd">
 <td><code>ld_clump(dat, clump_kb, clump_r2, clump_p, pop, bfile, plink_bin)</code></td>
 <td><code>clump_data()</code></td>
-<td><code>og_clump(src, data, ld = NULL, r2 = NULL, kb = NULL)</code></td>
-<td>Ranks by |z|, not p. <code>pop</code> becomes
-<code>ld = "EUR"</code>, or the LD Store is matched from the Analyses’
-ancestry. <code>clump_r2</code>/<code>clump_kb</code> become
+<td><code>og_clump(src, data, r2 = NULL, kb = NULL, by_analysis = TRUE)</code></td>
+<td>Ranks by |z|, not p. Clumps each Analysis (<code>id</code>) on its
+own, as <code>ld_clump()</code> did; <code>by_analysis = FALSE</code>
+clumps all the rows as one set. <code>pop</code> becomes the Source’s LD
+resource, <code>og_api(ld_store = "EUR")</code>, or
+<code>og_api(inherit = src, ld_store = "EUR")</code> from a Source you
+have; without one, the LD Store is matched from the Analyses’ ancestry.
+<code>clump_r2</code>/<code>clump_kb</code> become
 <code>r2</code>/<code>kb</code>, defaulting to the LD Store’s own.
-<code>bfile</code> and <code>plink_bin</code> become
-<code>ld = og_plink_reference(path, plink_bin)</code>. For
+<code>bfile</code> and <code>plink_bin</code> become a Local Source’s LD
+resource, <code>og_local(bfile = bfile, plink = plink_bin)</code>, with
+PLINK 1.9 or 2:
+<code>og_clump(og_local(bfile = bfile), data, r2 = , kb = )</code>. For
 <code>clump_p</code>, filter <code>data</code> before clumping.</td>
 </tr>
 <tr class="even">
 <td><code>ld_matrix(variants, with_alleles, pop)</code></td>
 <td><code>ld_matrix()</code></td>
-<td><code>og_ld_matrix(src, variants, ld = NULL, fill_below_t_far = FALSE)</code></td>
-<td>Named by ALID, which carries the alleles, so
+<td><code>og_ld_matrix(src, variants, fill_below_t_far = FALSE)</code></td>
+<td>
+<code>pop</code> becomes the Source’s LD resource, as for
+<code><a href="../reference/og_clump.html">og_clump()</a></code>. Named by ALID, which carries the alleles, so
 <code>with_alleles</code> is gone. Pairs the LD Store doesn’t hold are
 <code>NA</code>, not 0; <code>fill_below_t_far = TRUE</code> sets the
 weakly linked ones to 0 (<a href="ld.html#ld-matrix-fill">missing
@@ -318,13 +328,29 @@ records. Positions are on GRCh38 and exact: there is no
 </tr>
 <tr class="even">
 <td>
-<code>ld_clump_local()</code>, <code>ld_matrix_local()</code>
+<code>ld_clump_local(dat, clump_kb, clump_r2, clump_p, bfile, plink_bin)</code>,
+<code>ld_matrix_local()</code>
 </td>
 <td>
-<code><a href="../reference/og_clump.html">og_clump()</a></code>, <code><a href="../reference/og_ld_matrix.html">og_ld_matrix()</a></code> with
-<code>ld = og_plink_reference(path)</code>
+<code>og_clump(og_local(bfile = bfile, plink = plink_bin), data, r2 = , kb = )</code>
+and <code>og_ld_matrix(og_local(bfile = bfile), variants)</code>; or
+<code><a href="../reference/og_tophits.html">og_tophits()</a></code> on
+<code>og_local(gwas = ..., bfile = bfile)</code>
 </td>
-<td>The same functions as for LD Stores.</td>
+<td>The same functions as for LD Stores. <code>og_local(bfile = )</code>
+alone is a Local Source with LD only: it clumps and reads LD matrices
+for data you already have, such as top hits from the API, matched by
+their <code>rsid</code> column (<a href="ld.html#plink-reference">Using
+a PLINK Reference</a>). With Store Releases too, every call uses the
+PLINK Reference (<a href="local-source.html#local-clumping">Clumping and
+LD</a>). <code>r2</code> and <code>kb</code> are required: a PLINK
+Reference has no defaults. LD from a PLINK Reference is computed from
+its genotypes without adjusting for population structure (principal
+components), unlike OpenGWAS LD Stores and Genotype Stores, so it may be
+less accurate. opengwasr warns of this once per PLINK Reference in a
+session (class <code>opengwasr_plink_unadjusted</code>). PLINK 2 works
+as well as PLINK 1.9, and <code>plink_bin</code> can be a command on
+your <code>PATH</code>, such as <code>"plink2"</code>.</td>
 </tr>
 <tr class="odd">
 <td><code>variants_gene()</code></td>
@@ -401,7 +427,12 @@ opengwasr’s default is the LD Store’s own: within 10,000 kb at its
 and the error suggests what the LD Store can answer: r² 0.001 within
 3,000 kb, or r² of at least <code>t_far</code> within 10,000 kb.</p>
 <p>Expect different instrument counts from before. Each clumped data
-frame records the LD Store, r² and window it used (see <a href="ld.html#clumping-provenance">clumping provenance</a>).</p>
+frame records the LD Store, r² and window it used (see <a href="ld.html#clumping-provenance">clumping provenance</a>). Store
+Releases will also carry stored Clumps, made at these defaults when they
+were built, and the default call will read them; any other
+<code>r2</code>, <code>kb</code> or LD is clumped on the fly, and the
+provenance says which (<a href="ld.html#stored-clumps">Stored
+Clumps</a>).</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">exposure</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"clump_ld"</span>, <span class="st">"clump_ld_choice"</span>, <span class="st">"clump_r2"</span>, <span class="st">"clump_kb"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##              clump_ld clump_ld_choice   clump_r2 clump_kb</span></span>
@@ -414,8 +445,10 @@ frame records the LD Store, r² and window it used (see <a href="ld.html#clumpin
 opengwasr clumps each Analysis in the LD Store of its Assigned Ancestry,
 inferred from the Analysis’s allele frequencies. An Analysis with no
 confident ancestry (Unassigned), or a set of Analyses whose ancestries
-differ, is refused unless you choose the LD with <code>ld</code>. There
-is no fallback to European LD.</p>
+differ, is refused unless you choose the LD, with the Source’s LD
+resource: <code>og_api(ld_store = "EUR")</code>, or
+<code>og_api(inherit = src, ld_store = "EUR")</code> for a Source like
+the one you have. There is no fallback to European LD.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/og_ld_stores.html">og_ld_stores</a></span><span class="op">(</span><span class="va">src</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ld_store"</span>, <span class="st">"ancestry"</span>, <span class="st">"t_far"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">##              ld_store ancestry      t_far</span></span>

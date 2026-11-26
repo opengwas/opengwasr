@@ -21,8 +21,9 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
-    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
+    <li><a class="dropdown-item" href="../articles/local-source.html">Querying downloaded Store Releases</a></li>
     <li><a class="dropdown-item" href="../articles/ld.html">LD operations</a></li>
+    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
     <li><a class="dropdown-item" href="../articles/migrating-from-ieugwasr.html">Migrating from ieugwasr</a></li>
   </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -55,7 +56,7 @@
 
 
 <dl><dt id="arg-src">src<a class="anchor" aria-label="anchor" href="#arg-src"></a></dt>
-<dd><p>A Source, from <code><a href="og_api.html">og_api()</a></code>.</p></dd>
+<dd><p>A Source, from <code><a href="og_api.html">og_api()</a></code> or <code><a href="og_local.html">og_local()</a></code>.</p></dd>
 
 
 <dt id="arg-ids">ids<a class="anchor" aria-label="anchor" href="#arg-ids"></a></dt>
@@ -66,7 +67,9 @@
 <dd><p>Store Releases to use. <code>NULL</code> uses the one Store Release each GWAS Store serves,
 as does a GWAS Store id such as <code>"OGS-00011"</code>. The API doesn't say which Store Release of a GWAS
 Store is latest, so if a GWAS Store serves several, opengwasr stops with
-<code>opengwasr_release_selection_required</code> and lists them: pin one as <code>"&lt;store_id&gt;/&lt;release_id&gt;"</code>.</p></dd>
+<code>opengwasr_release_selection_required</code> and lists them: pin one as <code>"&lt;store_id&gt;/&lt;release_id&gt;"</code>.
+A Local Source holds one Store Release of each GWAS Store, so never asks. A Store Release the
+Source doesn't serve or hold raises <code>opengwasr_release_not_found</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -88,6 +91,30 @@ the API's own codes. The condition carries the identifiers in <code>ids</code>, 
 where it gave one in <code>api_reasons</code> (<code>NA</code> otherwise), and, for a retired Analysis, every
 successor the API named in <code>superseded_by</code>.</p></li>
 </ul></div>
+    <div class="section level2">
+    <h2 id="local-source">Local Source<a class="anchor" aria-label="anchor" href="#local-source"></a></h2>
+
+
+<p>A Local Source (<code><a href="og_local.html">og_local()</a></code>) answers from the <code>analyses.tsv</code> of each Store Release it holds,
+and names Analyses the same way. It has no catalogue of Legacy OpenGWAS identifiers: an
+identifier that isn't <code>&lt;store_id&gt;:&lt;analysis_id&gt;</code> and is no <code>analysis_id</code> it holds, in any of its
+Store Releases, raises <code>opengwasr_legacy_id_local</code> (with the identifiers in <code>ids</code>); translate it
+once with <code>og_analyses(og_api(), ids)</code> and use the <code>id</code> that returns.</p>
+<p>Its rows have every column of the API Source's, in the same order and of the same types, from
+the Store Release's <code>analyses.tsv</code>; <code>outcome_type</code> is derived as the catalogue derives it.
+Columns the catalogue adds are NA locally (<code>status</code>, <code>listed</code>, <code>trait_class</code>,
+<code>ancestry_category</code>, <code>label_from_source</code>), as is any column the Store Release has no value for.
+The other columns of <code>analyses.tsv</code> follow, of the types opengwasdb gives them: the counts
+(<code>n_hits_5e8</code>, <code>n_hits_5e6</code>, <code>n_hits_5e4</code>, <code>completion_n_imputed_total</code>,
+<code>completion_n_missing_total</code>, <code>n_missing_se_out_of_range</code>, <code>eaf_orientation_n</code>, <code>n_loci_5e8</code>,
+<code>n_unclumped_5e8</code>) integer; <code>completion_median_pearson_r</code>, <code>eaf_orientation_r</code> and
+<code>original_sd_dispersion</code> double, as is each <code>ancestry_prop_&lt;population&gt;</code> (a proportion, from 0
+to 1); <code>eaf_scope</code>, <code>completed_against</code> and <code>eaf_orientation</code> text. A
+blank is NA of its column's type, and a column opengwasr doesn't know is text. A value of
+<code>analyses.tsv</code> the catalogue would refuse (a sample size that isn't a whole number, say), or
+that isn't of its column's type (a count of <code>1.5</code>), raises <code>opengwasr_invalid_analyses</code>, naming
+the Store Release, the column (<code>column</code>) and the values (<code>values</code>).</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>

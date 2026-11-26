@@ -7,6 +7,7 @@
 <url><loc>https://opengwas.github.io/opengwasr/articles/index.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/articles/large-queries-and-jobs.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/articles/ld.html</loc></url>
+<url><loc>https://opengwas.github.io/opengwasr/articles/local-source.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/articles/migrating-from-ieugwasr.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/articles/opengwasr.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/authors.html</loc></url>
@@ -20,9 +21,11 @@
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_ld_matrix.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_ld_proxies.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_ld_reflookup.html</loc></url>
+<url><loc>https://opengwas.github.io/opengwasr/reference/og_ld_resource.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_ld_stores.html</loc></url>
+<url><loc>https://opengwas.github.io/opengwasr/reference/og_local.html</loc></url>
+<url><loc>https://opengwas.github.io/opengwasr/reference/og_local_check.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_phewas.html</loc></url>
-<url><loc>https://opengwas.github.io/opengwasr/reference/og_plink_reference.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_provenance.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_range.html</loc></url>
 <url><loc>https://opengwas.github.io/opengwasr/reference/og_status.html</loc></url>

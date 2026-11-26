@@ -25,7 +25,9 @@ og_phewas(
 - src:
 
   A Source, from
-  [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md).
+  [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md)
+  or
+  [`og_local()`](https://opengwas.github.io/opengwasr/reference/og_local.md).
 
 - variants:
 

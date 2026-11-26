@@ -5,11 +5,11 @@ Associations and LD. Every query function takes a **Source** as its
 first argument, which says where the query is answered. This vignette
 uses the API Source,
 [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md),
-which queries the OpenGWAS API over the network. A later release adds a
-Local Source for Store Releases downloaded to your own machine. Code
-written against
-[`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md)
-will work with it unchanged.
+which queries the OpenGWAS API over the network. A Local Source reads
+Store Releases downloaded to your own machine instead (see
+[Sources](#sources)). Its verbs, arguments and columns are the same, but
+it answers LD (clumping and LD matrices) only when you give it an LD
+resource.
 
 You never handle the API’s Jobs, polling, paging or variant encodings
 yourself. Each call waits for its answer and returns a plain
@@ -21,8 +21,13 @@ a different answer.
 > the development Data API on 23 November 2026, except the ones marked
 > illustrative, each with its reason: the planned `og_rho()` (it needs a
 > Data API endpoint that doesn’t exist yet), the error you get with no
-> key, and the error for an ambiguous identifier (no identifier is
-> ambiguous in today’s catalogue).
+> key, the error for an ambiguous identifier (no identifier is ambiguous
+> in today’s catalogue). `sources-local` opens the example Store
+> Releases that come with opengwasr, and runs only where Python and
+> ogquery are set up (`local_ready`, as in [Querying downloaded Store
+> Releases](https://opengwas.github.io/opengwasr/articles/local-source.md));
+> `sources-local-plink` also needs a PLINK binary (`plink_ready`).
+> Elsewhere, as on CRAN, their code is shown unevaluated.
 >
 > *Developer note:* The API responses in this vignette were recorded
 > against the development Data API, directly, with a developer key (see
@@ -37,6 +42,100 @@ index (BMI) affect coronary artery disease (CAD)?
 
 library(opengwasr)
 ```
+
+## Sources
+
+A **Source** says two things: where Associations come from, and which
+**LD resource** answers LD for them (clumping, LD matrices and LD
+proxies). There are two kinds of Source:
+
+- [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md),
+  the **API Source**, reads the OpenGWAS API over the network.
+- `og_local(gwas = ...)`, a **Local Source**, reads Store Releases you
+  have downloaded (see [Querying downloaded Store
+  Releases](https://opengwas.github.io/opengwasr/articles/local-source.md)).
+  `og_local(bfile = ...)` alone is a Local Source with LD only, from
+  your own PLINK Reference.
+
+An LD resource is one of three kinds, and each can be on the API or on
+your machine:
+
+| LD resource | On the API | On your machine |
+|----|----|----|
+| **LD Store**: the precomputed LD of one reference panel | `og_api(ld_store = "EUR")`, an LD Store’s name or an ancestry code. Available now | `og_local(gwas = ..., ld_store = path)`. Coming, when opengwasr can read downloaded LD Stores |
+| **Genotype Store**: genotypes of one reference panel, from which LD is computed when asked | `og_api(geno_store = ...)`. Coming, when the API serves Genotype Stores | `og_local(gwas = ..., geno_store = path)`. Coming, when opengwasr can read downloaded Genotype Stores |
+| **PLINK Reference**: your own PLINK binary fileset (`.bed`, `.bim`, `.fam`) | None: the API doesn’t read your files | `og_local(gwas = ..., bfile = prefix)`, or `og_local(bfile = prefix)` alone for LD only, and `plink =` the PLINK 1.9 or 2 binary if opengwasr can’t find it. Available now |
+| None given | [`og_api()`](https://opengwas.github.io/opengwasr/reference/og_api.md): each Analysis’s Assigned Ancestry chooses its LD Store | `og_local(gwas = ...)`: anything that needs LD stops and asks you to give an LD resource |
+
+A form that is coming is refused with an error that says so, rather than
+quietly doing something else.
+
+``` r
+
+src <- og_api()                         # LD: each Analysis's Assigned Ancestry chooses
+src_eur <- og_api(ld_store = "EUR")     # LD: the EUR LD Store
+src_eur
+```
+
+    ## <og_api_source>
+    ## • URL: http://localhost:6433
+    ## • Signed in with: OPENGWAS_DEV_KEY (as opengwasr-dev)
+    ## • Timeout: 3600 s
+    ## • Jobs in flight: at most 4
+    ## • LD resource: LD Store "EUR"
+
+With Store Releases you have downloaded, such as
+`og_local(gwas = "/data/opengwas/OGS-00011", bfile = "/data/ld/1kg/EUR")`.
+Here, the small example Store Releases and PLINK Reference that come
+with opengwasr:
+
+``` r
+
+stores <- system.file("stores", package = "opengwasr")
+local <- og_local(gwas = file.path(stores, "dense"))   # LD: none, so anything needing LD asks for one
+og_ld_resource(local)
+```
+
+    ## NULL
+
+``` r
+
+bfile <- file.path(system.file("plink", package = "opengwasr"), "ref")
+local <- og_local(gwas = file.path(stores, "dense"), bfile = bfile)   # LD: your PLINK Reference
+local
+```
+
+    ## <og_local_source>
+    ## • Store Releases: 1
+    ## • s/r: /home/runner/work/_temp/Library/opengwasr/stores/dense/r
+    ## • LD resource: PLINK Reference /home/runner/work/_temp/Library/opengwasr/plink/ref
+    ##   PLINK 1.90b6.21: /home/runner/work/_temp/Library/genetics.binaRies/bin/plink
+
+Every verb that needs LD
+([`og_tophits()`](https://opengwas.github.io/opengwasr/reference/og_tophits.md)
+when it clumps,
+[`og_clump()`](https://opengwas.github.io/opengwasr/reference/og_clump.md),
+[`og_ld_matrix()`](https://opengwas.github.io/opengwasr/reference/og_ld_matrix.md),
+[`og_ld_proxies()`](https://opengwas.github.io/opengwasr/reference/og_ld_proxies.md)
+and
+[`og_ld_reflookup()`](https://opengwas.github.io/opengwasr/reference/og_ld_reflookup.md))
+uses the Source’s LD resource; no verb takes an LD argument. For other
+LD in one call, make a Source like yours with other LD: `inherit =`
+keeps everything you don’t give, such as
+`og_ld_matrix(og_api(inherit = src_eur, ld_store = "AFR"), variants)`,
+or `og_local(inherit = local, bfile = ...)`.
+
+A Source’s LD lives where the Source does. To take Associations from one
+place and LD from another, fetch with one Source and clump with the
+other, such as
+`og_clump(og_local(bfile = ...), og_tophits(src, ids, clump = FALSE, limit = 10000), r2 = 0.001, kb = 10000)`
+for top hits from the API clumped with your PLINK Reference
+(`limit = 10000` fetches them all; the default, 1,000, would cut them
+off before clumping) ([Associations from one place, LD from
+another](https://opengwas.github.io/opengwasr/articles/ld.html#mixing)).
+[LD
+operations](https://opengwas.github.io/opengwasr/articles/ld.html#ld-resource)
+explains choosing LD in full.
 
 ## Credentials
 
@@ -901,7 +1000,7 @@ og_provenance(top)
     ## • Store Releases: OGS-00011/OGS-00011-completed
     ## • Jobs: 60057995
     ## • Rows: 3 returned of 3 matching (truncated)
-    ## • Retrieved: 2026-11-24 14:04:41 UTC
+    ## • Retrieved: 2026-11-26 10:17:55 UTC
 
 Record the Store Releases alongside your analysis. They identify exactly
 which data answered.

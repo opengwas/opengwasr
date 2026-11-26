@@ -8,7 +8,7 @@ matrix. See
 ## Usage
 
 ``` r
-og_ld_reflookup(src, variants, ld = NULL)
+og_ld_reflookup(src, variants)
 ```
 
 ## Arguments
@@ -22,12 +22,6 @@ og_ld_reflookup(src, variants, ld = NULL)
 
   ALIDs and rsIDs, or a data frame of Associations.
 
-- ld:
-
-  An LD Store's name, an ancestry code (its LD Store), or `NULL` to
-  match the Assigned Ancestry of the Associations' Analyses. LD Stores
-  only: a PLINK Reference is refused.
-
 ## Value
 
 A data frame with
@@ -38,19 +32,18 @@ without an `rsid` column) and `present`.
 
 ## Details
 
-`variants` and `ld` are as for
+`variants` and the LD Store are as for
 [`og_ld_proxies()`](https://opengwas.github.io/opengwasr/reference/og_ld_proxies.md);
-an LD Store can only be named, not a PLINK Reference. An rsID stands for
-every ALID it names, one row each; an rsID no GWAS Store holds has one
-row with `alid` `NA` and `present` `FALSE`. A variant the LD Store
-doesn't hold is a row, not a warning. One Job takes at most 10,000
-variants; more are split.
+a Local Source is refused. An rsID stands for every ALID it names, one
+row each; an rsID no GWAS Store holds has one row with `alid` `NA` and
+`present` `FALSE`. A variant the LD Store doesn't hold is a row, not a
+warning. One Job takes at most 10,000 variants; more are split.
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
-src <- og_api()
-og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085"), ld = "EUR")
+src <- og_api(ld_store = "EUR")
+og_ld_reflookup(src, c("16:53767042:C:T", "rs1421085"))
 } # }
 ```

@@ -25,8 +25,9 @@ vignette(&quot;large-queries-and-jobs&quot;))."></head><body>
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
-    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
+    <li><a class="dropdown-item" href="../articles/local-source.html">Querying downloaded Store Releases</a></li>
     <li><a class="dropdown-item" href="../articles/ld.html">LD operations</a></li>
+    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
     <li><a class="dropdown-item" href="../articles/migrating-from-ieugwasr.html">Migrating from ieugwasr</a></li>
   </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -60,7 +61,6 @@ vignette(&quot;large-queries-and-jobs&quot;))."></head><body>
 <span>  limit <span class="op">=</span> <span class="fl">1000</span>,</span>
 <span>  observed_only <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  clump <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  ld <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  r2 <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  kb <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  original_units <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -73,7 +73,7 @@ vignette(&quot;large-queries-and-jobs&quot;))."></head><body>
 
 
 <dl><dt id="arg-src">src<a class="anchor" aria-label="anchor" href="#arg-src"></a></dt>
-<dd><p>A Source, from <code><a href="og_api.html">og_api()</a></code>.</p></dd>
+<dd><p>A Source, from <code><a href="og_api.html">og_api()</a></code> or <code><a href="og_local.html">og_local()</a></code>.</p></dd>
 
 
 <dt id="arg-analyses">analyses<a class="anchor" aria-label="anchor" href="#arg-analyses"></a></dt>
@@ -95,12 +95,6 @@ vignette(&quot;large-queries-and-jobs&quot;))."></head><body>
 
 <dt id="arg-clump">clump<a class="anchor" aria-label="anchor" href="#arg-clump"></a></dt>
 <dd><p>Clump the top hits to one per independent signal.</p></dd>
-
-
-<dt id="arg-ld">ld<a class="anchor" aria-label="anchor" href="#arg-ld"></a></dt>
-<dd><p>An LD Store's name, an ancestry code (its LD Store), a PLINK Reference from
-<code><a href="og_plink_reference.html">og_plink_reference()</a></code>, or <code>NULL</code> to match each Analysis's Assigned Ancestry. Only with
-<code>clump = TRUE</code>.</p></dd>
 
 
 <dt id="arg-r-kb">r2, kb<a class="anchor" aria-label="anchor" href="#arg-r-kb"></a></dt>
@@ -129,9 +123,9 @@ on the error say which and why.</p></dd>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>By default (<code>clump = TRUE</code>) the top hits are clumped on the API, one index variant per
 independent signal (see <code><a href="../articles/ld.html">vignette("ld")</a></code>): every top hit at <code>threshold</code> is clumped, and <code>limit</code>
-then caps the index variants. Each Analysis is clumped in the LD Store matching its Assigned
-Ancestry, or in the one <code>ld</code> names; an Unassigned Analysis is refused (<code>opengwasr_ld_unmatched</code>)
-unless <code>ld</code> is given, before any Job runs. The Jobs, one per Analysis, are submitted grouped by
+then caps the index variants. Each Analysis is clumped in the Source's LD Store
+(<code>og_api(ld_store = )</code>), or, if it has none, in the LD Store matching its Assigned Ancestry; an
+Unassigned Analysis is then refused (<code>opengwasr_ld_unmatched</code>), before any Job runs. The Jobs, one per Analysis, are submitted grouped by
 LD Store; with progress on (option <code>opengwasr.progress</code>), a message of class
 <code>opengwasr_clumping</code> says which LD Store each Analysis is clumped in. <code>r2</code> and <code>kb</code> default to the LD Store's Far Threshold
 (<code>t_far</code>) and its far window (<code>far_bp</code>, 10,000 kb), and are always sent. A pair the LD Store can't
@@ -140,12 +134,21 @@ can't be clumped: they are left out, with a warning of class <code>opengwasr_clu
 Clumped rows add <code>clump_ld</code>, <code>clump_ld_choice</code>, <code>clump_r2</code>, <code>clump_kb</code> and <code>clump_size</code>, and
 <code>og_provenance(x)$clump</code> has each Analysis's <code>hits</code>, <code>absent</code> and <code>leads</code>. Pass <code>clump = FALSE</code>
 for every top hit.</p>
-<p>With a PLINK Reference in <code>ld</code> (see <code><a href="og_plink_reference.html">og_plink_reference()</a></code>) the clumping is local: each Analysis's
+<p>The LD is the Source's LD resource (<code>og_api(ld_store = )</code>, <code>og_local(bfile = )</code>), and nothing
+else: for other LD, pass another Source, such as <code>og_api(inherit = src, ld_store = "EUR")</code>. A
+Local Source with none is refused (<code>opengwasr_ld_resource_required</code>), naming the LD resources and
+<code>clump = FALSE</code>: Store Releases have no stored Clumps yet, so clumping is computed on the fly, and
+<code>og_provenance(x)$clump$clumps</code> is <code>"computed"</code>. An LD-only Local Source (<code>og_local(bfile = )</code>
+with no <code>gwas</code>) holds no Associations, so it is refused (<code>opengwasr_gwas_store_required</code>).</p>
+<p>With a PLINK Reference as a Local Source's LD resource (<code>og_local(gwas = , bfile = )</code>) the
+clumping is local: each Analysis's
 top hits are fetched unclumped (up to the API's most, 10,000), matched to the reference by rsID
-(those not in it are left out, with a message) and clumped by PLINK, and <code>limit</code> is then applied
+(those not in it are left out, with a message) and clumped by PLINK (whose LD isn't adjusted for
+principal components: a warning of class <code>opengwasr_plink_unadjusted</code> says so, once per PLINK
+Reference in a session), and <code>limit</code> is then applied
 to its index variants. If the API cut an Analysis's top hits off at 10,000, you get an
-<code>opengwasr_truncated</code> warning that clumping saw only the strongest; clumping on the server (an LD
-Store in <code>ld</code>) has no such cap. <code>og_provenance(x)$clump</code> names the reference's path and the <code>r2</code>
+<code>opengwasr_truncated</code> warning that clumping saw only the strongest; clumping on the server (an
+API Source's LD Store) has no such cap. <code>og_provenance(x)$clump</code> names the reference's path and the <code>r2</code>
 and <code>kb</code>.</p>
 <p>The columns are those the vignette section "What the columns mean" lists: the Analysis <code>id</code>, the variant, <code>beta</code> (<code>z * se</code>), <code>se</code>, <code>z</code>, <code>pval</code>, <code>effect_scale</code>
 (<code>"sd"</code> or <code>"log_or"</code> from the Analysis's stored effect scale, or <code>"original"</code> with

@@ -24,6 +24,12 @@ A list (class `og_status` or `og_user`, with a print method). Read its
 fields in scripts: `status$ready`, `status$execution$limits`;
 `user$user`, `user$tier`, `user$allowance`, `user$concurrency_budget`.
 
+## Details
+
+A Local Source has no API to ask: both refuse it
+(`opengwasr_local_unsupported`); check its setup with
+[`og_local_check()`](https://opengwas.github.io/opengwasr/reference/og_local_check.md).
+
 ## Examples
 
 ``` r

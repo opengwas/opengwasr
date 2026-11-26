@@ -23,8 +23,9 @@ you are signed in as, and your allowance."></head><body>
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Articles</h6></li>
-    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
+    <li><a class="dropdown-item" href="../articles/local-source.html">Querying downloaded Store Releases</a></li>
     <li><a class="dropdown-item" href="../articles/ld.html">LD operations</a></li>
+    <li><a class="dropdown-item" href="../articles/large-queries-and-jobs.html">Large queries and Jobs</a></li>
     <li><a class="dropdown-item" href="../articles/migrating-from-ieugwasr.html">Migrating from ieugwasr</a></li>
   </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -68,6 +69,11 @@ you are signed in as, and your allowance.</p>
     <p>A list (class <code>og_status</code> or <code>og_user</code>, with a print method). Read its fields in scripts:
 <code>status$ready</code>, <code>status$execution$limits</code>; <code>user$user</code>, <code>user$tier</code>, <code>user$allowance</code>,
 <code>user$concurrency_budget</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>A Local Source has no API to ask: both refuse it (<code>opengwasr_local_unsupported</code>); check its
+setup with <code><a href="og_local_check.html">og_local_check()</a></code>.</p>
     </div>
 
     <div class="section level2">

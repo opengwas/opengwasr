@@ -61,7 +61,7 @@ The single super-population label of an Analysis, inferred from its allele frequ
 _Avoid_: population, reported ancestry
 
 **PLINK Reference**:
-A user-supplied PLINK binary genotype fileset used for LD operations on the user's own machine.
+A user-supplied PLINK binary genotype fileset used for LD operations on the user's own machine. Its LD is computed from its genotypes without adjusting for population structure (principal components), unlike an LD Store's or a Genotype Store's, so it may be less accurate.
 _Avoid_: bfile, LD Store, LD panel
 
 **Genotype Store**:

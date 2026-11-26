@@ -277,6 +277,8 @@ A Source carries an **LD resource**, which answers LD for its Associations (see 
 
 A form that is coming is refused (`opengwasr_local_unsupported`), and so is giving two kinds at once.
 
+LD from a PLINK Reference is computed from its genotypes without adjusting for population structure (principal components), unlike OpenGWAS LD Stores and Genotype Stores, so it may be less accurate. opengwasr warns of this once per PLINK Reference in a session (class `opengwasr_plink_unadjusted`).
+
 The LD is chosen on the Source, and only there: no verb takes an LD argument. A Source's LD lives where the Source does, so a Local Source's LD is on your machine. To use LD from elsewhere, fetch with one Source and clump with the other ([Associations from one place, LD from another](ld.html#mixing)):
 
 | Associations | LD | How |

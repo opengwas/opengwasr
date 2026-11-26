@@ -211,7 +211,7 @@ head(bmi[, c("id", "analysis_label", "sample_size")], 3)
 
 ## Variants are named by ALID {#alids}
 
-opengwasr names every variant by its **ALID**, as the GWAS Stores and LD Stores do. An ALID is `chromosome:position:A1:A2`, such as `16:53767042:C:T`:
+opengwasr names every variant by its **ALID** (Alphabetic Variant ID), as the GWAS Stores and LD Stores do. The name comes from how the alleles of an SNV are ordered, alphabetically, as the list below sets out. An ALID is `chromosome:position:A1:A2`, such as `16:53767042:C:T`:
 
 - `chromosome` is `1` to `22`, `X`, `Y` or `MT`, with no `chr` prefix. Other contig names (such as GRCh38 alt contigs) are kept as given, as the GWAS Stores keep them.
 - `position` is on GRCh38, one-based, as in a VCF file. An indel is left-aligned, and its position is that of the first base of its alleles.

@@ -25,7 +25,7 @@ The scale an Analysis's effects are expressed on: SD units for continuous traits
 _Avoid_: units, original scale
 
 **ALID**:
-A variant's identity, `chromosome:position:A1:A2` on GRCh38: alleles of one length in alphabetical order, an indel's reference allele first. `A1` is the effect allele.
+Short for Alphabetic Variant ID: a variant's identity, `chromosome:position:A1:A2` on GRCh38: alleles of one length in alphabetical order, an indel's reference allele first. `A1` is the effect allele.
 _Avoid_: SNP id, variant id, chrpos
 
 **Rho Matrix**:
